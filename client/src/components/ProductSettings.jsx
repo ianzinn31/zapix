@@ -15,7 +15,9 @@ import {
   Zap,
   Key,
   Copy,
-  Check
+  Check,
+  Gift,
+  Layers
 } from 'lucide-react';
 
 export default function ProductSettings({ product, onSave }) {
@@ -26,6 +28,7 @@ export default function ProductSettings({ product, onSave }) {
     price: product?.price ?? '',
     currency: product?.currency || 'BRL',
     paymentMethod: product?.paymentMethod || 'both', // 'pix' | 'both' | 'checkout'
+    deliveryStrategy: product?.deliveryStrategy || 'require_payment', // 'require_payment' | 'deliver_first' | 'per_deliverable'
     checkoutUrl: product?.checkoutUrl || '',
     pixKey: product?.pixKey || '',
     pixKeyType: product?.pixKeyType || 'aleatoria', // 'aleatoria' | 'cpf' | 'cnpj' | 'email' | 'telefone'
@@ -54,6 +57,7 @@ export default function ProductSettings({ product, onSave }) {
         price: product.price ?? '',
         currency: product.currency || 'BRL',
         paymentMethod: product.paymentMethod || (product.pixKey ? 'both' : 'checkout'),
+        deliveryStrategy: product.deliveryStrategy || 'require_payment',
         checkoutUrl: product.checkoutUrl || '',
         pixKey: product.pixKey || '',
         pixKeyType: product.pixKeyType || 'aleatoria',
@@ -405,6 +409,98 @@ export default function ProductSettings({ product, onSave }) {
               />
             </div>
           )}
+        </div>
+
+        {/* ESTRATÉGIA DE LIBERAÇÃO DE ENTREGÁVEIS (ARQUIVOS / PDF) */}
+        <div style={{
+          background: 'rgba(99, 102, 241, 0.03)',
+          border: '1px solid rgba(99, 102, 241, 0.25)',
+          borderRadius: '12px',
+          padding: '20px',
+          marginBottom: '24px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Layers size={20} color="#818cf8" />
+              <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#f8fafc' }}>
+                Estratégia de Envio dos Entregáveis (PDF / Imagens)
+              </h4>
+            </div>
+            <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>
+              Defina quando os materiais são enviados ao cliente
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+            {/* Option 1: Cobrar Primeiro */}
+            <div
+              onClick={() => handleChange('deliveryStrategy', 'require_payment')}
+              style={{
+                padding: '14px',
+                borderRadius: '10px',
+                background: formData.deliveryStrategy === 'require_payment' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                border: formData.deliveryStrategy === 'require_payment' ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.08)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <Shield size={18} color={formData.deliveryStrategy === 'require_payment' ? '#34d399' : '#94a3b8'} />
+                <span style={{ fontSize: '0.88rem', fontWeight: 700, color: formData.deliveryStrategy === 'require_payment' ? '#34d399' : '#f8fafc' }}>
+                  Cobrar Primeiro (Antifraude)
+                </span>
+              </div>
+              <p style={{ fontSize: '0.74rem', color: '#94a3b8', lineHeight: '1.4' }}>
+                A IA só envia os arquivos após o PIX ser validado e aprovado. Agendamentos e comprovantes falsos são barrados automaticamente.
+              </p>
+            </div>
+
+            {/* Option 2: Entregar Antes, Cobrar Depois */}
+            <div
+              onClick={() => handleChange('deliveryStrategy', 'deliver_first')}
+              style={{
+                padding: '14px',
+                borderRadius: '10px',
+                background: formData.deliveryStrategy === 'deliver_first' ? 'rgba(245, 158, 11, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+                border: formData.deliveryStrategy === 'deliver_first' ? '1px solid #f59e0b' : '1px solid rgba(255, 255, 255, 0.08)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <Gift size={18} color={formData.deliveryStrategy === 'deliver_first' ? '#fbbf24' : '#94a3b8'} />
+                <span style={{ fontSize: '0.88rem', fontWeight: 700, color: formData.deliveryStrategy === 'deliver_first' ? '#fbbf24' : '#f8fafc' }}>
+                  Entregar Antes, Cobrar Depois
+                </span>
+              </div>
+              <p style={{ fontSize: '0.74rem', color: '#94a3b8', lineHeight: '1.4' }}>
+                Ideal para operações com Isca/Amostra: a IA envia o material antes para encantar e gerar valor, conduzindo a cobrança e fechamento em seguida.
+              </p>
+            </div>
+
+            {/* Option 3: Personalizado por Entregável */}
+            <div
+              onClick={() => handleChange('deliveryStrategy', 'per_deliverable')}
+              style={{
+                padding: '14px',
+                borderRadius: '10px',
+                background: formData.deliveryStrategy === 'per_deliverable' ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                border: formData.deliveryStrategy === 'per_deliverable' ? '1px solid #6366f1' : '1px solid rgba(255, 255, 255, 0.08)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <Layers size={18} color={formData.deliveryStrategy === 'per_deliverable' ? '#818cf8' : '#94a3b8'} />
+                <span style={{ fontSize: '0.88rem', fontWeight: 700, color: formData.deliveryStrategy === 'per_deliverable' ? '#818cf8' : '#f8fafc' }}>
+                  Por Entregável (Híbrido)
+                </span>
+              </div>
+              <p style={{ fontSize: '0.74rem', color: '#94a3b8', lineHeight: '1.4' }}>
+                Você decide arquivo por arquivo na aba Entregáveis: alguns podem ser liberados antes como isca, e outros apenas após pagamento.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Target Audience & Guarantee */}

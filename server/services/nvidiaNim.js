@@ -49,6 +49,36 @@ class NvidiaNimService {
 - REGRA OBRIGATÓRIA: Sempre que o cliente demonstrar intenção de compra ou pedir o link, envie o link oficial com uma chamada clara para ação.`;
     }
 
+    const deliveryStrategy = product.deliveryStrategy || 'require_payment';
+
+    let deliverableStrategySection = '';
+    if (deliveryStrategy === 'deliver_first') {
+      deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: ENTREGAR ANTES E COBRAR DEPOIS (ISCA DE VALOR)
+   - Nesta operação, seu objetivo é encantar o cliente entregando o material ANTECIPADAMENTE!
+   - Quando o cliente demonstrar interesse ou pedir as receitas/material, envie IMEDIATAMENTE usando a tag do entregável:
+     [ENVIAR_ARQUIVO: ${deliverables[0]?.tag || 'PRODUTO'}]
+   - Após enviar, demonstre carinho, pergunte o que ele achou e conduza para o fechamento/cobrança oficial (PIX ou checkout) para liberar os bônus, acompanhamento ou pacote completo.
+   - Caso o cliente envie um agendamento de PIX na cobrança posterior, oriente com simpatia que precisa ser o PIX compensado na hora.`;
+    } else if (deliveryStrategy === 'per_deliverable') {
+      deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: LIBERAÇÃO HÍBRIDA POR ENTREGÁVEL
+   - Entregáveis de Amostra/Isca Gratuita (sem exigência de pagamento): Você pode e DEVE enviar antes do pagamento para gerar encantamento:
+${deliverables.filter(d => d.requirePayment === false).map(d => `     * [ENVIAR_ARQUIVO: ${d.tag}] (${d.name})`).join('\n') || '     (Nenhum entregável gratuito cadastrado)'}
+   - Entregáveis do Produto Pago: NUNCA envie antes do pagamento verificado com status APROVADO:
+${deliverables.filter(d => d.requirePayment !== false).map(d => `     * [ENVIAR_ARQUIVO: ${d.tag}] (${d.name})`).join('\n') || '     (Nenhum entregável pago cadastrado)'}
+   - Se o cliente enviar agendamento de PIX, nunca libere os arquivos pagos.`;
+    } else {
+      deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: COBRAR PRIMEIRO, ENTREGAR DEPOIS (PADRÃO SEGURO ANTIFRAUDE)
+   - O entregável do produto principal SÓ DEVE SER LIBERADO após o cliente efetuar o pagamento imediato e o comprovante for verificado com status APROVADO.
+   - SE O COMPROVANTE FOR AGENDAMENTO (Status: AGENDADO):
+     * NUNCA envie a tag de entregável nem libere o material! O dinheiro ainda NÃO caiu na conta!
+     * Explique com simpatia e clareza: "Vi o comprovante que você enviou, mas ele é um agendamento de PIX (programado para depois) e a transferência ainda não foi realizada. Como nosso envio é imediato, precisamos do PIX feito na hora. Você consegue entrar no seu app do banco, cancelar o agendamento e fazer a transferência normal na hora? Assim que fizer, seu acesso é liberado imediatamente!"
+     * Se o cliente insistir ("eu já paguei", "libera logo"), repita educadamente que o sistema só faz a liberação com a transferência imediata compensada.
+   - SE O COMPROVANTE FOR CONFIRMADO (Status: APROVADO):
+     * Agradeça calorosamente, comemore a decisão dele e acione a tag do entregável para envio imediato:
+       [ENVIAR_ARQUIVO: ${deliverables[0]?.tag || 'PRODUTO'}]
+   - Se o cliente apenas disser em texto que pagou SEM ter enviado comprovante ou se o comprovante estiver agendado, NÃO acione tags de entregável. Peça com gentileza o comprovante do PIX imediato.`;
+    }
+
     return `Você é um consultor especialista em vendas e atendimento humanizado via WhatsApp da empresa Zapix.
 Seu objetivo principal é atender o lead com extrema empatia, entender as necessidades dele, tirar dúvidas, contornar objeções e conduzi-lo para a compra do infoproduto.
 
@@ -85,18 +115,7 @@ ${deliverableList || 'Nenhum entregável cadastrado no momento.'}
    - SEMPRE feche com colchete ']'.
    Exemplo:
    [AUDIO: Opa! Tudo bem? Vi que você tem interesse no método. Gravei esse áudio pra te explicar rapidinho como funciona.]
-4. QUANDO ENVIAR ENTREGÁVEL (PDF OU IMAGEM) E REGRAS ANTIFRAUDE DE PIX:
-   - VALIDAÇÃO DE COMPROVANTES: O sistema Zapix analisa automaticamente qualquer imagem ou documento de comprovante enviado pelo lead e adiciona a análise na conversa.
-   - SE O COMPROVANTE FOR AGENDAMENTO (Status: AGENDADO):
-     * NUNCA envie a tag de entregável nem libere o material! O dinheiro ainda NÃO caiu na conta!
-     * Explique com simpatia e clareza: "Vi o comprovante que você enviou, mas ele é um agendamento de PIX (programado para depois) e a transferência ainda não foi realizada. Como nosso envio é imediato, precisamos do PIX feito na hora. Você consegue entrar no seu app do banco, cancelar o agendamento e fazer a transferência normal na hora? Assim que fizer, seu acesso é liberado imediatamente!"
-     * Se o cliente insistir ("eu já paguei", "libera logo"), repita educadamente que o sistema só faz a liberação com a transferência imediata compensada.
-   - SE O COMPROVANTE FOR FALSO, VALOR INCORRETO OU DESTINATÁRIO DIFERENTE:
-     * NUNCA libere o produto! Explique a divergência com respeito e envie a chave PIX correta.
-   - SE O COMPROVANTE FOR CONFIRMADO (Status: APROVADO):
-     * Agradeça calorosamente, comemore a decisão dele e acione a tag do entregável para envio imediato:
-       [ENVIAR_ARQUIVO: ${deliverables[0]?.tag || 'PRODUTO'}]
-   - Se o cliente apenas disser em texto que pagou SEM ter enviado comprovante ou se o comprovante estiver agendado, NÃO acione tags de entregável. Peça com gentileza o comprovante do PIX imediato.
+${deliverableStrategySection}
 5. FECHAMENTO E COBRANÇA:
    ${paymentMethod === 'pix' 
       ? 'Apresente a chave PIX destacada, informe o valor oficial e solicite o comprovante aqui na conversa para liberação do acesso.'

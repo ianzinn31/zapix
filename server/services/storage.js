@@ -83,6 +83,8 @@ const DEFAULT_STATE = {
       price: 0,
       currency: 'BRL',
       paymentMethod: 'both', // 'checkout' | 'pix' | 'both'
+      deliveryStrategy: 'require_payment', // 'require_payment' | 'deliver_first' | 'per_deliverable'
+      deliveryInstructions: '',
       checkoutUrl: '',
       pixKey: '',
       pixKeyType: 'aleatoria', // 'aleatoria' | 'cpf' | 'cnpj' | 'email' | 'telefone'
@@ -378,6 +380,7 @@ class StorageService {
       type: deliv.type || 'pdf',
       tag: deliv.tag || deliv.name.toUpperCase().replace(/\s+/g, '_'),
       description: deliv.description || '',
+      requirePayment: deliv.requirePayment !== undefined ? Boolean(deliv.requirePayment) : true,
       url: deliv.url,
       path: deliv.path,
       size: deliv.size || 0,
@@ -387,6 +390,20 @@ class StorageService {
     this.save();
     supabaseService.addDeliverable(newDeliv);
     return newDeliv;
+  }
+
+  updateDeliverable(id, updates = {}) {
+    const index = this.data.deliverables.findIndex((d) => d.id === id);
+    if (index !== -1) {
+      this.data.deliverables[index] = {
+        ...this.data.deliverables[index],
+        ...updates
+      };
+      this.save();
+      supabaseService.addDeliverable(this.data.deliverables[index]);
+      return this.data.deliverables[index];
+    }
+    return null;
   }
 
   deleteDeliverable(id) {

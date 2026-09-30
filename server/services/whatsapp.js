@@ -464,38 +464,89 @@ class WhatsAppService {
           }
         }
 
-        // Antifraud Safety Guard: Check lead's verified receipt status
+        // 3. Antifraud & Delivery Strategy Engine
+        const settings = storage.getSettings();
+        const product = settings.product || {};
+        const deliveryStrategy = product.deliveryStrategy || 'require_payment'; // 'require_payment' | 'deliver_first' | 'per_deliverable'
         const leadObj = storage.getLead(phone);
-        const isBlockedByReceipt =
-          leadObj?.lastReceiptStatus &&
-          ['AGENDADO', 'VALOR_INCORRETO', 'DESTINATARIO_INCORRETO', 'FALSO_OU_ADULTERADO', 'NAO_E_COMPROVANTE'].includes(leadObj.lastReceiptStatus);
 
-        if (isBlockedByReceipt && deliverablesToSend.length > 0) {
-          deliverablesToSend.length = 0;
-          storage.addLog(
-            'WARNING',
-            `Bloqueio Antifraude: Envio automático de entregável cancelado para ${phone} pois o comprovante está com status: ${leadObj.lastReceiptStatus}.`
-          );
-        }
+        // Filter deliverables based on the chosen strategy
+        const verifiedDeliverables = deliverablesToSend.filter((deliv) => {
+          // If operation strategy is 'deliver_first' (entrega antes e cobra depois)
+          if (deliveryStrategy === 'deliver_first') {
+            return true; // Allowed to send before payment!
+          }
 
-        // Contextual fallback: ONLY if customer has confirmed receipt status (APROVADO) and asked for the file
-        if (deliverablesToSend.length === 0 && !isBlockedByReceipt && leadObj?.lastReceiptStatus === 'APROVADO') {
+          // If operation strategy is 'per_deliverable'
+          if (deliveryStrategy === 'per_deliverable') {
+            if (deliv.requirePayment === false) {
+              return true; // Freebie / Sample / Lead magnet - allowed before payment!
+            }
+          }
+
+          // Otherwise (require_payment or paid deliverable):
+          // Check if lead sent a fake or scheduled receipt
+          const isBlockedByReceipt =
+            leadObj?.lastReceiptStatus &&
+            ['AGENDADO', 'VALOR_INCORRETO', 'DESTINATARIO_INCORRETO', 'FALSO_OU_ADULTERADO', 'NAO_E_COMPROVANTE'].includes(leadObj.lastReceiptStatus);
+
+          if (isBlockedByReceipt) {
+            storage.addLog(
+              'WARNING',
+              `Bloqueio Antifraude: Envio do entregável pago (${deliv.name}) cancelado para ${phone} pois o comprovante está com status: ${leadObj.lastReceiptStatus}.`
+            );
+            return false;
+          }
+
+          return true;
+        });
+
+        deliverablesToSend.length = 0;
+        deliverablesToSend.push(...verifiedDeliverables);
+
+        // Contextual fallback: if customer asked for the file or confirmed purchase
+        if (deliverablesToSend.length === 0) {
           const lowerUser = (userText || '').toLowerCase();
           const lowerReply = (replyText || '').toLowerCase();
-          const isPurchaseConfirmed =
-            lowerUser.includes('paguei') ||
-            lowerUser.includes('comprei') ||
-            lowerUser.includes('pix') ||
-            lowerUser.includes('comprovante') ||
-            lowerUser.includes('pode me enviar') ||
-            lowerUser.includes('manda o produto') ||
-            lowerReply.includes('obrigado por ter feito sua compra') ||
-            lowerReply.includes('aproveite seu produto');
 
-          if (isPurchaseConfirmed) {
-            const defaultDeliv = resolveDeliverable('PRODUTO');
-            if (defaultDeliv) {
-              deliverablesToSend.push(defaultDeliv);
+          // Strategy A: 'deliver_first' -> allow sending sample / product if customer wants it, before charging!
+          if (deliveryStrategy === 'deliver_first') {
+            const wantsFile =
+              lowerUser.includes('amostra') ||
+              lowerUser.includes('receita') ||
+              lowerUser.includes('material') ||
+              lowerUser.includes('manda') ||
+              lowerUser.includes('envia') ||
+              lowerUser.includes('quero') ||
+              lowerUser.includes('pode me enviar') ||
+              lowerReply.includes('vou te enviar') ||
+              lowerReply.includes('aqui está') ||
+              lowerReply.includes('estou enviando');
+
+            if (wantsFile) {
+              const defaultDeliv = resolveDeliverable('AMOSTRA') || resolveDeliverable('PRODUTO') || storage.getDeliverables()[0];
+              if (defaultDeliv) {
+                deliverablesToSend.push(defaultDeliv);
+              }
+            }
+          } else {
+            // Strategy B: 'require_payment' or 'per_deliverable' -> only release paid product if receipt is APROVADO
+            const isPurchaseConfirmed =
+              leadObj?.lastReceiptStatus === 'APROVADO' &&
+              (lowerUser.includes('paguei') ||
+               lowerUser.includes('comprei') ||
+               lowerUser.includes('pix') ||
+               lowerUser.includes('comprovante') ||
+               lowerUser.includes('pode me enviar') ||
+               lowerUser.includes('manda o produto') ||
+               lowerReply.includes('obrigado por ter feito sua compra') ||
+               lowerReply.includes('aproveite seu produto'));
+
+            if (isPurchaseConfirmed) {
+              const defaultDeliv = resolveDeliverable('PRODUTO') || storage.getDeliverables()[0];
+              if (defaultDeliv) {
+                deliverablesToSend.push(defaultDeliv);
+              }
             }
           }
         }

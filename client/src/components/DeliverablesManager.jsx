@@ -8,14 +8,25 @@ import {
   Check, 
   ExternalLink, 
   Plus,
-  FileCheck
+  FileCheck,
+  ShieldCheck,
+  Gift,
+  Layers,
+  ArrowRightLeft
 } from 'lucide-react';
 
-export default function DeliverablesManager({ deliverables, onUpload, onDelete }) {
+export default function DeliverablesManager({ 
+  deliverables = [], 
+  deliveryStrategy = 'require_payment', 
+  onUpload, 
+  onUpdate, 
+  onDelete 
+}) {
   const [file, setFile] = useState(null);
   const [name, setName] = useState('');
   const [tag, setTag] = useState('');
   const [description, setDescription] = useState('');
+  const [requirePayment, setRequirePayment] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [copiedTag, setCopiedTag] = useState(null);
 
@@ -42,6 +53,7 @@ export default function DeliverablesManager({ deliverables, onUpload, onDelete }
     formData.append('name', name);
     formData.append('tag', tag);
     formData.append('description', description);
+    formData.append('requirePayment', requirePayment);
 
     try {
       await onUpload(formData);
@@ -49,6 +61,7 @@ export default function DeliverablesManager({ deliverables, onUpload, onDelete }
       setName('');
       setTag('');
       setDescription('');
+      setRequirePayment(true);
     } catch (err) {
       alert(`Erro no upload: ${err.message}`);
     } finally {
@@ -64,6 +77,55 @@ export default function DeliverablesManager({ deliverables, onUpload, onDelete }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* Global Strategy Notice */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '14px 20px',
+        background: deliveryStrategy === 'deliver_first' 
+          ? 'rgba(245, 158, 11, 0.12)' 
+          : deliveryStrategy === 'per_deliverable' 
+          ? 'rgba(99, 102, 241, 0.12)' 
+          : 'rgba(16, 185, 129, 0.12)',
+        border: `1px solid ${
+          deliveryStrategy === 'deliver_first' ? '#f59e0b' : deliveryStrategy === 'per_deliverable' ? '#6366f1' : '#10b981'
+        }`,
+        borderRadius: '12px',
+        flexWrap: 'wrap',
+        gap: '12px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {deliveryStrategy === 'deliver_first' ? (
+            <Gift size={24} color="#fbbf24" />
+          ) : deliveryStrategy === 'per_deliverable' ? (
+            <Layers size={24} color="#818cf8" />
+          ) : (
+            <ShieldCheck size={24} color="#34d399" />
+          )}
+          <div>
+            <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#f8fafc' }}>
+              Modo da Operação:{' '}
+              {deliveryStrategy === 'deliver_first'
+                ? '🎁 Entregar Antes e Cobrar Depois (Isca de Valor)'
+                : deliveryStrategy === 'per_deliverable'
+                ? '⚙️ Personalizado por Entregável (Híbrido)'
+                : '🔒 Cobrar Primeiro, Entregar Depois (Padrão Antifraude)'}
+            </div>
+            <p style={{ fontSize: '0.76rem', color: '#cbd5e1', margin: 0, marginTop: '2px' }}>
+              {deliveryStrategy === 'deliver_first'
+                ? 'A IA tem autorização para enviar os materiais antes da cobrança para encantar o lead, cobrando a oferta em seguida.'
+                : deliveryStrategy === 'per_deliverable'
+                ? 'Arquivos configurados como Amostra/Isca podem ser enviados antes; os marcados como Pagos exigem PIX aprovado.'
+                : 'A IA só libera materiais após o PIX imediato ser validado e aprovado pelo perito antifraude.'}
+            </p>
+          </div>
+        </div>
+        <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+          (Altere na aba Produto)
+        </span>
+      </div>
+
       {/* Upload Form Card */}
       <div className="glass-card" style={{ padding: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
@@ -75,7 +137,7 @@ export default function DeliverablesManager({ deliverables, onUpload, onDelete }
               Upload de Entregáveis (PDF & Imagens)
             </h3>
             <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-              Suba arquivos de prova social, ebooks e materiais para a IA disparar automaticamente no WhatsApp.
+              Suba arquivos de amostra grátis, ebooks completos ou provas sociais para a IA disparar no WhatsApp.
             </p>
           </div>
         </div>
@@ -100,7 +162,7 @@ export default function DeliverablesManager({ deliverables, onUpload, onDelete }
             </label>
             <input
               type="text"
-              placeholder="Ex: Guia Rápido dos Primeiros R$ 10k"
+              placeholder="Ex: Amostra 10 Receitas Rápidas"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="input-field"
@@ -114,7 +176,7 @@ export default function DeliverablesManager({ deliverables, onUpload, onDelete }
             </label>
             <input
               type="text"
-              placeholder="Ex: GUIA_AMOSTRA ou PROVA_SOCIAL"
+              placeholder="Ex: AMOSTRA ou EBOOK_COMPLETO"
               value={tag}
               onChange={(e) => setTag(e.target.value.toUpperCase().replace(/\s+/g, '_'))}
               className="input-field"
@@ -124,15 +186,64 @@ export default function DeliverablesManager({ deliverables, onUpload, onDelete }
 
           <div>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-              Descrição / Legenda
+              Descrição / Legenda para a IA
             </label>
             <input
               type="text"
-              placeholder="Ex: Print comprovando alunos faturando"
+              placeholder="Ex: Degustação gratuita de 3 páginas para encantar o lead"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="input-field"
             />
+          </div>
+
+          {/* Regra de Liberação do Entregável */}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
+              Regra de Liberação deste Arquivo
+            </label>
+            <div 
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                background: requirePayment ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                border: requirePayment ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
+                borderRadius: '8px',
+                cursor: 'pointer'
+              }}
+              onClick={() => setRequirePayment(!requirePayment)}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {requirePayment ? <ShieldCheck size={20} color="#34d399" /> : <Gift size={20} color="#fbbf24" />}
+                <div>
+                  <div style={{ fontSize: '0.86rem', fontWeight: 700, color: requirePayment ? '#34d399' : '#fbbf24' }}>
+                    {requirePayment ? '🔒 Exigir Pagamento Aprovado (Produto Pago)' : '🎁 Liberar Antes de Pagar (Amostra Grátis / Isca)'}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                    {requirePayment 
+                      ? 'A IA só envia este arquivo após o PIX imediato ser validado e aprovado.' 
+                      : 'A IA tem autorização para enviar este material antes do lead pagar para gerar encantamento.'}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  border: 'none',
+                  background: requirePayment ? '#10b981' : '#f59e0b',
+                  color: '#fff',
+                  cursor: 'pointer'
+                }}
+              >
+                {requirePayment ? 'Exige PIX' : 'Liberado Antes'}
+              </button>
+            </div>
           </div>
 
           <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
@@ -163,6 +274,7 @@ export default function DeliverablesManager({ deliverables, onUpload, onDelete }
             {deliverables.map((item) => {
               const isPdf = item.type === 'pdf';
               const triggerTag = isPdf ? `[ENVIAR_ARQUIVO: ${item.tag}]` : `[ENVIAR_IMAGEM: ${item.tag}]`;
+              const isPaid = item.requirePayment !== false;
 
               return (
                 <div
@@ -232,6 +344,53 @@ export default function DeliverablesManager({ deliverables, onUpload, onDelete }
                     >
                       {copiedTag === item.id ? <Check size={14} /> : <Copy size={14} />}
                     </button>
+                  </div>
+
+                  {/* Payment Requirement Badge & Toggle Button */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    borderTop: '1px solid rgba(255,255,255,0.06)',
+                    paddingTop: '10px'
+                  }}>
+                    <span style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      padding: '3px 8px',
+                      borderRadius: '5px',
+                      background: isPaid ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                      color: isPaid ? '#34d399' : '#fbbf24',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      {isPaid ? <ShieldCheck size={13} /> : <Gift size={13} />}
+                      {isPaid ? 'Exige Pagamento' : 'Libera Antes (Isca)'}
+                    </span>
+
+                    {onUpdate && (
+                      <button
+                        type="button"
+                        onClick={() => onUpdate(item.id, { requirePayment: !isPaid })}
+                        style={{
+                          background: 'rgba(255,255,255,0.05)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: '6px',
+                          color: '#cbd5e1',
+                          fontSize: '0.72rem',
+                          padding: '4px 8px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Alternar entre exigir pagamento ou liberar antes"
+                      >
+                        <ArrowRightLeft size={12} />
+                        <span>Mudar para {isPaid ? 'Liberar Antes' : 'Exigir PIX'}</span>
+                      </button>
+                    )}
                   </div>
 
                   {item.url && (

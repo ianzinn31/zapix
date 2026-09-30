@@ -316,6 +316,23 @@ export default function App() {
     showToast('Entregável removido.');
   };
 
+  const handleUpdateDeliverable = async (id, updates) => {
+    try {
+      const res = await fetch(`/api/deliverables/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      if (!res.ok) throw new Error('Falha ao atualizar');
+      const updated = await res.json();
+      setDeliverables((prev) => prev.map((d) => (d.id === id ? updated : d)));
+      showToast(`Regra atualizada: ${updated.requirePayment ? 'Exige Pagamento' : 'Liberação Antecipada (Isca)'}`);
+      fetchLogs();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
   // Meta Ads Spend Sync
   const handleSyncMeta = async () => {
     setIsSyncingMeta(true);
@@ -542,7 +559,9 @@ export default function App() {
         {activeTab === 'deliverables' && (
           <DeliverablesManager
             deliverables={deliverables}
+            deliveryStrategy={settings?.product?.deliveryStrategy}
             onUpload={handleUploadDeliverable}
+            onUpdate={handleUpdateDeliverable}
             onDelete={handleDeleteDeliverable}
           />
         )}

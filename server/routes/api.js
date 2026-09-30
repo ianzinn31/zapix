@@ -173,7 +173,7 @@ router.post('/deliverables', upload.single('file'), (req, res) => {
     return res.status(400).json({ error: 'Nenhum arquivo enviado' });
   }
 
-  const { name, tag, description } = req.body;
+  const { name, tag, description, requirePayment } = req.body;
   const isPdf = req.file.mimetype.includes('pdf');
   const type = isPdf ? 'pdf' : 'image';
 
@@ -183,13 +183,25 @@ router.post('/deliverables', upload.single('file'), (req, res) => {
     type,
     tag: (tag || name || 'ARQUIVO').toUpperCase().replace(/[^A-Z0-9_]/g, '_'),
     description: description || '',
+    requirePayment: requirePayment !== 'false' && requirePayment !== false,
     url: `/uploads/${req.file.filename}`,
     path: `/data/uploads/${req.file.filename}`,
     size: req.file.size
   });
 
-  storage.addLog('SUCCESS', `Entregável adicionado: ${newDeliverable.name} (${newDeliverable.type})`);
+  storage.addLog('SUCCESS', `Entregável adicionado: ${newDeliverable.name} (${newDeliverable.type}) - ${newDeliverable.requirePayment ? 'Exige Pagamento' : 'Liberação Antecipada/Isca'}`);
   res.json(newDeliverable);
+});
+
+router.patch('/deliverables/:id', (req, res) => {
+  const { id } = req.params;
+  const updated = storage.updateDeliverable(id, req.body);
+  if (updated) {
+    storage.addLog('INFO', `Entregável atualizado (${updated.name}): ${updated.requirePayment ? 'Exige Pagamento' : 'Liberação Antecipada/Isca'}`);
+    res.json(updated);
+  } else {
+    res.status(404).json({ error: 'Entregável não encontrado' });
+  }
 });
 
 router.delete('/deliverables/:id', (req, res) => {
