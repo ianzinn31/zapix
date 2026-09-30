@@ -15,12 +15,12 @@ import {
 
 export default function AiConfig({ aiSettings, onSave }) {
   const [formData, setFormData] = useState({
-    primaryModel: aiSettings?.primaryModel || 'deepseek-ai/deepseek-v4.1-flash',
+    primaryModel: aiSettings?.primaryModel || 'meta/llama-3.2-11b-vision-instruct',
     primaryApiKey: aiSettings?.primaryApiKey || '',
-    fallbackModel: aiSettings?.fallbackModel || 'deepseek-ai/deepseek-v4.1-flash',
+    fallbackModel: aiSettings?.fallbackModel || 'meta/llama-3.2-11b-vision-instruct',
     fallbackApiKey: aiSettings?.fallbackApiKey || '',
     temperature: aiSettings?.temperature ?? 0.7,
-    maxTokens: aiSettings?.maxTokens || 1000,
+    maxTokens: aiSettings?.maxTokens || 800,
     customPromptInstructions: aiSettings?.customPromptInstructions || ''
   });
 
@@ -29,11 +29,10 @@ export default function AiConfig({ aiSettings, onSave }) {
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const availableModels = [
-    { id: 'deepseek-ai/deepseek-v4.1-flash', name: 'DeepSeek v4.1 Flash (Recomendado & Super Persuasivo)', tag: 'Raciocínio & Conversão' },
-    { id: 'meta/llama-3.2-11b-vision-instruct', name: 'Meta Llama 3.2 11B Vision Instruct', tag: 'Multimodal' },
-    { id: 'z-ai/glm-5.3-flash', name: 'GLM 5.3 Flash (Alta Velocidade)', tag: 'Ultra Rápido' },
-    { id: 'deepseek-ai/deepseek-coder-6.7b-instruct', name: 'DeepSeek Coder 6.7B Instruct', tag: 'Lógica Rápida' },
-    { id: 'meta/muse-glimmer-30b', name: 'Meta Muse Glimmer 30B', tag: 'Diálogo' }
+    { id: 'meta/llama-3.2-11b-vision-instruct', name: 'Meta Llama 3.2 11B Vision Instruct (Recomendado & Ultra Estável)', tag: 'Estável & Sem Vazamentos' },
+    { id: 'meta/llama-3.2-90b-vision-instruct', name: 'Meta Llama 3.2 90B Vision Instruct', tag: 'Alta Capacidade' },
+    { id: 'deepseek-ai/deepseek-v4.1-flash', name: 'DeepSeek v4.1 Flash (Modo Raciocínio CoT)', tag: 'Raciocínio' },
+    { id: 'deepseek-ai/deepseek-coder-6.7b-instruct', name: 'DeepSeek Coder 6.7B Instruct', tag: 'Lógica Rápida' }
   ];
 
   const handleSubmit = (e) => {

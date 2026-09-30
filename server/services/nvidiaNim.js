@@ -105,12 +105,13 @@ ${deliverables.filter(d => d.requirePayment !== false).map(d => `     * [ENVIAR_
    REGRAS OBRIGATÓRIAS DO ÁUDIO:
    - Formato rigoroso: [AUDIO: texto falado aqui] (dois pontos DENTRO dos colchetes, sem aspas, feche sempre com ']').
    - NUNCA escreva [Áudio]: "..." com dois pontos fora do colchete nem com aspas! Escreva sempre [AUDIO: texto falado].
-   - A fala no áudio deve ser curta, espontânea, brasileira e natural (1 a 3 frases no máximo), sem emojis, sem links e sem asteriscos.
-   - Você pode enviar texto antes ou depois de [AUDIO: ...]! O sistema enviará a mensagem de texto E o áudio de voz na mesma interação!`;
+   - DURAÇÃO E COMPLETUDE: A fala no áudio deve ter entre 2 e 4 frases completas (duração ideal de 15 a 25 segundos). NUNCA faça áudios telegráficos de 1 frase que soem cortados no meio! Desenvolva a ideia com carinho e termine a frase perfeitamente.
+   - SEMPRE envie texto antes ou depois do [AUDIO: ...] anunciando o áudio e fazendo uma pergunta para o cliente! O sistema enviará o texto E o áudio juntos.`;
       } else if (autoAudioMode === 'frequent_audio') {
         audioStrategySection = `3. ESTRATÉGIA ATIVA DE ÁUDIO (MODO FREQUENTE - 80%+ EM ÁUDIO):
    O cliente prefere atendimento quase 100% em áudio de voz!
    Quase todas as suas respostas devem conter a tag [AUDIO: texto falado], especialmente qualquer explicação de receitas, produtos ou dúvidas!
+   A fala no áudio deve ser completa (2 a 4 frases, 15 a 25 segundos).
    Use texto apenas para enviar links, chaves PIX ou dados que o cliente precise copiar e colar, e fale todo o restante através de [AUDIO: ...].`;
       } else if (autoAudioMode === 'pitch_and_welcome') {
         audioStrategySection = `3. ESTRATÉGIA DE ÁUDIO (BOAS-VINDAS E PITCH):
@@ -163,6 +164,22 @@ ${deliverableList || 'Nenhum entregável cadastrado no momento.'}
    - Não tente falar tudo de uma vez. Nunca cuspa explicação + preço + chave PIX + arquivo na mesma mensagem se o cliente apenas pediu uma explicação!
    - Se o cliente perguntou "como funciona" ou "pode me explicar", explique no áudio [AUDIO: ...], mande 1 frase em texto e termine perguntando algo sobre ele (ex: "Você mesmo que vai fazer as receitas ou é pra alguém da sua família?").
    - Espere o cliente interagir para então fazer o pitch e enviar o PIX!
+=== EXEMPLOS DO FORMATO EXATO ESPERADO (ÁUDIO COMPLETO + TEXTO CURTO) ===
+
+Exemplo 1 (Quando o lead pede para explicar ou saber mais):
+Claro! Te gravei um áudio explicando tudo com muito carinho 👇
+
+[AUDIO: Oi! Que bom falar com você! Então, nosso material foi feito com todo o carinho pra quem busca receitas gostosas e práticas. São opções sem açúcar que não afetam a glicemia, super fáceis de fazer com ingredientes normais que você já tem em casa!]
+
+Você mesmo que vai preparar as receitas ou é pra alguém da sua família? 😊
+
+Exemplo 2 (Quando o lead pergunta como recebe):
+Te gravei um áudio rapidinho aqui explicando como é a entrega! 👆
+
+[AUDIO: O envio é 100% digital e imediato! Assim que confirmado, você recebe o material completo em PDF aqui mesmo no WhatsApp e também no seu e-mail pra acessar sempre que quiser no celular, com garantia total de 7 dias!]
+
+Quer que eu já te passe a chave PIX pra você garantir seu acesso hoje?
+
 ${audioStrategySection}
 ${deliverableStrategySection}
 5. FECHAMENTO E COBRANÇA:
@@ -177,7 +194,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
   }
 
   // Call single NIM model with timeout
-  async callModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1000) {
+  async callModel(model, apiKey, messages, temperature = 0.7, maxTokens = 800) {
     if (!apiKey) {
       throw new Error(`API Key não configurada para o modelo ${model}`);
     }
@@ -199,14 +216,19 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
     });
 
     if (response.data && response.data.choices && response.data.choices[0]?.message?.content) {
-      return response.data.choices[0].message.content.trim();
+      let content = response.data.choices[0].message.content.trim();
+      // Anti-Leak: Strip any <think> tags or reasoning blocks
+      content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+      content = content.replace(/```(?:thought|thinking)[\s\S]*?```/gi, '').trim();
+      content = content.replace(/^(?:thought|thinking):\s*[\s\S]*?\n\n/gi, '').trim();
+
+      if (content.length > 0) {
+        return content;
+      }
     }
 
-    if (response.data?.choices?.[0]?.message?.reasoning_content) {
-      return response.data.choices[0].message.reasoning_content.trim();
-    }
-
-    throw new Error('Resposta vazia ou inválida da API NVIDIA NIM');
+    // NEVER return reasoning_content or internal thinking to WhatsApp!
+    throw new Error('Modelo retornou conteúdo vazio ou apenas tokens de raciocínio interno.');
   }
 
   // Generate sales response with automatic primary -> secondary fallback
@@ -234,18 +256,18 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
     }
 
     let responseText = null;
-    let modelUsed = settings.primaryModel || 'deepseek-ai/deepseek-v4.1-flash';
+    let modelUsed = settings.primaryModel || 'meta/llama-3.2-11b-vision-instruct';
 
     // 1. Try Primary NVIDIA NIM Model
     try {
       const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
       if (primaryKey) {
         responseText = await this.callModel(
-          settings.primaryModel || 'deepseek-ai/deepseek-v4.1-flash',
+          settings.primaryModel || 'meta/llama-3.2-11b-vision-instruct',
           primaryKey,
           messages,
           settings.temperature ?? 0.7,
-          settings.maxTokens || 1000
+          settings.maxTokens || 800
         );
         // Primary succeeded - ensure fallback state is marked inactive
         if (settings.isFallbackActive) {
@@ -258,7 +280,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
       console.warn(`[NVIDIA NIM Primary Error]: ${primaryErr.message}`);
       storage.addLog(
         'FALLBACK_TRIGGERED',
-        `NVIDIA NIM Primário (${settings.primaryModel}) falhou: ${primaryErr.message}. Ativando Fallback para (${settings.fallbackModel || 'deepseek-ai/deepseek-v4.1-flash'}).`
+        `NVIDIA NIM Primário (${settings.primaryModel}) falhou: ${primaryErr.message}. Ativando Fallback para (${settings.fallbackModel || 'meta/llama-3.2-11b-vision-instruct'}).`
       );
       storage.updateSettings({
         ai: {
@@ -271,7 +293,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
     // 2. Try Fallback NVIDIA NIM Model
     try {
       const fallbackKey = settings.fallbackApiKey || process.env.NVIDIA_NIM_FALLBACK_API_KEY || settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
-      const fallbackModel = settings.fallbackModel || 'deepseek-ai/deepseek-v4.1-flash';
+      const fallbackModel = settings.fallbackModel || 'meta/llama-3.2-11b-vision-instruct';
       if (fallbackKey && fallbackModel) {
         modelUsed = fallbackModel;
         responseText = await this.callModel(
@@ -279,7 +301,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
           fallbackKey,
           messages,
           settings.temperature ?? 0.7,
-          settings.maxTokens || 1000
+          settings.maxTokens || 800
         );
         return { text: responseText, modelUsed, fallbackTriggered: true };
       }
@@ -364,11 +386,11 @@ Gere agora o texto exato falado para ser gravado em áudio sob medida para este 
       const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
       if (primaryKey) {
         const generated = await this.callModel(
-          settings.primaryModel || 'deepseek-ai/deepseek-v4.1-flash',
+          settings.primaryModel || 'meta/llama-3.2-11b-vision-instruct',
           primaryKey,
           messages,
           0.7,
-          600
+          350
         );
         if (generated && generated.length > 5) {
           return generated.replace(/["'“”«»]/g, '').trim();
@@ -383,11 +405,11 @@ Gere agora o texto exato falado para ser gravado em áudio sob medida para este 
       const fallbackKey = settings.fallbackApiKey || process.env.NVIDIA_NIM_FALLBACK_API_KEY || settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
       if (fallbackKey) {
         const generated = await this.callModel(
-          settings.fallbackModel || 'deepseek-ai/deepseek-v4.1-flash',
+          settings.fallbackModel || 'meta/llama-3.2-11b-vision-instruct',
           fallbackKey,
           messages,
           0.7,
-          600
+          350
         );
         if (generated && generated.length > 5) {
           return generated.replace(/["'“”«»]/g, '').trim();
