@@ -10,17 +10,19 @@ import {
   FileText, 
   Megaphone,
   Bell,
-  Sparkles
+  Sparkles,
+  RotateCcw
 } from 'lucide-react';
 
 import Header from './components/Header';
 import DashboardOverview from './components/DashboardOverview';
 import LiveChatInbox from './components/LiveChatInbox';
 import ProductSettings from './components/ProductSettings';
+import DeliverablesManager from './components/DeliverablesManager';
+import RemarketingConfig from './components/RemarketingConfig';
 import AiConfig from './components/AiConfig';
 import FishAudioConfig from './components/FishAudioConfig';
 import AntiBanConfig from './components/AntiBanConfig';
-import DeliverablesManager from './components/DeliverablesManager';
 import MetaAdsConfig from './components/MetaAdsConfig';
 import QrConnectModal from './components/QrConnectModal';
 
@@ -422,6 +424,7 @@ export default function App() {
     { id: 'chat', label: 'WhatsApp Live', icon: MessageSquare, badge: leads.length },
     { id: 'product', label: 'Oferta & Infoproduto', icon: Package },
     { id: 'deliverables', label: 'Entregáveis (PDF/Foto)', icon: FileText, badge: deliverables.length },
+    { id: 'remarketing', label: 'Remarketing (Áudio)', icon: RotateCcw },
     { id: 'ai', label: 'NVIDIA NIM (IA)', icon: Cpu },
     { id: 'fish_audio', label: 'Fish Audio (Voz)', icon: Mic },
     { id: 'anti_ban', label: 'Anti-Banimento', icon: ShieldCheck },
@@ -563,6 +566,14 @@ export default function App() {
             onUpload={handleUploadDeliverable}
             onUpdate={handleUpdateDeliverable}
             onDelete={handleDeleteDeliverable}
+          />
+        )}
+
+        {activeTab === 'remarketing' && (
+          <RemarketingConfig
+            remarketingSettings={settings?.remarketing}
+            product={settings?.product}
+            onSave={handleSaveSettings}
           />
         )}
 

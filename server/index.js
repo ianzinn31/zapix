@@ -11,6 +11,7 @@ import apiRouter from './routes/api.js';
 import webhooksRouter from './routes/webhooks.js';
 import { whatsapp } from './services/whatsapp.js';
 import { storage, UPLOADS_DIR, AUDIO_CACHE_DIR, MEDIA_CACHE_DIR } from './services/storage.js';
+import { remarketingService } from './services/remarketingService.js';
 
 dotenv.config();
 
@@ -82,4 +83,7 @@ server.listen(PORT, () => {
   console.log(`=======================================================`);
 
   storage.addLog('INFO', `Servidor Zapix AI iniciado com sucesso na porta ${PORT}`);
+  
+  // Start background remarketing monitor
+  remarketingService.init();
 });

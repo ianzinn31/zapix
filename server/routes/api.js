@@ -7,6 +7,7 @@ import { whatsapp } from '../services/whatsapp.js';
 import { salesMetrics } from '../services/salesMetrics.js';
 import { fishAudio } from '../services/fishAudio.js';
 import { nvidiaNim } from '../services/nvidiaNim.js';
+import { remarketingService } from '../services/remarketingService.js';
 
 const router = Router();
 
@@ -288,6 +289,62 @@ router.post('/transcription/test', async (req, res) => {
       message: 'Conexão com a Groq Cloud estabelecida com sucesso!',
       whisperModels: whisperModels.length > 0 ? whisperModels : ['whisper-large-v3', 'whisper-large-v3-turbo']
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === Remarketing & Auto Recovery Engine ===
+router.get('/remarketing', (req, res) => {
+  const settings = storage.getSettings();
+  const config = settings.remarketing || {};
+  const leads = storage.getLeads();
+  
+  // Compute queue stats
+  const eligibleLeads = leads.filter(l => l.stage !== 'APROVADO' && l.lastReceiptStatus !== 'APROVADO' && l.aiActive !== false);
+  const recoveringLeads = eligibleLeads.filter(l => typeof l.lastRemarketingStep === 'number' && l.lastRemarketingStep >= 0);
+  
+  res.json({
+    config,
+    stats: {
+      totalEligible: eligibleLeads.length,
+      currentlyRecovering: recoveringLeads.length,
+      withinHours: remarketingService.isWithinOperatingHours(config.startHour ?? 8, config.endHour ?? 22),
+      isProcessing: remarketingService.isProcessing
+    }
+  });
+});
+
+router.post('/remarketing', (req, res) => {
+  const updatedSettings = storage.updateSettings({ remarketing: req.body });
+  storage.addLog('INFO', 'Configurações de Remarketing em Áudio atualizadas.');
+  res.json(updatedSettings.remarketing);
+});
+
+router.post('/remarketing/test', async (req, res) => {
+  const { stepId, targetPhone } = req.body;
+  try {
+    const result = await remarketingService.testStep(stepId, targetPhone);
+    res.json({ success: true, message: 'Disparo de teste realizado com sucesso!', result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/remarketing/preview-audio', async (req, res) => {
+  const { text } = req.body;
+  try {
+    const result = await remarketingService.previewAudio(text);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/remarketing/trigger-now', async (req, res) => {
+  try {
+    remarketingService.checkAndExecuteRemarketing();
+    res.json({ success: true, message: 'Verificação da fila de remarketing iniciada!' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

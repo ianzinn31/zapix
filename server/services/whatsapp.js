@@ -792,6 +792,72 @@ class WhatsAppService {
     }
   }
 
+  // Send a voice note directly to a contact (e.g. for Remarketing or manual triggers)
+  async sendVoiceNoteDirect(phone, speechText) {
+    if (!this.sock || this.status !== 'connected') {
+      throw new Error('WhatsApp não está conectado no momento.');
+    }
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    const jid = `${cleanPhone}@s.whatsapp.net`;
+
+    const generatedAudio = await fishAudio.generateSpeech(speechText);
+    const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
+    
+    await antiBan.sleep(thinkingDelay);
+    await this.sock.sendPresenceUpdate('recording', jid);
+    await antiBan.sleep(recordingDelay);
+    await this.sock.sendPresenceUpdate('paused', jid);
+
+    const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
+    await this.sock.sendMessage(jid, {
+      audio: audioBuffer,
+      mimetype: 'audio/ogg; codecs=opus',
+      ptt: true
+    });
+
+    const audioMsg = storage.addMessage({
+      phone,
+      fromMe: true,
+      text: `🎵 [Áudio Remarketing]: "${speechText}"`,
+      type: 'audio',
+      mediaUrl: generatedAudio.audioUrl,
+      audioDuration: generatedAudio.durationSec
+    });
+    this.emit('chat:message', audioMsg);
+    storage.addLog('SUCCESS', `Áudio de Remarketing enviado com sucesso para ${phone}`);
+    return { success: true, audioMsg, generatedAudio };
+  }
+
+  // Send a text directly to a contact
+  async sendTextDirect(phone, text) {
+    if (!this.sock || this.status !== 'connected') {
+      throw new Error('WhatsApp não está conectado no momento.');
+    }
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    const jid = `${cleanPhone}@s.whatsapp.net`;
+    const bubbles = antiBan.splitIntoNaturalBubbles(text);
+
+    for (let i = 0; i < bubbles.length; i++) {
+      const bubble = bubbles[i];
+      const { baseThinking, typingTime } = antiBan.calculateTypingDelay(bubble);
+      await antiBan.sleep(baseThinking);
+      await this.sock.sendPresenceUpdate('composing', jid);
+      await antiBan.sleep(typingTime);
+      await this.sock.sendPresenceUpdate('paused', jid);
+
+      await this.sock.sendMessage(jid, { text: bubble });
+      const sentMsg = storage.addMessage({
+        phone,
+        fromMe: true,
+        text: bubble,
+        type: 'text'
+      });
+      this.emit('chat:message', sentMsg);
+      if (i < bubbles.length - 1) await antiBan.sleep(1500);
+    }
+    return { success: true };
+  }
+
   // Fetch contact profile information (avatar, name) from WhatsApp
   async fetchContactInfo(phone) {
     if (!this.sock) {

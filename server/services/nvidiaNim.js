@@ -268,8 +268,49 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
       return `[ENVIAR_ARQUIVO: GUIA_AMOSTRA]\nCom certeza! Acabei de te mandar o guia em PDF com os primeiros passos para você dar uma olhada.\n\nDepois que ler me fala aqui o que achou!`;
     }
 
-    // Default conversational greeting
     return `Olá! Que bom falar com você! 😊\n\nSou do time de atendimento do ${product.name}. Vi que você se interessou pelo nosso método prático de renda com IA.\n\nMe conta: você já tem alguma experiência ou está começando do absoluto zero?`;
+  }
+
+  // Generate spoken remarketing script tailored to a lead and step
+  async generateRemarketingSpeech(instruction, lead, product) {
+    const settings = storage.getSettings().ai;
+    const leadFirstName = (lead.name || '').split(' ')[0] || '';
+    const cleanLeadName = /^[0-9+() -]+$/.test(leadFirstName) ? '' : leadFirstName;
+
+    const systemPrompt = `Você é um atendente humanizado brasileiro enviando um áudio pessoal no WhatsApp para reengajar um cliente que não finalizou a compra ou não respondeu.
+Regras Absolutas:
+1. Responda APENAS com o texto exato que será falado em voz alta no áudio (sem aspas, sem [AUDIO:], sem emojis, sem links, sem asteriscos).
+2. O tom deve ser ultra-natural, brasileiro, empático, acolhedor e direto (entre 1 e 3 frases curtas no máximo, ideal para mensagem de voz de 10 a 18 segundos).
+3. Se houver nome (${cleanLeadName}), use no cumprimento inicial.
+4. Contexto: Produto "${product.name || 'nosso método'}", Preço R$ ${Number(product.price || 0).toFixed(2)}.`;
+
+    const userPrompt = `Instrução desta etapa de recuperação: ${instruction}.
+Nome do cliente: ${cleanLeadName || 'amigo(a)'}.
+Gere o texto exato falado para ser gravado em áudio agora.`;
+
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ];
+
+    try {
+      const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
+      if (primaryKey) {
+        const generated = await this.callModel(
+          settings.primaryModel || 'meta/llama-3.2-11b-vision-instruct',
+          primaryKey,
+          messages,
+          0.7,
+          150
+        );
+        if (generated && generated.length > 5) {
+          return generated.replace(/["'“”«»]/g, '').trim();
+        }
+      }
+    } catch (e) {
+      console.warn('[NVIDIA NIM Remarketing Error]:', e.message);
+    }
+    return null;
   }
 }
 

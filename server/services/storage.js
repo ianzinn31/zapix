@@ -95,6 +95,46 @@ const DEFAULT_STATE = {
       mainBenefits: [],
       objections: [],
       defaultAudioPitchText: ''
+    },
+    remarketing: {
+      enabled: true,
+      preferAudio: true, // "todos os nossos remarketing devem ser de preferencia em audio"
+      startHour: 8,      // 08:00
+      endHour: 22,       // 22:00
+      minJitterMinutes: 2, // Variação humana de tempo
+      maxJitterMinutes: 6,
+      steps: [
+        {
+          id: 'step-1',
+          name: '1º Toque: Suporte no PIX / Dificuldade no App',
+          delayMinutes: 20,
+          sendMode: 'audio',
+          targetFunnel: 'PIX_OR_ABANDONED',
+          audioText: 'Opa, tudo bem? Tô passando aqui rapidinho só pra saber se você conseguiu abrir o app do banco ou se deu algum errinho no PIX. Qualquer coisa me dá um alô aqui que eu te ajudo!',
+          useAiGeneratedText: true,
+          aiPromptInstruction: 'Pergunte com simpatia se o lead teve alguma dificuldade no aplicativo do banco para concluir o PIX e ofereça ajuda.'
+        },
+        {
+          id: 'step-2',
+          name: '2º Toque: Escassez & Condição Promocional (2h)',
+          delayMinutes: 120,
+          sendMode: 'audio',
+          targetFunnel: 'PIX_OR_ABANDONED',
+          audioText: 'Oi! Passando só pra te avisar que eu consegui segurar aquela condição promocional de R$ 37,90 pra você até o fim do dia. Se você ainda quiser aproveitar, me avisa pra eu já liberar seu acesso na hora!',
+          useAiGeneratedText: true,
+          aiPromptInstruction: 'Avise que segurou o valor promocional do produto até o final do dia e pergunte se ele quer aproveitar para liberar o acesso imediato.'
+        },
+        {
+          id: 'step-3',
+          name: '3º Toque: Reengajamento & Prova Social (24h)',
+          delayMinutes: 1440,
+          sendMode: 'audio',
+          targetFunnel: 'ALL_UNPAID',
+          audioText: 'Oi! Tudo bem com você? Tava lembrando da nossa conversa aqui e queria ver como você tá. Você ainda tem interesse nas receitas de doces saudáveis? Muita gente tá amando os resultados!',
+          useAiGeneratedText: true,
+          aiPromptInstruction: 'Fale de forma calorosa no dia seguinte perguntando se o lead ainda quer transformar a rotina com o método e se ficou alguma dúvida.'
+        }
+      ]
     }
   },
   leads: {},
@@ -187,7 +227,8 @@ class StorageService {
             antiBan: { ...DEFAULT_STATE.settings.antiBan, ...(parsed.settings?.antiBan || {}) },
             metaAds: { ...DEFAULT_STATE.settings.metaAds, ...(parsed.settings?.metaAds || {}) },
             vision: { ...DEFAULT_STATE.settings.vision, ...(parsed.settings?.vision || {}) },
-            product: { ...DEFAULT_STATE.settings.product, ...(parsed.settings?.product || {}) }
+            product: { ...DEFAULT_STATE.settings.product, ...(parsed.settings?.product || {}) },
+            remarketing: { ...DEFAULT_STATE.settings.remarketing, ...(parsed.settings?.remarketing || {}) }
           },
           leads: parsed.leads || DEFAULT_STATE.leads,
           messages: parsed.messages || DEFAULT_STATE.messages,
@@ -233,8 +274,14 @@ class StorageService {
     if (partialSettings.metaAds) {
       this.data.settings.metaAds = { ...this.data.settings.metaAds, ...partialSettings.metaAds };
     }
+    if (partialSettings.vision) {
+      this.data.settings.vision = { ...this.data.settings.vision, ...partialSettings.vision };
+    }
     if (partialSettings.product) {
       this.data.settings.product = { ...this.data.settings.product, ...partialSettings.product };
+    }
+    if (partialSettings.remarketing) {
+      this.data.settings.remarketing = { ...this.data.settings.remarketing, ...partialSettings.remarketing };
     }
     this.save();
     supabaseService.saveSettings(this.data.settings);
