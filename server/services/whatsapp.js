@@ -402,14 +402,14 @@ class WhatsAppService {
         //    b) [AUDIO: ...] or [ÁUDIO: ...] (bracketed text)
         //    c) [ENVIAR_AUDIO: ...]
         let audioSpeechText = null;
-        const quotedRegex = /\[(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)\]:?\s*["'“”«»]([\s\S]*?)["'“”«»]/i;
+        const quotedRegex = /\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)\s*\]:?\s*["'“”«»]([\s\S]*?)["'“”«»]/i;
         const quotedMatch = replyText.match(quotedRegex);
 
         if (quotedMatch) {
           audioSpeechText = quotedMatch[1].trim();
           replyText = replyText.replace(quotedMatch[0], '').trim();
         } else {
-          const bracketRegex = /\[(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)\s*([\s\S]*?)(?:\]|$)/i;
+          const bracketRegex = /\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)\s*([\s\S]*?)(?:\]|$)/i;
           const bracketMatch = replyText.match(bracketRegex);
           if (bracketMatch) {
             audioSpeechText = bracketMatch[1].trim().replace(/^["'“”«»]+|["'“”«»]+$/g, '').trim();
@@ -419,7 +419,8 @@ class WhatsAppService {
 
         // Clean any remaining audio tag remnants from replyText so they NEVER leak as plain text bubbles
         replyText = replyText
-          .replace(/\[(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)[\s\S]*?(?:\]|$)/gi, '')
+          .replace(/\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)[\s\S]*?(?:\]|$)/gi, '')
+          .replace(/\[\s*(?:AUDIO|ÁUDIO)\s*\]:?\s*["'“”«»][\s\S]*?["'“”«»]/gi, '')
           .trim();
 
         if (audioSpeechText && audioSpeechText.length > 0) {
@@ -568,8 +569,8 @@ class WhatsAppService {
         // CRITICAL: Strip ALL system tags completely from replyText so they are NEVER sent as plain text bubbles!
         replyText = replyText
           .replace(/\[(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE):[\s\S]*?(?:\]|$)/gi, '')
-          .replace(/\[(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)[\s\S]*?(?:\]|$)/gi, '')
-          .replace(/\[(?:AUDIO|ÁUDIO)\]:?\s*["'“”«»][\s\S]*?["'“”«»]/gi, '')
+          .replace(/\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)[\s\S]*?(?:\]|$)/gi, '')
+          .replace(/\[\s*(?:AUDIO|ÁUDIO)\s*\]:?\s*["'“”«»][\s\S]*?["'“”«»]/gi, '')
           .trim();
 
         // 4. Send Text Messages with Natural Anti-Ban Bubbles & Typing Simulation

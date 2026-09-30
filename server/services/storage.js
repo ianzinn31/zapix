@@ -21,12 +21,12 @@ const MEDIA_CACHE_DIR = path.join(DATA_DIR, 'media_cache');
 const DEFAULT_STATE = {
   settings: {
     ai: {
-      primaryModel: 'meta/llama-3.2-11b-vision-instruct',
+      primaryModel: 'deepseek-ai/deepseek-v4.1-flash',
       primaryApiKey: process.env.NVIDIA_NIM_PRIMARY_API_KEY || '',
-      fallbackModel: 'meta/llama-3.2-11b-vision-instruct',
+      fallbackModel: 'deepseek-ai/deepseek-v4.1-flash',
       fallbackApiKey: process.env.NVIDIA_NIM_FALLBACK_API_KEY || '',
       temperature: 0.7,
-      maxTokens: 600,
+      maxTokens: 1000,
       isFallbackActive: false,
       lastFallbackReason: null,
       customPromptInstructions: ''

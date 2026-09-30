@@ -167,7 +167,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
   }
 
   // Call single NIM model with timeout
-  async callModel(model, apiKey, messages, temperature = 0.7, maxTokens = 600) {
+  async callModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1000) {
     if (!apiKey) {
       throw new Error(`API Key não configurada para o modelo ${model}`);
     }
@@ -185,11 +185,15 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
         Authorization: `Bearer ${apiKey.trim()}`,
         'Content-Type': 'application/json'
       },
-      timeout: 25000 // 25s timeout
+      timeout: 35000 // 35s timeout
     });
 
     if (response.data && response.data.choices && response.data.choices[0]?.message?.content) {
       return response.data.choices[0].message.content.trim();
+    }
+
+    if (response.data?.choices?.[0]?.message?.reasoning_content) {
+      return response.data.choices[0].message.reasoning_content.trim();
     }
 
     throw new Error('Resposta vazia ou inválida da API NVIDIA NIM');
@@ -220,18 +224,18 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
     }
 
     let responseText = null;
-    let modelUsed = settings.primaryModel || 'meta/llama-3.2-11b-vision-instruct';
+    let modelUsed = settings.primaryModel || 'deepseek-ai/deepseek-v4.1-flash';
 
     // 1. Try Primary NVIDIA NIM Model
     try {
       const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
       if (primaryKey) {
         responseText = await this.callModel(
-          settings.primaryModel || 'meta/llama-3.2-11b-vision-instruct',
+          settings.primaryModel || 'deepseek-ai/deepseek-v4.1-flash',
           primaryKey,
           messages,
-          settings.temperature,
-          settings.maxTokens
+          settings.temperature ?? 0.7,
+          settings.maxTokens || 1000
         );
         // Primary succeeded - ensure fallback state is marked inactive
         if (settings.isFallbackActive) {
@@ -244,7 +248,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
       console.warn(`[NVIDIA NIM Primary Error]: ${primaryErr.message}`);
       storage.addLog(
         'FALLBACK_TRIGGERED',
-        `NVIDIA NIM Primário (${settings.primaryModel}) falhou: ${primaryErr.message}. Ativando Fallback para (${settings.fallbackModel || 'meta/llama-3.2-11b-vision-instruct'}).`
+        `NVIDIA NIM Primário (${settings.primaryModel}) falhou: ${primaryErr.message}. Ativando Fallback para (${settings.fallbackModel || 'deepseek-ai/deepseek-v4.1-flash'}).`
       );
       storage.updateSettings({
         ai: {
@@ -257,15 +261,15 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
     // 2. Try Fallback NVIDIA NIM Model
     try {
       const fallbackKey = settings.fallbackApiKey || process.env.NVIDIA_NIM_FALLBACK_API_KEY || settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
-      const fallbackModel = settings.fallbackModel || 'meta/llama-3.2-11b-vision-instruct';
+      const fallbackModel = settings.fallbackModel || 'deepseek-ai/deepseek-v4.1-flash';
       if (fallbackKey && fallbackModel) {
         modelUsed = fallbackModel;
         responseText = await this.callModel(
           fallbackModel,
           fallbackKey,
           messages,
-          settings.temperature,
-          settings.maxTokens
+          settings.temperature ?? 0.7,
+          settings.maxTokens || 1000
         );
         return { text: responseText, modelUsed, fallbackTriggered: true };
       }
@@ -350,11 +354,11 @@ Gere agora o texto exato falado para ser gravado em áudio sob medida para este 
       const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
       if (primaryKey) {
         const generated = await this.callModel(
-          settings.primaryModel || 'meta/llama-3.2-11b-vision-instruct',
+          settings.primaryModel || 'deepseek-ai/deepseek-v4.1-flash',
           primaryKey,
           messages,
           0.7,
-          150
+          600
         );
         if (generated && generated.length > 5) {
           return generated.replace(/["'“”«»]/g, '').trim();
@@ -369,11 +373,11 @@ Gere agora o texto exato falado para ser gravado em áudio sob medida para este 
       const fallbackKey = settings.fallbackApiKey || process.env.NVIDIA_NIM_FALLBACK_API_KEY || settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
       if (fallbackKey) {
         const generated = await this.callModel(
-          settings.fallbackModel || 'meta/llama-3.2-3b-instruct',
+          settings.fallbackModel || 'deepseek-ai/deepseek-v4.1-flash',
           fallbackKey,
           messages,
           0.7,
-          150
+          600
         );
         if (generated && generated.length > 5) {
           return generated.replace(/["'“”«»]/g, '').trim();

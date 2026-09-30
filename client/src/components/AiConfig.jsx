@@ -15,12 +15,12 @@ import {
 
 export default function AiConfig({ aiSettings, onSave }) {
   const [formData, setFormData] = useState({
-    primaryModel: aiSettings?.primaryModel || 'meta/llama-3.2-11b-vision-instruct',
+    primaryModel: aiSettings?.primaryModel || 'deepseek-ai/deepseek-v4.1-flash',
     primaryApiKey: aiSettings?.primaryApiKey || '',
-    fallbackModel: aiSettings?.fallbackModel || 'meta/llama-3.2-11b-vision-instruct',
+    fallbackModel: aiSettings?.fallbackModel || 'deepseek-ai/deepseek-v4.1-flash',
     fallbackApiKey: aiSettings?.fallbackApiKey || '',
     temperature: aiSettings?.temperature ?? 0.7,
-    maxTokens: aiSettings?.maxTokens || 600,
+    maxTokens: aiSettings?.maxTokens || 1000,
     customPromptInstructions: aiSettings?.customPromptInstructions || ''
   });
 
@@ -29,11 +29,11 @@ export default function AiConfig({ aiSettings, onSave }) {
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const availableModels = [
-    { id: 'meta/llama-3.2-11b-vision-instruct', name: 'Meta Llama 3.2 11B Instruct (Recomendado & Ativo)', tag: 'Alta Precisão' },
-    { id: 'meta/muse-glimmer-30b', name: 'Meta Muse Glimmer 30B (Persuasão & Diálogo)', tag: 'Persuasão' },
-    { id: 'google/diffusiongemma-26b-a4b-it', name: 'Google DiffusionGemma 26B Instruct', tag: 'Estável' },
-    { id: 'nvidia/nemotron-3.5-lightning-30b-a3b', name: 'NVIDIA Nemotron 3.5 Lightning 30B', tag: 'Ultra Rápido' },
-    { id: 'openai/gpt-oss-20b', name: 'OpenAI GPT-OSS 20B (Conversacional)', tag: 'Baixa Latência' }
+    { id: 'deepseek-ai/deepseek-v4.1-flash', name: 'DeepSeek v4.1 Flash (Recomendado & Super Persuasivo)', tag: 'Raciocínio & Conversão' },
+    { id: 'meta/llama-3.2-11b-vision-instruct', name: 'Meta Llama 3.2 11B Vision Instruct', tag: 'Multimodal' },
+    { id: 'z-ai/glm-5.3-flash', name: 'GLM 5.3 Flash (Alta Velocidade)', tag: 'Ultra Rápido' },
+    { id: 'deepseek-ai/deepseek-coder-6.7b-instruct', name: 'DeepSeek Coder 6.7B Instruct', tag: 'Lógica Rápida' },
+    { id: 'meta/muse-glimmer-30b', name: 'Meta Muse Glimmer 30B', tag: 'Diálogo' }
   ];
 
   const handleSubmit = (e) => {
