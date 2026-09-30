@@ -430,19 +430,67 @@ export default function FishAudioConfig({ fishSettings, transcriptionSettings, o
             {/* Dispatch Mode */}
             <div>
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                Momento de Envio do Áudio
+                Estratégia & Frequência de Envio de Áudio
               </label>
               <select
-                value={formData.autoAudioMode}
+                value={formData.autoAudioMode || 'hybrid_high_conversion'}
                 onChange={(e) => setFormData({ ...formData, autoAudioMode: e.target.value })}
                 className="input-field"
                 style={{ fontSize: '0.84rem' }}
               >
-                <option value="pitch_and_welcome">Boas-vindas e Oferta Principal (Recomendado)</option>
-                <option value="pitch_only">Apenas no Pitch de Vendas</option>
-                <option value="all_messages">Todas as Mensagens (Alto Consumo)</option>
-                <option value="manual_only">Apenas Quando Acionado pelo Operador</option>
+                <option value="hybrid_high_conversion">🔥 Modo Híbrido Alta Conversão (Mescla Texto + Áudio - Recomendado)</option>
+                <option value="frequent_audio">🎙️ Modo Frequente (Áudio em 80%+ das Interações)</option>
+                <option value="pitch_and_welcome">👋 Boas-vindas e Pitch de Vendas</option>
+                <option value="pitch_only">💰 Apenas no Fechamento / Pitch de Vendas</option>
+                <option value="mirror_only">👂 Espelhamento (Apenas quando o lead mandar áudio ou pedir)</option>
+                <option value="manual_only">🔒 Desativar Áudios Automáticos (Apenas Texto)</option>
               </select>
+            </div>
+          </div>
+
+          {/* Strategy Explanatory Card */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%)',
+            border: '1px solid rgba(6, 182, 212, 0.25)',
+            borderRadius: '10px',
+            padding: '12px 16px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            <Sparkles size={20} color="#22d3ee" style={{ flexShrink: 0 }} />
+            <div style={{ fontSize: '0.8rem', color: '#cbd5e1', lineHeight: '1.45' }}>
+              {(formData.autoAudioMode === 'hybrid_high_conversion' || !formData.autoAudioMode) && (
+                <span>
+                  <strong style={{ color: '#38bdf8' }}>Modo Híbrido Ativo:</strong> A IA não espera o cliente pedir! Ela mescla naturalmente áudios pessoais de voz (10-15s) nos momentos de maior impacto psicológico (conexão inicial com a dor, quebra de objeções, apresentação da oferta e fechamento no PIX com a chave limpa no texto para cópia).
+                </span>
+              )}
+              {formData.autoAudioMode === 'frequent_audio' && (
+                <span>
+                  <strong style={{ color: '#34d399' }}>Modo Frequente Ativo:</strong> A IA prioriza voz em praticamente todas as mensagens (80%+). O texto é reservado apenas para links, números e chaves PIX.
+                </span>
+              )}
+              {formData.autoAudioMode === 'pitch_and_welcome' && (
+                <span>
+                  <strong style={{ color: '#fbbf24' }}>Boas-vindas e Pitch:</strong> Áudios são disparados no primeiro contato com o lead e na apresentação do valor do produto.
+                </span>
+              )}
+              {formData.autoAudioMode === 'pitch_only' && (
+                <span>
+                  <strong style={{ color: '#fbbf24' }}>Pitch Only:</strong> Apenas na hora de apresentar a oferta final ou cobrar.
+                </span>
+              )}
+              {formData.autoAudioMode === 'mirror_only' && (
+                <span>
+                  <strong style={{ color: '#94a3b8' }}>Espelhamento:</strong> O agente responde em texto e só manda áudio se o cliente mandar áudio primeiro ou pedir.
+                </span>
+              )}
+              {formData.autoAudioMode === 'manual_only' && (
+                <span>
+                  <strong style={{ color: '#f43f5e' }}>Apenas Texto:</strong> Nenhum áudio automático será disparado no funil regular.
+                </span>
+              )}
             </div>
           </div>
 

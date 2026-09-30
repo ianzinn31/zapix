@@ -37,7 +37,7 @@ const DEFAULT_STATE = {
       model: 'fish-audio/s2.1-pro-free:free',
       voiceId: process.env.FISH_AUDIO_VOICE_ID || '7f92f8afb8ec43bf81429cc1c9199cb1',
       enabled: true,
-      autoAudioMode: 'pitch_and_welcome',
+      autoAudioMode: 'hybrid_high_conversion',
       speed: 1.0
     },
     antiBan: {
