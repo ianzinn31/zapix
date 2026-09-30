@@ -36,6 +36,78 @@ class FishAudioService {
     }
   }
 
+  // Extract real audio waveform envelope (64 bytes, 0-100 values) for WhatsApp PTT visualization
+  async extractWaveform(filePath, samplesCount = 64) {
+    try {
+      const { stdout } = await execFileAsync('ffmpeg', [
+        '-i', filePath,
+        '-ac', '1',
+        '-ar', '8000',
+        '-f', 's16le',
+        '-'
+      ], { encoding: 'buffer', maxBuffer: 10 * 1024 * 1024 });
+
+      const totalSamples = Math.floor(stdout.length / 2);
+      if (totalSamples === 0) {
+        return this.generateNaturalWaveformFallback(samplesCount);
+      }
+
+      const blockSize = Math.floor(totalSamples / samplesCount);
+      const waveform = new Uint8Array(samplesCount);
+
+      let maxPeak = 0;
+      const rawPeaks = new Float32Array(samplesCount);
+
+      for (let i = 0; i < samplesCount; i++) {
+        const start = i * blockSize * 2;
+        const end = (i === samplesCount - 1) ? stdout.length : (i + 1) * blockSize * 2;
+        let sum = 0;
+        let count = 0;
+        let peak = 0;
+
+        for (let offset = start; offset < end; offset += 2) {
+          if (offset + 1 < stdout.length) {
+            const val = Math.abs(stdout.readInt16LE(offset));
+            if (val > peak) peak = val;
+            sum += val;
+            count++;
+          }
+        }
+
+        const avg = count > 0 ? (sum / count) : 0;
+        const blended = (peak * 0.7) + (avg * 0.3);
+        rawPeaks[i] = blended;
+        if (blended > maxPeak) maxPeak = blended;
+      }
+
+      const scale = maxPeak > 0 ? (100 / maxPeak) : 1;
+      for (let i = 0; i < samplesCount; i++) {
+        const normalized = Math.round(rawPeaks[i] * scale);
+        // Ensure values between 2 and 100 for clean visual peaks in WhatsApp
+        waveform[i] = Math.min(100, Math.max(2, normalized));
+      }
+
+      return waveform;
+    } catch (err) {
+      console.warn('Could not extract waveform from audio with ffmpeg, using natural speech curve fallback:', err.message);
+      return this.generateNaturalWaveformFallback(samplesCount);
+    }
+  }
+
+  // Generate realistic human vocal waveform (silences, rising and falling intonations)
+  generateNaturalWaveformFallback(samplesCount = 64) {
+    const waveform = new Uint8Array(samplesCount);
+    for (let i = 0; i < samplesCount; i++) {
+      const progress = i / samplesCount;
+      const envelope = Math.sin(progress * Math.PI);
+      const variation = Math.sin(progress * Math.PI * 6) * 0.3 + 0.7;
+      const noise = (Math.random() * 0.3) + 0.7;
+      const val = Math.round(envelope * variation * noise * 85);
+      waveform[i] = Math.min(100, Math.max(3, val));
+    }
+    return waveform;
+  }
+
   // Generate speech audio from text using OpenRouter (fish-audio/s2.1-pro-free:free)
   async generateSpeech(text, customModel = null, customVoiceId = null) {
     const config = storage.getSettings().fishAudio;
@@ -81,11 +153,13 @@ class FishAudioService {
         await this.convertToWhatsAppOpus(tempMp3Path, finalOggPath);
 
         const durationSec = Math.max(Math.ceil(text.length / 15), 3);
+        const waveform = await this.extractWaveform(finalOggPath);
 
         return {
           oggPath: finalOggPath,
           audioUrl: `/audio/${path.basename(finalOggPath)}`,
           durationSec,
+          waveform,
           filename: path.basename(finalOggPath),
           provider: 'openrouter',
           model,
@@ -118,10 +192,12 @@ class FishAudioService {
             fs.writeFileSync(tempMp3Path, Buffer.from(directRes.data));
             await this.convertToWhatsAppOpus(tempMp3Path, finalOggPath);
             const durationSec = Math.max(Math.ceil(text.length / 15), 3);
+            const waveform = await this.extractWaveform(finalOggPath);
             return {
               oggPath: finalOggPath,
               audioUrl: `/audio/${path.basename(finalOggPath)}`,
               durationSec,
+              waveform,
               filename: path.basename(finalOggPath),
               provider: 'fish-audio-direct'
             };
@@ -147,11 +223,13 @@ class FishAudioService {
         finalOggPath
       ];
       await execFileAsync('ffmpeg', toneArgs);
+      const waveform = await this.extractWaveform(finalOggPath);
 
       return {
         oggPath: finalOggPath,
         audioUrl: `/audio/${path.basename(finalOggPath)}`,
         durationSec,
+        waveform,
         filename: path.basename(finalOggPath),
         isSynthetic: true,
         model

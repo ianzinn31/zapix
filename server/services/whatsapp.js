@@ -424,12 +424,14 @@ class WhatsAppService {
               await antiBan.sleep(recordingDelay);
               await this.sock?.sendPresenceUpdate('paused', jid);
 
-              // Send native WhatsApp Voice Note (PTT)
+              // Send native WhatsApp Voice Note (PTT) with animated waveform
               const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
+              const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
               await this.sock?.sendMessage(jid, {
                 audio: audioBuffer,
                 mimetype: 'audio/ogg; codecs=opus',
-                ptt: true
+                ptt: true,
+                waveform
               });
 
               // Save audio message to store
@@ -724,11 +726,13 @@ class WhatsAppService {
       if (speechText.length > 0) {
         const generatedAudio = await fishAudio.generateSpeech(speechText);
         const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
+        const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
 
         await this.sock.sendMessage(jid, {
           audio: audioBuffer,
           mimetype: 'audio/ogg; codecs=opus',
-          ptt: true
+          ptt: true,
+          waveform
         });
 
         const audioMsg = storage.addMessage({
@@ -749,10 +753,12 @@ class WhatsAppService {
     if (type === 'audio' && mediaUrl) {
       const audioPath = path.resolve(DATA_DIR, mediaUrl.replace(/^\/audio\//, 'audio_cache/'));
       if (fs.existsSync(audioPath)) {
+        const waveform = await fishAudio.extractWaveform(audioPath);
         await this.sock.sendMessage(jid, {
           audio: fs.readFileSync(audioPath),
           mimetype: 'audio/ogg; codecs=opus',
-          ptt: true
+          ptt: true,
+          waveform
         });
       }
     } else {
@@ -809,10 +815,12 @@ class WhatsAppService {
     await this.sock.sendPresenceUpdate('paused', jid);
 
     const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
+    const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
     await this.sock.sendMessage(jid, {
       audio: audioBuffer,
       mimetype: 'audio/ogg; codecs=opus',
-      ptt: true
+      ptt: true,
+      waveform
     });
 
     const audioMsg = storage.addMessage({
