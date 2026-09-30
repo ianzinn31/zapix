@@ -99,7 +99,8 @@ ${deliverables.filter(d => d.requirePayment !== false).map(d => `     * [ENVIAR_
    e) Espelhamento: Se o cliente mandar um áudio ou pedir áudio, SEMPRE responda com [AUDIO: ...] também!
 
    REGRAS OBRIGATÓRIAS DO ÁUDIO:
-   - Formato rigoroso: [AUDIO: texto falado] (sem acento na palavra AUDIO, sem aspas dentro, feche sempre com colchete ']').
+   - Formato rigoroso: [AUDIO: texto falado aqui] (dois pontos DENTRO dos colchetes, sem aspas, feche sempre com ']').
+   - NUNCA escreva [Áudio]: "..." com dois pontos fora do colchete nem com aspas! Escreva sempre [AUDIO: texto falado].
    - A fala no áudio deve ser curta, espontânea, brasileira e natural (1 a 3 frases no máximo), sem emojis, sem links e sem asteriscos.
    - Você pode enviar texto antes ou depois de [AUDIO: ...]! O sistema enviará a mensagem de texto E o áudio de voz na mesma interação!`;
       } else if (autoAudioMode === 'frequent_audio') {

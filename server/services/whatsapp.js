@@ -397,20 +397,32 @@ class WhatsAppService {
           });
         }
 
-        // 2. Check for Voice Audio Tag: [AUDIO: ...] or [ÁUDIO: ...]
-        const audioTagMatch = replyText.match(/\[(?:AUDIO|ÁUDIO):\s*([\s\S]*?)(?:\]|$)/i);
-        if (audioTagMatch) {
-          let audioSpeechText = audioTagMatch[1].trim();
-          audioSpeechText = audioSpeechText.replace(/^["'“”«»]+|["'“”«»]+$/g, '').trim();
+        // 2. Check for Voice Audio Tag in all its variations:
+        //    a) [Áudio]: "..." or [Audio]: "..." (quoted text after bracketed tag)
+        //    b) [AUDIO: ...] or [ÁUDIO: ...] (bracketed text)
+        //    c) [ENVIAR_AUDIO: ...]
+        let audioSpeechText = null;
+        const quotedRegex = /\[(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)\]:?\s*["'“”«»]([\s\S]*?)["'“”«»]/i;
+        const quotedMatch = replyText.match(quotedRegex);
 
-          // Strip the audio tag cleanly from replyText
-          if (/\[(?:AUDIO|ÁUDIO):[\s\S]*?\]/i.test(replyText)) {
-            replyText = replyText.replace(/\[(?:AUDIO|ÁUDIO):[\s\S]*?\]/gi, '').trim();
-          } else {
-            replyText = replyText.replace(/\[(?:AUDIO|ÁUDIO):[\s\S]*?(?:\]|$)/gi, '').trim();
+        if (quotedMatch) {
+          audioSpeechText = quotedMatch[1].trim();
+          replyText = replyText.replace(quotedMatch[0], '').trim();
+        } else {
+          const bracketRegex = /\[(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)\s*([\s\S]*?)(?:\]|$)/i;
+          const bracketMatch = replyText.match(bracketRegex);
+          if (bracketMatch) {
+            audioSpeechText = bracketMatch[1].trim().replace(/^["'“”«»]+|["'“”«»]+$/g, '').trim();
+            replyText = replyText.replace(bracketMatch[0], '').trim();
           }
+        }
 
-          if (audioSpeechText.length > 0) {
+        // Clean any remaining audio tag remnants from replyText so they NEVER leak as plain text bubbles
+        replyText = replyText
+          .replace(/\[(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)[\s\S]*?(?:\]|$)/gi, '')
+          .trim();
+
+        if (audioSpeechText && audioSpeechText.length > 0) {
             // Generate audio via Fish Audio TTS
             try {
               const generatedAudio = await fishAudio.generateSpeech(audioSpeechText);
@@ -556,7 +568,8 @@ class WhatsAppService {
         // CRITICAL: Strip ALL system tags completely from replyText so they are NEVER sent as plain text bubbles!
         replyText = replyText
           .replace(/\[(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE):[\s\S]*?(?:\]|$)/gi, '')
-          .replace(/\[(?:AUDIO|ÁUDIO):[\s\S]*?(?:\]|$)/gi, '')
+          .replace(/\[(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)[\s\S]*?(?:\]|$)/gi, '')
+          .replace(/\[(?:AUDIO|ÁUDIO)\]:?\s*["'“”«»][\s\S]*?["'“”«»]/gi, '')
           .trim();
 
         // 4. Send Text Messages with Natural Anti-Ban Bubbles & Typing Simulation
@@ -719,11 +732,22 @@ class WhatsAppService {
       }
     }
 
-    // 2. Check if this is an Audio Pitch tag trigger: [AUDIO: ...] or [ÁUDIO: ...]
-    const audioMatch = text ? text.match(/\[(?:AUDIO|ÁUDIO):\s*([\s\S]*?)(?:\]|$)/i) : null;
-    if (audioMatch) {
-      let speechText = audioMatch[1].trim().replace(/^["'“”«»]+|["'“”«»]+$/g, '').trim();
-      if (speechText.length > 0) {
+    // 2. Check if this is an Audio Pitch tag trigger: [AUDIO: ...] or [Áudio]: "..."
+    let manualSpeechText = null;
+    if (text) {
+      const qMatch = text.match(/\[(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)\]:?\s*["'“”«»]([\s\S]*?)["'“”«»]/i);
+      if (qMatch) {
+        manualSpeechText = qMatch[1].trim();
+      } else {
+        const bMatch = text.match(/\[(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)\s*([\s\S]*?)(?:\]|$)/i);
+        if (bMatch) {
+          manualSpeechText = bMatch[1].trim().replace(/^["'“”«»]+|["'“”«»]+$/g, '').trim();
+        }
+      }
+    }
+
+    if (manualSpeechText && manualSpeechText.length > 0) {
+      const speechText = manualSpeechText;
         const generatedAudio = await fishAudio.generateSpeech(speechText);
         const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
         const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
