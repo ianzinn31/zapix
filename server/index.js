@@ -1,0 +1,84 @@
+import express from 'express';
+import http from 'http';
+import { Server as SocketIOServer } from 'socket.io';
+import cors from 'cors';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+import apiRouter from './routes/api.js';
+import webhooksRouter from './routes/webhooks.js';
+import { whatsapp } from './services/whatsapp.js';
+import { storage, UPLOADS_DIR, AUDIO_CACHE_DIR } from './services/storage.js';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const server = http.createServer(app);
+
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
+
+// Attach socket.io to WhatsApp service
+whatsapp.setSocketIo(io);
+
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+// Static directories for deliverables & audio cache
+app.use('/uploads', express.static(UPLOADS_DIR));
+app.use('/audio', express.static(AUDIO_CACHE_DIR));
+
+// Routes
+app.use('/api', apiRouter);
+app.use('/webhooks', webhooksRouter);
+
+// Serve built frontend if client/dist exists
+const clientDistPath = path.resolve(__dirname, '../client/dist');
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/webhooks') && !req.path.startsWith('/uploads') && !req.path.startsWith('/audio')) {
+      return res.sendFile(path.join(clientDistPath, 'index.html'));
+    }
+    next();
+  });
+}
+
+// Socket.io connection handling
+io.on('connection', (socket) => {
+  console.log(`[Socket.io] Dashboard client connected: ${socket.id}`);
+
+  // Send initial statuses immediately upon dashboard connection
+  socket.emit('whatsapp:status', whatsapp.getStatus());
+  socket.emit('settings:updated', storage.getSettings());
+
+  socket.on('disconnect', () => {
+    // client disconnected
+  });
+});
+
+const PORT = process.env.PORT || 3001;
+
+server.listen(PORT, () => {
+  console.log(`=======================================================`);
+  console.log(`🚀 Zapix AI - WhatsApp Sales Agent Server rodando!`);
+  console.log(`🌐 Backend API & WebSockets: http://localhost:${PORT}`);
+  console.log(`📊 Dashboard UI: http://localhost:5173 (dev) ou :${PORT}`);
+  console.log(`⚡ NVIDIA NIM Dual Fallback: Pronto`);
+  console.log(`🎙️ Fish Audio TTS + Opus WhatsApp PTT: Pronto`);
+  console.log(`🛡️ Anti-Ban & Human Simulation: Ativado`);
+  console.log(`=======================================================`);
+
+  storage.addLog('INFO', `Servidor Zapix AI iniciado com sucesso na porta ${PORT}`);
+});
