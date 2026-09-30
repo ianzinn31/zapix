@@ -106,9 +106,22 @@ class AntiBanService {
     return nextPromise;
   }
 
-  // Sleep utility
-  sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  // Sleep utility with optional AbortSignal for human interruption
+  sleep(ms, signal = null) {
+    return new Promise((resolve) => {
+      if (signal?.aborted) return resolve();
+      const timer = setTimeout(resolve, ms);
+      if (signal) {
+        signal.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          { once: true }
+        );
+      }
+    });
   }
 }
 

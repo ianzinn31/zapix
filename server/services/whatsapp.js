@@ -77,6 +77,8 @@ class WhatsAppService {
     this.connectedNumber = null;
     this.reconnectAttempts = 0;
     this.isInitializing = false;
+    this.activeLeadControllers = new Map(); // phone -> AbortController
+    this.incomingDebounceMap = new Map(); // phone -> { timer, messages: [], jid }
   }
 
   setSocketIo(io) {
@@ -356,8 +358,36 @@ class WhatsAppService {
             : messageContent;
 
           if (aiInput) {
-            // Trigger AI Sales Agent with Anti-Ban & Human Simulation
-            this.handleAiResponse(phone, jid, aiInput);
+            // Cancel any pending bubble loop from previous response if lead spoke again
+            if (this.activeLeadControllers.has(phone)) {
+              const activeCtrl = this.activeLeadControllers.get(phone);
+              if (activeCtrl && !activeCtrl.signal.aborted) {
+                activeCtrl.abort();
+                console.log(`[Zapix Human Pacing] Lead ${phone} enviou nova mensagem. Cancelando bolhas pendentes da resposta anterior para priorizar a fala do lead.`);
+              }
+            }
+
+            // Human Debounce Buffer: Group multiple quick messages sent within 2.2s window
+            if (!this.incomingDebounceMap.has(phone)) {
+              this.incomingDebounceMap.set(phone, { timer: null, messages: [], jid });
+            }
+
+            const debounceEntry = this.incomingDebounceMap.get(phone);
+            debounceEntry.messages.push(aiInput);
+            debounceEntry.jid = jid;
+
+            if (debounceEntry.timer) {
+              clearTimeout(debounceEntry.timer);
+            }
+
+            debounceEntry.timer = setTimeout(() => {
+              const pendingMessages = [...debounceEntry.messages];
+              const targetJid = debounceEntry.jid;
+              this.incomingDebounceMap.delete(phone);
+
+              const consolidatedInput = pendingMessages.join('\n');
+              this.handleAiResponse(phone, targetJid, consolidatedInput);
+            }, 2200); // 2.2s natural conversational buffer
           }
         }
       });
@@ -375,16 +405,22 @@ class WhatsAppService {
   // Handle AI Sales Response with Human Pacing and Anti-Ban
   async handleAiResponse(phone, jid, userText) {
     antiBan.enqueueForLead(phone, async () => {
+      const abortController = new AbortController();
+      this.activeLeadControllers.set(phone, abortController);
+      const signal = abortController.signal;
+
       try {
         const lead = storage.getLead(phone);
         // Double check if operator paused AI in the meantime
         if (lead && lead.aiActive === false) return;
+        if (signal.aborted) return;
 
         // Fetch recent conversation history
         const history = storage.getMessages(phone);
 
         // 1. Generate AI Response via NVIDIA NIM (with automatic fallback)
         const aiResult = await nvidiaNim.generateResponse(phone, userText, history);
+        if (signal.aborted) return;
         let replyText = aiResult.text;
 
         if (!replyText) return;
@@ -423,46 +459,48 @@ class WhatsAppService {
           .replace(/\[\s*(?:AUDIO|ÁUDIO)\s*\]:?\s*["'“”«»][\s\S]*?["'“”«»]/gi, '')
           .trim();
 
-        if (audioSpeechText && audioSpeechText.length > 0) {
-            // Generate audio via Fish Audio TTS
-            try {
-              const generatedAudio = await fishAudio.generateSpeech(audioSpeechText);
+        if (audioSpeechText && audioSpeechText.length > 0 && !signal.aborted) {
+          // Generate audio via Fish Audio TTS
+          try {
+            const generatedAudio = await fishAudio.generateSpeech(audioSpeechText);
+            if (signal.aborted) return;
 
-              // Anti-ban: Simulate human recording voice note
-              const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
-              await antiBan.sleep(thinkingDelay);
+            // Anti-ban: Simulate human recording voice note
+            const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
+            await antiBan.sleep(thinkingDelay, signal);
+            if (signal.aborted) return;
 
-              // WhatsApp presence: 'recording'
-              await this.sock?.sendPresenceUpdate('recording', jid);
-              await antiBan.sleep(recordingDelay);
-              await this.sock?.sendPresenceUpdate('paused', jid);
+            // WhatsApp presence: 'recording'
+            await this.sock?.sendPresenceUpdate('recording', jid);
+            await antiBan.sleep(recordingDelay, signal);
+            await this.sock?.sendPresenceUpdate('paused', jid);
+            if (signal.aborted) return;
 
-              // Send native WhatsApp Voice Note (PTT) with animated waveform
-              const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
-              const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
-              await this.sock?.sendMessage(jid, {
-                audio: audioBuffer,
-                mimetype: 'audio/ogg; codecs=opus',
-                ptt: true,
-                waveform
-              });
+            // Send native WhatsApp Voice Note (PTT) with animated waveform
+            const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
+            const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
+            await this.sock?.sendMessage(jid, {
+              audio: audioBuffer,
+              mimetype: 'audio/ogg; codecs=opus',
+              ptt: true,
+              waveform
+            });
 
-              // Save audio message to store
-              const audioMsg = storage.addMessage({
-                phone,
-                fromMe: true,
-                text: `🎵 [Áudio]: "${audioSpeechText}"`,
-                type: 'audio',
-                mediaUrl: generatedAudio.audioUrl,
-                audioDuration: generatedAudio.durationSec
-              });
-              this.emit('chat:message', audioMsg);
-              storage.addLog('SUCCESS', `Áudio humanizado Fish Audio enviado para ${phone}`);
-            } catch (audioErr) {
-              console.error('Failed to send voice note:', audioErr);
-              // If audio fails, send as text fallback so customer gets the message
-              replyText = `${audioSpeechText}\n\n${replyText}`.trim();
-            }
+            // Save audio message to store
+            const audioMsg = storage.addMessage({
+              phone,
+              fromMe: true,
+              text: `🎵 [Áudio]: "${audioSpeechText}"`,
+              type: 'audio',
+              mediaUrl: generatedAudio.audioUrl,
+              audioDuration: generatedAudio.durationSec
+            });
+            this.emit('chat:message', audioMsg);
+            storage.addLog('SUCCESS', `Áudio humanizado Fish Audio enviado para ${phone}`);
+          } catch (audioErr) {
+            console.error('Failed to send voice note:', audioErr);
+            // If audio fails, send as text fallback so customer gets the message
+            replyText = `${audioSpeechText}\n\n${replyText}`.trim();
           }
         }
 
@@ -527,16 +565,21 @@ class WhatsAppService {
           // Strategy A: 'deliver_first' -> allow sending sample / product if customer wants it, before charging!
           if (deliveryStrategy === 'deliver_first') {
             const wantsFile =
-              lowerUser.includes('amostra') ||
-              lowerUser.includes('receita') ||
-              lowerUser.includes('material') ||
-              lowerUser.includes('manda') ||
-              lowerUser.includes('envia') ||
-              lowerUser.includes('quero') ||
-              lowerUser.includes('pode me enviar') ||
-              lowerReply.includes('vou te enviar') ||
-              lowerReply.includes('aqui está') ||
-              lowerReply.includes('estou enviando');
+              (lowerUser.includes('manda') ||
+               lowerUser.includes('envia') ||
+               lowerUser.includes('quero ver') ||
+               lowerUser.includes('pode me enviar') ||
+               lowerUser.includes('me passa') ||
+               lowerUser.includes('manda a amostra') ||
+               lowerUser.includes('envia a amostra')) &&
+              (lowerUser.includes('amostra') ||
+               lowerUser.includes('receita') ||
+               lowerUser.includes('material') ||
+               lowerUser.includes('guia') ||
+               lowerUser.includes('pdf')) ||
+              lowerReply.includes('vou te enviar o material') ||
+              lowerReply.includes('vou te mandar o material') ||
+              lowerReply.includes('estou te enviando o arquivo');
 
             if (wantsFile) {
               const defaultDeliv = resolveDeliverable('AMOSTRA') || resolveDeliverable('PRODUTO') || storage.getDeliverables()[0];
@@ -574,20 +617,26 @@ class WhatsAppService {
           .trim();
 
         // 4. Send Text Messages with Natural Anti-Ban Bubbles & Typing Simulation
-        if (replyText && replyText.length > 0) {
+        if (replyText && replyText.length > 0 && !signal.aborted) {
           const bubbles = antiBan.splitIntoNaturalBubbles(replyText);
 
           for (let i = 0; i < bubbles.length; i++) {
+            if (signal.aborted) {
+              console.log(`[Zapix Human Pacing] Envio de bolhas cancelado para ${phone} pois o lead enviou nova mensagem.`);
+              break;
+            }
             const bubble = bubbles[i];
             const { baseThinking, typingTime } = antiBan.calculateTypingDelay(bubble);
 
             // Thinking pause (human reading / deciding)
-            await antiBan.sleep(baseThinking);
+            await antiBan.sleep(baseThinking, signal);
+            if (signal.aborted) break;
 
             // Typing presence update
             await this.sock?.sendPresenceUpdate('composing', jid);
-            await antiBan.sleep(typingTime);
+            await antiBan.sleep(typingTime, signal);
             await this.sock?.sendPresenceUpdate('paused', jid);
+            if (signal.aborted) break;
 
             // Send bubble
             await this.sock?.sendMessage(jid, { text: bubble });
@@ -603,14 +652,16 @@ class WhatsAppService {
 
             // Natural pause between bubbles
             if (i < bubbles.length - 1) {
-              await antiBan.sleep(1500);
+              await antiBan.sleep(1500, signal);
             }
           }
         }
 
         // 5. Send Deliverable(s) if triggered
         for (const deliverableToSend of deliverablesToSend) {
-          await antiBan.sleep(2000);
+          if (signal.aborted) break;
+          await antiBan.sleep(2000, signal);
+          if (signal.aborted) break;
           let fullPath = path.join(UPLOADS_DIR, deliverableToSend.filename);
           if (!fs.existsSync(fullPath)) {
             fullPath = path.resolve(DATA_DIR, deliverableToSend.path.replace(/^\/?data\//, ''));
@@ -658,6 +709,10 @@ class WhatsAppService {
       } catch (err) {
         console.error(`Error in handleAiResponse for ${phone}:`, err);
         storage.addLog('ERROR', `Erro ao responder ${phone}: ${err.message}`);
+      } finally {
+        if (this.activeLeadControllers.get(phone) === abortController) {
+          this.activeLeadControllers.delete(phone);
+        }
       }
     });
   }
@@ -772,7 +827,6 @@ class WhatsAppService {
         storage.addLog('SUCCESS', `Áudio enviado manualmente para ${phone}`);
         return audioMsg;
       }
-    }
 
     // 3. Audio file with mediaUrl
     if (type === 'audio' && mediaUrl) {
