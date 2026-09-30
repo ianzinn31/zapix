@@ -144,3 +144,60 @@ No painel superior do Dashboard você encontra botões dedicados para testar tod
 - **⚡ Simular Lead**: simula um potencial cliente enviando perguntas no WhatsApp.
 - **💰 Simular Venda**: simula uma compra aprovada de R$ 97 com animação de confetes e atualização automática de faturamento, ROAS e CAC.
 - **🎙️ Laboratório de Áudio**: teste qualquer texto e escute como fica a nota de voz do WhatsApp.
+
+---
+
+## ☁️ Deploy em VPS (Ubuntu / Debian) com PM2 (24/7 Online)
+
+### Passo 1: Subir o projeto para o seu GitHub
+No terminal da sua máquina local:
+```bash
+# 1. Crie um repositório vazio no seu GitHub (ex: zapix-ai)
+# 2. Conecte ao seu repositório remoto:
+git remote add origin https://github.com/SEU_USUARIO/SEU_REPOSITORIO.git
+
+# 3. Envie para o GitHub:
+git push -u origin main
+```
+
+### Passo 2: Preparar a VPS (Ubuntu/Debian)
+Acesse sua VPS via SSH (`ssh root@ip_da_vps`) e rode:
+```bash
+# 1. Atualizar pacotes do sistema
+sudo apt update && sudo apt upgrade -y
+
+# 2. Instalar Git, FFmpeg (necessário para os áudios Opus PTT) e Curl
+sudo apt install -y git ffmpeg curl
+
+# 3. Instalar Node.js v22 LTS e PM2
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+sudo npm install -g pm2
+```
+
+### Passo 3: Clonar e Rodar na VPS
+```bash
+# 1. Clonar o repositório
+git clone https://github.com/SEU_USUARIO/SEU_REPOSITORIO.git zapix-ai
+cd zapix-ai
+
+# 2. Instalar dependências do backend e do frontend
+npm run install:all
+
+# 3. Gerar o build da Dashboard
+npm run build
+
+# 4. Criar o arquivo de variáveis .env com suas chaves
+cp .env.example .env
+nano .env  # cole suas chaves e salve com Ctrl+O, Enter, Ctrl+X
+
+# 5. Iniciar o Zapix AI com PM2 (permanece 24/7 e reinicia se a VPS reiniciar)
+pm2 start server/index.js --name "zapix-ai"
+pm2 save
+pm2 startup
+```
+
+### Passo 4: Acessar a Dashboard na VPS
+Abra no seu navegador:
+`http://IP_DA_SUA_VPS:3001`
+Clique em **Conectar WhatsApp**, escaneie o QR Code uma única vez e seu agente estará vendendo e atendendo 24 horas por dia sem depender do seu computador ligado!
