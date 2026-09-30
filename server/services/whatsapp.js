@@ -328,48 +328,57 @@ class WhatsAppService {
           });
         }
 
-        // 2. Check for Voice Audio Tag: [AUDIO: ...]
-        const audioTagMatch = replyText.match(/\[AUDIO:\s*([\s\S]*?)\]/i);
+        // 2. Check for Voice Audio Tag: [AUDIO: ...] or [ÁUDIO: ...]
+        const audioTagMatch = replyText.match(/\[(?:AUDIO|ÁUDIO):\s*([\s\S]*?)(?:\]|$)/i);
         if (audioTagMatch) {
-          const audioSpeechText = audioTagMatch[1].trim();
-          replyText = replyText.replace(/\[AUDIO:\s*([\s\S]*?)\]/i, '').trim();
+          let audioSpeechText = audioTagMatch[1].trim();
+          audioSpeechText = audioSpeechText.replace(/^["'“”«»]+|["'“”«»]+$/g, '').trim();
 
-          // Generate audio via Fish Audio TTS
-          try {
-            const generatedAudio = await fishAudio.generateSpeech(audioSpeechText);
+          // Strip the audio tag cleanly from replyText
+          if (/\[(?:AUDIO|ÁUDIO):[\s\S]*?\]/i.test(replyText)) {
+            replyText = replyText.replace(/\[(?:AUDIO|ÁUDIO):[\s\S]*?\]/gi, '').trim();
+          } else {
+            replyText = replyText.replace(/\[(?:AUDIO|ÁUDIO):[\s\S]*?(?:\]|$)/gi, '').trim();
+          }
 
-            // Anti-ban: Simulate human recording voice note
-            const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
-            await antiBan.sleep(thinkingDelay);
+          if (audioSpeechText.length > 0) {
+            // Generate audio via Fish Audio TTS
+            try {
+              const generatedAudio = await fishAudio.generateSpeech(audioSpeechText);
 
-            // WhatsApp presence: 'recording'
-            await this.sock?.sendPresenceUpdate('recording', jid);
-            await antiBan.sleep(recordingDelay);
-            await this.sock?.sendPresenceUpdate('paused', jid);
+              // Anti-ban: Simulate human recording voice note
+              const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
+              await antiBan.sleep(thinkingDelay);
 
-            // Send native WhatsApp Voice Note (PTT)
-            const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
-            await this.sock?.sendMessage(jid, {
-              audio: audioBuffer,
-              mimetype: 'audio/ogg; codecs=opus',
-              ptt: true
-            });
+              // WhatsApp presence: 'recording'
+              await this.sock?.sendPresenceUpdate('recording', jid);
+              await antiBan.sleep(recordingDelay);
+              await this.sock?.sendPresenceUpdate('paused', jid);
 
-            // Save audio message to store
-            const audioMsg = storage.addMessage({
-              phone,
-              fromMe: true,
-              text: `🎵 [Áudio]: "${audioSpeechText}"`,
-              type: 'audio',
-              mediaUrl: generatedAudio.audioUrl,
-              audioDuration: generatedAudio.durationSec
-            });
-            this.emit('chat:message', audioMsg);
-            storage.addLog('SUCCESS', `Áudio humanizado Fish Audio enviado para ${phone}`);
-          } catch (audioErr) {
-            console.error('Failed to send voice note:', audioErr);
-            // If audio fails, send as text fallback so customer gets the message
-            replyText = `${audioSpeechText}\n\n${replyText}`.trim();
+              // Send native WhatsApp Voice Note (PTT)
+              const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
+              await this.sock?.sendMessage(jid, {
+                audio: audioBuffer,
+                mimetype: 'audio/ogg; codecs=opus',
+                ptt: true
+              });
+
+              // Save audio message to store
+              const audioMsg = storage.addMessage({
+                phone,
+                fromMe: true,
+                text: `🎵 [Áudio]: "${audioSpeechText}"`,
+                type: 'audio',
+                mediaUrl: generatedAudio.audioUrl,
+                audioDuration: generatedAudio.durationSec
+              });
+              this.emit('chat:message', audioMsg);
+              storage.addLog('SUCCESS', `Áudio humanizado Fish Audio enviado para ${phone}`);
+            } catch (audioErr) {
+              console.error('Failed to send voice note:', audioErr);
+              // If audio fails, send as text fallback so customer gets the message
+              replyText = `${audioSpeechText}\n\n${replyText}`.trim();
+            }
           }
         }
 
@@ -410,8 +419,8 @@ class WhatsAppService {
 
         // CRITICAL: Strip ALL system tags completely from replyText so they are NEVER sent as plain text bubbles!
         replyText = replyText
-          .replace(/\[(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE):[^\]]*\]/gi, '')
-          .replace(/\[AUDIO:[^\]]*\]/gi, '')
+          .replace(/\[(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE):[\s\S]*?(?:\]|$)/gi, '')
+          .replace(/\[(?:AUDIO|ÁUDIO):[\s\S]*?(?:\]|$)/gi, '')
           .trim();
 
         // 4. Send Text Messages with Natural Anti-Ban Bubbles & Typing Simulation
@@ -574,30 +583,32 @@ class WhatsAppService {
       }
     }
 
-    // 2. Check if this is an Audio Pitch tag trigger: [AUDIO: ...]
-    const audioMatch = text ? text.match(/\[AUDIO:\s*([\s\S]*?)\]/i) : null;
+    // 2. Check if this is an Audio Pitch tag trigger: [AUDIO: ...] or [ÁUDIO: ...]
+    const audioMatch = text ? text.match(/\[(?:AUDIO|ÁUDIO):\s*([\s\S]*?)(?:\]|$)/i) : null;
     if (audioMatch) {
-      const speechText = audioMatch[1].trim();
-      const generatedAudio = await fishAudio.generateSpeech(speechText);
-      const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
+      let speechText = audioMatch[1].trim().replace(/^["'“”«»]+|["'“”«»]+$/g, '').trim();
+      if (speechText.length > 0) {
+        const generatedAudio = await fishAudio.generateSpeech(speechText);
+        const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
 
-      await this.sock.sendMessage(jid, {
-        audio: audioBuffer,
-        mimetype: 'audio/ogg; codecs=opus',
-        ptt: true
-      });
+        await this.sock.sendMessage(jid, {
+          audio: audioBuffer,
+          mimetype: 'audio/ogg; codecs=opus',
+          ptt: true
+        });
 
-      const audioMsg = storage.addMessage({
-        phone,
-        fromMe: true,
-        text: `🎵 [Áudio]: "${speechText}"`,
-        type: 'audio',
-        mediaUrl: generatedAudio.audioUrl,
-        audioDuration: generatedAudio.durationSec
-      });
-      this.emit('chat:message', audioMsg);
-      storage.addLog('SUCCESS', `Áudio enviado manualmente para ${phone}`);
-      return audioMsg;
+        const audioMsg = storage.addMessage({
+          phone,
+          fromMe: true,
+          text: `🎵 [Áudio]: "${speechText}"`,
+          type: 'audio',
+          mediaUrl: generatedAudio.audioUrl,
+          audioDuration: generatedAudio.durationSec
+        });
+        this.emit('chat:message', audioMsg);
+        storage.addLog('SUCCESS', `Áudio enviado manualmente para ${phone}`);
+        return audioMsg;
+      }
     }
 
     // 3. Audio file with mediaUrl

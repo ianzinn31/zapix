@@ -79,6 +79,10 @@ ${deliverableList || 'Nenhum entregável cadastrado no momento.'}
 3. QUANDO ENVIAR ÁUDIO (FISH AUDIO):
    Se você quiser enviar uma resposta ou parte dela em áudio de voz para gerar conexão profunda (especialmente na apresentação da oferta ou contorno de objeção), use a tag:
    [AUDIO: texto exato que será falado no áudio]
+   ATENÇÃO:
+   - Use rigorosamente o formato [AUDIO: texto] sem acento na palavra AUDIO.
+   - NÃO use aspas ao redor do texto dentro da tag.
+   - SEMPRE feche com colchete ']'.
    Exemplo:
    [AUDIO: Opa! Tudo bem? Vi que você tem interesse no método. Gravei esse áudio pra te explicar rapidinho como funciona.]
 4. QUANDO ENVIAR ENTREGÁVEL (PDF OU IMAGEM):
