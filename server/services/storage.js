@@ -9,9 +9,10 @@ const DATA_DIR = path.resolve(__dirname, '../data');
 const STORE_FILE = path.join(DATA_DIR, 'store.json');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const AUDIO_CACHE_DIR = path.join(DATA_DIR, 'audio_cache');
+const MEDIA_CACHE_DIR = path.join(DATA_DIR, 'media_cache');
 
 // Ensure necessary directories exist
-[DATA_DIR, UPLOADS_DIR, AUDIO_CACHE_DIR].forEach((dir) => {
+[DATA_DIR, UPLOADS_DIR, AUDIO_CACHE_DIR, MEDIA_CACHE_DIR].forEach((dir) => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -65,6 +66,15 @@ const DEFAULT_STATE = {
       model: 'whisper-large-v3',
       language: 'pt',
       enabled: true
+    },
+    vision: {
+      provider: 'openrouter',
+      apiKey: process.env.OPENROUTER_API_KEY || '',
+      model: 'google/gemini-2.5-flash',
+      fallbackModel: 'meta/llama-3.2-11b-vision-instruct',
+      enabled: true,
+      autoValidatePix: true,
+      blockDeliverablesOnPending: true
     },
     product: {
       name: '',
@@ -174,6 +184,7 @@ class StorageService {
             transcription: { ...DEFAULT_STATE.settings.transcription, ...(parsed.settings?.transcription || {}) },
             antiBan: { ...DEFAULT_STATE.settings.antiBan, ...(parsed.settings?.antiBan || {}) },
             metaAds: { ...DEFAULT_STATE.settings.metaAds, ...(parsed.settings?.metaAds || {}) },
+            vision: { ...DEFAULT_STATE.settings.vision, ...(parsed.settings?.vision || {}) },
             product: { ...DEFAULT_STATE.settings.product, ...(parsed.settings?.product || {}) }
           },
           leads: parsed.leads || DEFAULT_STATE.leads,
@@ -439,4 +450,4 @@ class StorageService {
 }
 
 export const storage = new StorageService();
-export { DATA_DIR, UPLOADS_DIR, AUDIO_CACHE_DIR };
+export { DATA_DIR, UPLOADS_DIR, AUDIO_CACHE_DIR, MEDIA_CACHE_DIR };

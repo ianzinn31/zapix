@@ -10,7 +10,7 @@ import dotenv from 'dotenv';
 import apiRouter from './routes/api.js';
 import webhooksRouter from './routes/webhooks.js';
 import { whatsapp } from './services/whatsapp.js';
-import { storage, UPLOADS_DIR, AUDIO_CACHE_DIR } from './services/storage.js';
+import { storage, UPLOADS_DIR, AUDIO_CACHE_DIR, MEDIA_CACHE_DIR } from './services/storage.js';
 
 dotenv.config();
 
@@ -35,9 +35,10 @@ app.use(cors());
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
-// Static directories for deliverables & audio cache
+// Static directories for deliverables & audio/media cache
 app.use('/uploads', express.static(UPLOADS_DIR));
 app.use('/audio', express.static(AUDIO_CACHE_DIR));
+app.use('/media', express.static(MEDIA_CACHE_DIR));
 
 // Routes
 app.use('/api', apiRouter);

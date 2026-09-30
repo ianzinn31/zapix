@@ -325,6 +325,27 @@ export default function LiveChatInbox({
                     }}>
                       {lead.aiActive !== false ? 'IA ON' : 'IA OFF'}
                     </span>
+                    {lead.lastReceiptStatus && (
+                      <span style={{
+                        fontSize: '0.62rem',
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        background: lead.lastReceiptStatus === 'APROVADO' 
+                          ? 'rgba(16, 185, 129, 0.2)' 
+                          : lead.lastReceiptStatus === 'AGENDADO'
+                          ? 'rgba(245, 158, 11, 0.25)'
+                          : 'rgba(239, 68, 68, 0.2)',
+                        color: lead.lastReceiptStatus === 'APROVADO' 
+                          ? '#10b981' 
+                          : lead.lastReceiptStatus === 'AGENDADO'
+                          ? '#f59e0b'
+                          : '#ef4444',
+                        fontWeight: 700,
+                        marginLeft: '4px'
+                      }}>
+                        {lead.lastReceiptStatus === 'APROVADO' ? '✓ PIX Pago' : lead.lastReceiptStatus === 'AGENDADO' ? '⏳ Agendado' : '✕ Inválido'}
+                      </span>
+                    )}
                   </div>
                 </div>
               );
@@ -607,30 +628,46 @@ export default function LiveChatInbox({
                           </div>
                         ) : isDeliverable ? (
                           /* Deliverable Document or Image Preview */
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 0' }}>
-                            <div style={{
-                              padding: '10px',
-                              background: 'rgba(255, 255, 255, 0.08)',
-                              borderRadius: '8px',
-                              color: msg.type === 'pdf' ? '#f43f5e' : '#fbbf24'
-                            }}>
-                              {msg.type === 'pdf' ? <FileText size={24} /> : <ImageIcon size={24} />}
-                            </div>
-                            <div>
-                              <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                                {msg.text}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '4px 0' }}>
+                            {msg.type === 'image' && msg.mediaUrl && (
+                              <a
+                                href={msg.mediaUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ display: 'block', borderRadius: '8px', overflow: 'hidden', maxWidth: '280px', border: '1px solid rgba(255,255,255,0.1)' }}
+                              >
+                                <img
+                                  src={msg.mediaUrl}
+                                  alt="Comprovante / Anexo"
+                                  style={{ width: '100%', maxHeight: '200px', objectFit: 'cover', display: 'block' }}
+                                />
+                              </a>
+                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <div style={{
+                                padding: '10px',
+                                background: 'rgba(255, 255, 255, 0.08)',
+                                borderRadius: '8px',
+                                color: msg.type === 'pdf' ? '#f43f5e' : '#fbbf24'
+                              }}>
+                                {msg.type === 'pdf' ? <FileText size={24} /> : <ImageIcon size={24} />}
                               </div>
-                              {msg.mediaUrl && (
-                                <a
-                                  href={msg.mediaUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{ fontSize: '0.75rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}
-                                >
-                                  <span>Visualizar Entregável</span>
-                                  <ExternalLink size={12} />
-                                </a>
-                              )}
+                              <div>
+                                <div style={{ fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'pre-wrap' }}>
+                                  {msg.text}
+                                </div>
+                                {msg.mediaUrl && (
+                                  <a
+                                    href={msg.mediaUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ fontSize: '0.75rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}
+                                  >
+                                    <span>Visualizar Anexo Completo</span>
+                                    <ExternalLink size={12} />
+                                  </a>
+                                )}
+                              </div>
                             </div>
                           </div>
                         ) : (

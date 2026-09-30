@@ -7,11 +7,12 @@ import pino from 'pino';
 import path from 'path';
 import fs from 'fs';
 import QRCode from 'qrcode';
-import { storage, DATA_DIR, UPLOADS_DIR, AUDIO_CACHE_DIR } from './storage.js';
+import { storage, DATA_DIR, UPLOADS_DIR, AUDIO_CACHE_DIR, MEDIA_CACHE_DIR } from './storage.js';
 import { antiBan } from './antiBan.js';
 import { nvidiaNim } from './nvidiaNim.js';
 import { fishAudio } from './fishAudio.js';
 import { audioTranscriber } from './audioTranscriber.js';
+import { visionService } from './visionService.js';
 
 const AUTH_DIR = path.join(DATA_DIR, 'auth_info_baileys');
 
@@ -235,10 +236,70 @@ class WhatsAppService {
                 storage.addLog('WARNING', `Falha ao processar áudio recebido de ${phone}: ${audioErr.message}`);
               }
             }
-          } else if (isImage) {
-            messageType = 'image';
-          } else if (isDocument) {
-            messageType = 'document';
+          } else if (isImage || isDocument) {
+            messageType = isImage ? 'image' : 'document';
+            if (!fromMe) {
+              try {
+                const buffer = await downloadMediaMessage(
+                  msg,
+                  'buffer',
+                  {},
+                  {
+                    reuploadRequest: this.sock?.updateMediaMessage
+                  }
+                );
+
+                if (buffer && buffer.length > 0) {
+                  const rawExt = isImage
+                    ? 'jpg'
+                    : (msg.message?.documentMessage?.fileName?.split('.').pop() || 'pdf');
+                  const filename = `incoming_${Date.now()}_${phone}.${rawExt}`;
+                  const mediaDiskPath = path.join(MEDIA_CACHE_DIR, filename);
+                  fs.writeFileSync(mediaDiskPath, buffer);
+                  mediaUrl = `/media/${filename}`;
+
+                  const mimetype = isImage
+                    ? (msg.message?.imageMessage?.mimetype || 'image/jpeg')
+                    : (msg.message?.documentMessage?.mimetype || 'application/pdf');
+
+                  // Vision & OCR Analysis for receipts / PIX
+                  const analysis = await visionService.analyzeMedia(buffer, mimetype, { phone, pushName });
+
+                  if (analysis) {
+                    // Update lead with receipt analysis
+                    storage.updateLead(phone, {
+                      lastReceiptStatus: analysis.status,
+                      lastReceiptAmount: analysis.amount,
+                      lastReceiptBank: analysis.bank,
+                      lastReceiptDate: Date.now(),
+                      lastReceiptSummary: analysis.reason,
+                      lastReceiptExplanation: analysis.customerExplanation
+                    });
+
+                    if (analysis.isBankReceipt) {
+                      messageContent = `[COMPROVANTE DE PAGAMENTO ANALISADO]:
+- Status: ${analysis.status}
+- Banco: ${analysis.bank || 'Não identificado'}
+- Valor identificado: ${analysis.amount ? `R$ ${analysis.amount}` : 'Não identificado'}
+- Efetivado?: ${analysis.shouldReleaseProduct ? 'SIM (Liberar produto)' : 'NÃO (NÃO LIBERAR)'}
+- Detalhes: ${analysis.reason}
+- Instrução para sua resposta: ${
+                        analysis.status === 'AGENDADO'
+                          ? 'Explique com simpatia que você viu o comprovante, mas ele é um AGENDAMENTO (o dinheiro ainda não caiu). Oriente o cliente a cancelar o agendamento no aplicativo do banco e fazer a transferência imediata na hora para que o sistema possa liberar o produto imediatamente.'
+                          : analysis.status === 'APROVADO'
+                          ? 'Agradeça pelo pagamento confirmado e envie o produto com a tag do entregável.'
+                          : 'Explique a divergência com respeito e passe a chave PIX oficial novamente.'
+                      }`;
+                    } else if (analysis.reason) {
+                      messageContent = `[IMAGEM RECEBIDA DO CLIENTE]: ${analysis.reason}`;
+                    }
+                  }
+                }
+              } catch (mediaErr) {
+                console.error('[WhatsApp Media] Erro ao baixar ou analisar imagem/documento:', mediaErr);
+                storage.addLog('WARNING', `Falha ao processar mídia recebida de ${phone}: ${mediaErr.message}`);
+              }
+            }
           }
 
           // Build message text for display in chat & logs
@@ -246,9 +307,17 @@ class WhatsAppService {
           if (isAudio) {
             displayText = messageContent ? `🎵 [Áudio]: "${messageContent}"` : '🎵 [Áudio do Cliente]';
           } else if (isImage) {
-            displayText = messageContent ? `📷 [Imagem]: ${messageContent}` : '📷 [Imagem]';
+            if (messageContent && messageContent.startsWith('[COMPROVANTE')) {
+              displayText = `📷 ${messageContent}`;
+            } else {
+              displayText = messageContent ? `📷 [Imagem]: ${messageContent}` : '📷 [Imagem do Cliente]';
+            }
           } else if (isDocument) {
-            displayText = messageContent ? `📎 [Arquivo]: ${messageContent}` : '📎 [Arquivo]';
+            if (messageContent && messageContent.startsWith('[COMPROVANTE')) {
+              displayText = `📎 ${messageContent}`;
+            } else {
+              displayText = messageContent ? `📎 [Documento]: ${messageContent}` : '📎 [Documento do Cliente]';
+            }
           }
 
           // Record incoming message in database
@@ -395,8 +464,22 @@ class WhatsAppService {
           }
         }
 
-        // Contextual fallback: if customer confirmed purchase or asked for the file and we have deliverables
-        if (deliverablesToSend.length === 0) {
+        // Antifraud Safety Guard: Check lead's verified receipt status
+        const leadObj = storage.getLead(phone);
+        const isBlockedByReceipt =
+          leadObj?.lastReceiptStatus &&
+          ['AGENDADO', 'VALOR_INCORRETO', 'DESTINATARIO_INCORRETO', 'FALSO_OU_ADULTERADO', 'NAO_E_COMPROVANTE'].includes(leadObj.lastReceiptStatus);
+
+        if (isBlockedByReceipt && deliverablesToSend.length > 0) {
+          deliverablesToSend.length = 0;
+          storage.addLog(
+            'WARNING',
+            `Bloqueio Antifraude: Envio automático de entregável cancelado para ${phone} pois o comprovante está com status: ${leadObj.lastReceiptStatus}.`
+          );
+        }
+
+        // Contextual fallback: ONLY if customer has confirmed receipt status (APROVADO) and asked for the file
+        if (deliverablesToSend.length === 0 && !isBlockedByReceipt && leadObj?.lastReceiptStatus === 'APROVADO') {
           const lowerUser = (userText || '').toLowerCase();
           const lowerReply = (replyText || '').toLowerCase();
           const isPurchaseConfirmed =
