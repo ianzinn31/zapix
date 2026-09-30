@@ -21,12 +21,12 @@ const MEDIA_CACHE_DIR = path.join(DATA_DIR, 'media_cache');
 const DEFAULT_STATE = {
   settings: {
     ai: {
-      primaryModel: 'meta/llama-3.2-11b-vision-instruct',
+      primaryModel: 'z-ai/glm-5.3-flash',
       primaryApiKey: process.env.NVIDIA_NIM_PRIMARY_API_KEY || '',
-      fallbackModel: 'meta/llama-3.2-11b-vision-instruct',
+      fallbackModel: 'google/diffusiongemma-26b-a4b-it',
       fallbackApiKey: process.env.NVIDIA_NIM_FALLBACK_API_KEY || '',
       temperature: 0.7,
-      maxTokens: 800,
+      maxTokens: 1500,
       isFallbackActive: false,
       lastFallbackReason: null,
       customPromptInstructions: ''

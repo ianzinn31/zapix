@@ -194,7 +194,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
   }
 
   // Call single NIM model with timeout
-  async callModel(model, apiKey, messages, temperature = 0.7, maxTokens = 800) {
+  async callModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500) {
     if (!apiKey) {
       throw new Error(`API Key não configurada para o modelo ${model}`);
     }
@@ -212,7 +212,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
         Authorization: `Bearer ${apiKey.trim()}`,
         'Content-Type': 'application/json'
       },
-      timeout: 35000 // 35s timeout
+      timeout: 40000 // 40s timeout for reasoning models like GLM 5.3 Flash
     });
 
     if (response.data && response.data.choices && response.data.choices[0]?.message?.content) {
@@ -256,18 +256,18 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
     }
 
     let responseText = null;
-    let modelUsed = settings.primaryModel || 'meta/llama-3.2-11b-vision-instruct';
+    let modelUsed = settings.primaryModel || 'z-ai/glm-5.3-flash';
 
-    // 1. Try Primary NVIDIA NIM Model
+    // 1. Try Primary NVIDIA NIM Model (z-ai/glm-5.3-flash)
     try {
       const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
       if (primaryKey) {
         responseText = await this.callModel(
-          settings.primaryModel || 'meta/llama-3.2-11b-vision-instruct',
+          settings.primaryModel || 'z-ai/glm-5.3-flash',
           primaryKey,
           messages,
           settings.temperature ?? 0.7,
-          settings.maxTokens || 800
+          settings.maxTokens || 1500
         );
         // Primary succeeded - ensure fallback state is marked inactive
         if (settings.isFallbackActive) {
@@ -280,7 +280,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
       console.warn(`[NVIDIA NIM Primary Error]: ${primaryErr.message}`);
       storage.addLog(
         'FALLBACK_TRIGGERED',
-        `NVIDIA NIM Primário (${settings.primaryModel}) falhou: ${primaryErr.message}. Ativando Fallback para (${settings.fallbackModel || 'meta/llama-3.2-11b-vision-instruct'}).`
+        `NVIDIA NIM Primário (${settings.primaryModel || 'z-ai/glm-5.3-flash'}) falhou: ${primaryErr.message}. Ativando Fallback para (${settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it'}).`
       );
       storage.updateSettings({
         ai: {
@@ -290,10 +290,10 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
       });
     }
 
-    // 2. Try Fallback NVIDIA NIM Model
+    // 2. Try Fallback NVIDIA NIM Model (google/diffusiongemma-26b-a4b-it)
     try {
       const fallbackKey = settings.fallbackApiKey || process.env.NVIDIA_NIM_FALLBACK_API_KEY || settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
-      const fallbackModel = settings.fallbackModel || 'meta/llama-3.2-11b-vision-instruct';
+      const fallbackModel = settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it';
       if (fallbackKey && fallbackModel) {
         modelUsed = fallbackModel;
         responseText = await this.callModel(
@@ -301,7 +301,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
           fallbackKey,
           messages,
           settings.temperature ?? 0.7,
-          settings.maxTokens || 800
+          settings.maxTokens || 1500
         );
         return { text: responseText, modelUsed, fallbackTriggered: true };
       }
@@ -386,11 +386,11 @@ Gere agora o texto exato falado para ser gravado em áudio sob medida para este 
       const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
       if (primaryKey) {
         const generated = await this.callModel(
-          settings.primaryModel || 'meta/llama-3.2-11b-vision-instruct',
+          settings.primaryModel || 'z-ai/glm-5.3-flash',
           primaryKey,
           messages,
           0.7,
-          350
+          500
         );
         if (generated && generated.length > 5) {
           return generated.replace(/["'“”«»]/g, '').trim();
@@ -405,11 +405,11 @@ Gere agora o texto exato falado para ser gravado em áudio sob medida para este 
       const fallbackKey = settings.fallbackApiKey || process.env.NVIDIA_NIM_FALLBACK_API_KEY || settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
       if (fallbackKey) {
         const generated = await this.callModel(
-          settings.fallbackModel || 'meta/llama-3.2-11b-vision-instruct',
+          settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it',
           fallbackKey,
           messages,
           0.7,
-          350
+          500
         );
         if (generated && generated.length > 5) {
           return generated.replace(/["'“”«»]/g, '').trim();

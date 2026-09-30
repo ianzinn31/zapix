@@ -15,12 +15,12 @@ import {
 
 export default function AiConfig({ aiSettings, onSave }) {
   const [formData, setFormData] = useState({
-    primaryModel: aiSettings?.primaryModel || 'meta/llama-3.2-11b-vision-instruct',
+    primaryModel: aiSettings?.primaryModel || 'z-ai/glm-5.3-flash',
     primaryApiKey: aiSettings?.primaryApiKey || '',
-    fallbackModel: aiSettings?.fallbackModel || 'meta/llama-3.2-11b-vision-instruct',
+    fallbackModel: aiSettings?.fallbackModel || 'google/diffusiongemma-26b-a4b-it',
     fallbackApiKey: aiSettings?.fallbackApiKey || '',
     temperature: aiSettings?.temperature ?? 0.7,
-    maxTokens: aiSettings?.maxTokens || 800,
+    maxTokens: aiSettings?.maxTokens || 1500,
     customPromptInstructions: aiSettings?.customPromptInstructions || ''
   });
 
@@ -29,10 +29,9 @@ export default function AiConfig({ aiSettings, onSave }) {
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const availableModels = [
-    { id: 'meta/llama-3.2-11b-vision-instruct', name: 'Meta Llama 3.2 11B Vision Instruct (Recomendado & Ultra Estável)', tag: 'Estável & Sem Vazamentos' },
-    { id: 'meta/llama-3.2-90b-vision-instruct', name: 'Meta Llama 3.2 90B Vision Instruct', tag: 'Alta Capacidade' },
-    { id: 'deepseek-ai/deepseek-v4.1-flash', name: 'DeepSeek v4.1 Flash (Modo Raciocínio CoT)', tag: 'Raciocínio' },
-    { id: 'deepseek-ai/deepseek-coder-6.7b-instruct', name: 'DeepSeek Coder 6.7B Instruct', tag: 'Lógica Rápida' }
+    { id: 'z-ai/glm-5.3-flash', name: 'GLM 5.3 Flash (Recomendado Principal - Raciocínio & Alta Inteligência)', tag: 'Raciocínio & Persuasão' },
+    { id: 'google/diffusiongemma-26b-a4b-it', name: 'Google DiffusionGemma 26B (Recomendado Fallback - Sub-segundo)', tag: 'Google 26B & Rápido' },
+    { id: 'meta/llama-3.2-11b-vision-instruct', name: 'Meta Llama 3.2 11B Vision Instruct', tag: 'Meta 11B' }
   ];
 
   const handleSubmit = (e) => {
