@@ -57,6 +57,36 @@ router.get('/leads', (req, res) => {
   res.json(storage.getLeads());
 });
 
+router.put('/leads/:phone', (req, res) => {
+  const { phone } = req.params;
+  const updates = req.body;
+  const updated = storage.upsertLead(phone, updates);
+  whatsapp.emit('lead:updated', updated);
+  storage.addLog('INFO', `Lead ${phone} atualizado manualmente.`);
+  res.json(updated);
+});
+
+router.delete('/leads/:phone', (req, res) => {
+  const { phone } = req.params;
+  const success = storage.deleteLead(phone);
+  if (success) {
+    whatsapp.emit('lead:deleted', { phone });
+    storage.addLog('INFO', `Lead ${phone} e histórico de mensagens foram excluídos.`);
+    return res.json({ success: true, phone });
+  }
+  res.status(404).json({ error: 'Lead não encontrado' });
+});
+
+router.post('/leads/:phone/sync', async (req, res) => {
+  const { phone } = req.params;
+  try {
+    const updated = await whatsapp.fetchContactInfo(phone);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/leads/:phone/ai-toggle', (req, res) => {
   const { phone } = req.params;
   const { aiActive } = req.body;

@@ -238,7 +238,8 @@ class StorageService {
   }
 
   upsertLead(phone, updates = {}) {
-    const existing = this.data.leads[phone] || {
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    const existing = this.data.leads[phone] || this.data.leads[cleanPhone] || {
       id: phone,
       phone,
       name: phone.replace(/[^0-9]/g, ''),
@@ -249,9 +250,17 @@ class StorageService {
       unreadCount: 0
     };
 
+    // If existing name is just the raw numbers and updates provides a friendly name, prioritize the friendly name
+    let name = updates.name || existing.name;
+    const existingIsDigits = /^[0-9+() -]+$/.test(existing.name || '');
+    if (updates.name && existingIsDigits && !/^[0-9+() -]+$/.test(updates.name)) {
+      name = updates.name;
+    }
+
     const updated = {
       ...existing,
       ...updates,
+      name,
       updatedAt: Date.now()
     };
 
@@ -259,6 +268,24 @@ class StorageService {
     this.save();
     supabaseService.upsertLead(updated);
     return updated;
+  }
+
+  deleteLead(phone) {
+    if (!phone) return false;
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    delete this.data.leads[phone];
+    if (this.data.leads[cleanPhone]) delete this.data.leads[cleanPhone];
+
+    // Remove all associated messages
+    this.data.messages = this.data.messages.filter((m) => {
+      const mClean = (m.phone || '').replace(/[^0-9]/g, '');
+      return mClean !== cleanPhone && m.phone !== phone;
+    });
+
+    this.save();
+    supabaseService.deleteLead(phone);
+    supabaseService.deleteMessagesByPhone(phone);
+    return true;
   }
 
   setLeadAiActive(phone, isActive) {

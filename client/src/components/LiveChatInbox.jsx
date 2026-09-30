@@ -15,8 +15,32 @@ import {
   DollarSign, 
   Zap, 
   Clock,
-  ShieldAlert
+  ShieldAlert,
+  Trash2,
+  Edit2,
+  RefreshCw,
+  Check,
+  X,
+  Phone
 } from 'lucide-react';
+
+export function formatPhoneNumber(raw) {
+  if (!raw) return '';
+  const num = String(raw).replace(/[^0-9]/g, '');
+  if (num.length === 13 && num.startsWith('55')) {
+    return `+55 (${num.slice(2, 4)}) ${num.slice(4, 9)}-${num.slice(9)}`;
+  }
+  if (num.length === 12 && num.startsWith('55')) {
+    return `+55 (${num.slice(2, 4)}) ${num.slice(4, 8)}-${num.slice(8)}`;
+  }
+  if (num.length === 11) {
+    return `(${num.slice(0, 2)}) ${num.slice(2, 7)}-${num.slice(7)}`;
+  }
+  if (num.length === 10) {
+    return `(${num.slice(0, 2)}) ${num.slice(2, 6)}-${num.slice(6)}`;
+  }
+  return `+${num}`;
+}
 
 export default function LiveChatInbox({ 
   leads, 
@@ -26,12 +50,20 @@ export default function LiveChatInbox({
   onSendMessage, 
   onToggleAi, 
   onChangeLeadStage,
+  onDeleteLead,
+  onUpdateLead,
+  onSyncLead,
   product,
   deliverables
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [inputMessage, setInputMessage] = useState('');
   const [playingAudioId, setPlayingAudioId] = useState(null);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [leadToDelete, setLeadToDelete] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
   const audioRefs = useRef({});
   const messagesEndRef = useRef(null);
 
@@ -40,7 +72,8 @@ export default function LiveChatInbox({
     const term = searchTerm.toLowerCase();
     const phone = (lead.phone || '').toLowerCase();
     const name = (lead.name || '').toLowerCase();
-    return phone.includes(term) || name.includes(term);
+    const formatted = formatPhoneNumber(lead.phone).toLowerCase();
+    return phone.includes(term) || name.includes(term) || formatted.includes(term);
   });
 
   const activeLead = leads.find((l) => l.phone === selectedLeadPhone) || filteredLeads[0];
@@ -48,6 +81,7 @@ export default function LiveChatInbox({
   // Auto scroll to bottom of chat when new message arrives
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setEditingName(false);
   }, [messages, selectedLeadPhone]);
 
   const handleSend = (e) => {
@@ -57,75 +91,136 @@ export default function LiveChatInbox({
     setInputMessage('');
   };
 
-  const handleSendQuickAudioPitch = () => {
-    if (!activeLead) return;
-    const text = product?.defaultAudioPitchText || 'Olá! Gravei esse áudio para te explicar como funciona o nosso método de vendas com IA.';
-    onSendMessage(activeLead.phone, `[AUDIO: ${text}]`, 'text');
+  const handleSaveName = async () => {
+    if (!activeLead || !nameInput.trim()) return;
+    if (onUpdateLead) {
+      await onUpdateLead(activeLead.phone, { name: nameInput.trim() });
+    }
+    setEditingName(false);
   };
 
-  const handleSendCheckoutLink = () => {
-    if (!activeLead || !product?.checkoutUrl) return;
-    const text = `Aqui está o link oficial com a condição especial que te falei:\n👉 ${product.checkoutUrl}\n\nAssim que você concluir a inscrição, me avisa aqui que libero seus bônus imediatos!`;
-    onSendMessage(activeLead.phone, text, 'text');
-  };
-
-  const handleSendDeliverable = (tag) => {
-    if (!activeLead) return;
-    onSendMessage(activeLead.phone, `[ENVIAR_ARQUIVO: ${tag}]`, 'text');
+  const handleSyncLeadInfo = async () => {
+    if (!activeLead || !onSyncLead) return;
+    setIsSyncing(true);
+    try {
+      await onSyncLead(activeLead.phone);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const togglePlayAudio = (msgId, audioUrl) => {
     if (playingAudioId === msgId) {
-      audioRefs.current[msgId]?.pause();
+      if (audioRefs.current[msgId]) {
+        audioRefs.current[msgId].pause();
+      }
       setPlayingAudioId(null);
     } else {
+      // Pause any currently playing audio
       if (playingAudioId && audioRefs.current[playingAudioId]) {
         audioRefs.current[playingAudioId].pause();
       }
+
       if (!audioRefs.current[msgId]) {
-        audioRefs.current[msgId] = new Audio(audioUrl);
-        audioRefs.current[msgId].onended = () => setPlayingAudioId(null);
+        const audio = new Audio(audioUrl);
+        audio.onended = () => setPlayingAudioId(null);
+        audioRefs.current[msgId] = audio;
       }
+
       audioRefs.current[msgId].play();
       setPlayingAudioId(msgId);
     }
   };
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '320px 1fr',
-      height: 'calc(100vh - 180px)',
-      minHeight: '600px',
-      gap: '16px'
-    }}>
-      {/* Sidebar: Leads List */}
-      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {/* Search header */}
-        <div style={{ padding: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#f8fafc' }}>
-              Conversas ({leads.length})
-            </h3>
-            <span style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 600 }}>
-              Live Sync
-            </span>
-          </div>
+    <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '20px', height: 'calc(100vh - 170px)', minHeight: '620px' }}>
+      
+      {/* Delete Confirmation Modal */}
+      {leadToDelete && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(5px)',
+          zIndex: 99999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div className="glass-card" style={{ maxWidth: '440px', width: '100%', padding: '24px', border: '1px solid rgba(244, 63, 94, 0.3)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+              <div style={{ padding: '10px', background: 'rgba(244, 63, 94, 0.15)', borderRadius: '10px', color: '#f43f5e' }}>
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc' }}>
+                  Excluir Lead e Conversa?
+                </h3>
+                <p style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                  Esta ação é irreversível.
+                </p>
+              </div>
+            </div>
 
+            <p style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.5', marginBottom: '20px' }}>
+              Você está excluindo o lead <strong>{leadToDelete.name || formatPhoneNumber(leadToDelete.phone)}</strong> ({formatPhoneNumber(leadToDelete.phone)}). Todas as mensagens e mídias desta conversa serão permanentemente apagadas.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setLeadToDelete(null)}
+                className="btn-secondary"
+                style={{ fontSize: '0.82rem' }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteLead) onDeleteLead(leadToDelete.phone);
+                  setLeadToDelete(null);
+                }}
+                style={{
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px 18px',
+                  fontWeight: 600,
+                  fontSize: '0.84rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Excluir Definitivamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Left Sidebar: Leads List */}
+      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Search Header */}
+        <div style={{ padding: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
           <div style={{ position: 'relative' }}>
-            <Search size={16} color="#64748b" style={{ position: 'absolute', left: '12px', top: '11px' }} />
+            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
             <input
               type="text"
-              placeholder="Buscar por telefone ou nome..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar por nome ou número..."
               className="input-field"
-              style={{ paddingLeft: '36px', fontSize: '0.82rem' }}
+              style={{ paddingLeft: '38px', fontSize: '0.85rem' }}
             />
           </div>
         </div>
 
-        {/* Contact items list */}
+        {/* Lead List Scrollable */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {filteredLeads.length === 0 ? (
             <div style={{ padding: '30px 16px', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
@@ -139,60 +234,90 @@ export default function LiveChatInbox({
                   key={lead.phone}
                   onClick={() => onSelectLead(lead.phone)}
                   style={{
-                    padding: '14px 16px',
+                    padding: '12px 16px',
                     borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
                     background: isSelected ? 'rgba(16, 185, 129, 0.1)' : 'transparent',
                     borderLeft: isSelected ? '3px solid #10b981' : '3px solid transparent',
                     cursor: 'pointer',
-                    transition: 'all 0.15s ease'
+                    transition: 'all 0.15s ease',
+                    position: 'relative'
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '50%',
-                        background: isSelected ? '#10b981' : '#1e293b',
-                        color: isSelected ? '#ffffff' : '#94a3b8',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '0.8rem',
-                        fontWeight: 700
-                      }}>
-                        {lead.name ? lead.name[0].toUpperCase() : 'Z'}
-                      </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {lead.avatarUrl ? (
+                        <img 
+                          src={lead.avatarUrl} 
+                          alt="" 
+                          style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} 
+                        />
+                      ) : (
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          background: isSelected ? '#10b981' : '#1e293b',
+                          color: isSelected ? '#ffffff' : '#94a3b8',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.8rem',
+                          fontWeight: 700
+                        }}>
+                          {lead.name ? lead.name[0].toUpperCase() : 'Z'}
+                        </div>
+                      )}
                       <div>
-                        <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#f8fafc' }}>
-                          {lead.name || lead.phone}
+                        <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#f8fafc', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {lead.name || formatPhoneNumber(lead.phone)}
                         </div>
                         <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                          +{lead.phone}
+                          {formatPhoneNumber(lead.phone)}
                         </div>
                       </div>
                     </div>
 
-                    <span className={`badge badge-${(lead.stage || 'novo').toLowerCase()}`} style={{ fontSize: '0.65rem' }}>
-                      {lead.stage || 'NOVO'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span className={`badge badge-${(lead.stage || 'novo').toLowerCase()}`} style={{ fontSize: '0.62rem' }}>
+                        {lead.stage || 'NOVO'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLeadToDelete(lead);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#475569',
+                          cursor: 'pointer',
+                          padding: '2px',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                        title="Excluir Lead"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
                     <span style={{
-                      fontSize: '0.78rem',
+                      fontSize: '0.76rem',
                       color: isSelected ? '#cbd5e1' : '#94a3b8',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
-                      maxWidth: '190px'
+                      maxWidth: '180px'
                     }}>
                       {lead.lastMessage || 'Conversa iniciada'}
                     </span>
 
                     <span style={{
                       fontSize: '0.65rem',
-                      padding: '2px 5px',
+                      padding: '1px 5px',
                       borderRadius: '4px',
                       background: lead.aiActive !== false ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)',
                       color: lead.aiActive !== false ? '#34d399' : '#fb7185',
@@ -214,7 +339,7 @@ export default function LiveChatInbox({
           <>
             {/* Chat Header */}
             <div style={{
-              padding: '14px 20px',
+              padding: '12px 20px',
               borderBottom: '1px solid var(--border-subtle)',
               display: 'flex',
               alignItems: 'center',
@@ -222,26 +347,93 @@ export default function LiveChatInbox({
               background: 'rgba(11, 17, 32, 0.4)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#fff',
-                  fontWeight: 700
-                }}>
-                  {activeLead.name ? activeLead.name[0].toUpperCase() : 'W'}
-                </div>
+                {activeLead.avatarUrl ? (
+                  <img 
+                    src={activeLead.avatarUrl} 
+                    alt="" 
+                    style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} 
+                  />
+                ) : (
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    fontWeight: 700
+                  }}>
+                    {activeLead.name ? activeLead.name[0].toUpperCase() : 'W'}
+                  </div>
+                )}
+
                 <div>
+                  {/* Lead Name with Inline Edit & WhatsApp Sync */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <h4 style={{ fontSize: '0.98rem', fontWeight: 700, color: '#f8fafc' }}>
-                      {activeLead.name || activeLead.phone}
-                    </h4>
+                    {editingName ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <input
+                          type="text"
+                          value={nameInput}
+                          onChange={(e) => setNameInput(e.target.value)}
+                          className="input-field"
+                          style={{ padding: '3px 8px', fontSize: '0.88rem', height: '28px', width: '180px' }}
+                          placeholder="Nome do Lead"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveName();
+                            if (e.key === 'Escape') setEditingName(false);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSaveName}
+                          style={{ background: '#10b981', border: 'none', borderRadius: '4px', padding: '5px', cursor: 'pointer', color: '#fff', display: 'flex' }}
+                          title="Salvar Nome"
+                        >
+                          <Check size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingName(false)}
+                          style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '4px', padding: '5px', cursor: 'pointer', color: '#94a3b8', display: 'flex' }}
+                          title="Cancelar"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <h4 style={{ fontSize: '0.98rem', fontWeight: 700, color: '#f8fafc' }}>
+                          {activeLead.name || formatPhoneNumber(activeLead.phone)}
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNameInput(activeLead.name || '');
+                            setEditingName(true);
+                          }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '2px', display: 'flex' }}
+                          title="Editar Nome do Lead"
+                        >
+                          <Edit2 size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSyncLeadInfo}
+                          disabled={isSyncing}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#38bdf8', padding: '2px', display: 'flex' }}
+                          title="Puxar Nome e Foto do WhatsApp"
+                        >
+                          <RefreshCw size={13} className={isSyncing ? 'animate-spin' : ''} />
+                        </button>
+                      </>
+                    )}
+
                     <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                      ({activeLead.phone})
+                      ({formatPhoneNumber(activeLead.phone)})
                     </span>
                   </div>
 
@@ -272,11 +464,11 @@ export default function LiveChatInbox({
                 </div>
               </div>
 
-              {/* Right Controls: AI Switch & Quick Action */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              {/* Right Controls: AI Switch & Delete Button */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '0.8rem', color: activeLead.aiActive !== false ? '#34d399' : '#94a3b8', fontWeight: 600 }}>
-                    {activeLead.aiActive !== false ? 'IA Automática Ativa' : 'Pausado p/ Atendimento Humano'}
+                  <span style={{ fontSize: '0.78rem', color: activeLead.aiActive !== false ? '#34d399' : '#94a3b8', fontWeight: 600 }}>
+                    {activeLead.aiActive !== false ? 'IA Ativa' : 'Pausado'}
                   </span>
                   <label className="toggle-switch">
                     <input
@@ -287,74 +479,49 @@ export default function LiveChatInbox({
                     <span className="toggle-slider"></span>
                   </label>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => setLeadToDelete(activeLead)}
+                  style={{
+                    background: 'rgba(244, 63, 94, 0.1)',
+                    border: '1px solid rgba(244, 63, 94, 0.25)',
+                    borderRadius: '6px',
+                    padding: '5px 10px',
+                    color: '#fb7185',
+                    fontSize: '0.74rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    cursor: 'pointer'
+                  }}
+                  title="Excluir este lead e todo o histórico da conversa"
+                >
+                  <Trash2 size={13} />
+                  <span>Excluir Lead</span>
+                </button>
               </div>
             </div>
 
-            {/* Quick Action Bar */}
-            <div style={{
-              padding: '8px 20px',
-              background: 'rgba(15, 23, 42, 0.4)',
-              borderBottom: '1px solid rgba(255,255,255,0.05)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              overflowX: 'auto'
-            }}>
-              <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>
-                Gatilhos Rápidos:
-              </span>
-
-              <button
-                onClick={handleSendQuickAudioPitch}
-                className="btn-secondary"
-                style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '6px', color: '#22d3ee' }}
-              >
-                <Mic size={13} />
-                <span>Enviar Áudio de Pitch</span>
-              </button>
-
-              <button
-                onClick={handleSendCheckoutLink}
-                className="btn-secondary"
-                style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '6px', color: '#f472b6' }}
-              >
-                <DollarSign size={13} />
-                <span>Enviar Checkout {product?.price ? `(R$ ${Number(product.price).toFixed(2)})` : ''}</span>
-              </button>
-
-              {deliverables && deliverables.map((deliv) => (
-                <button
-                  key={deliv.id}
-                  onClick={() => handleSendDeliverable(deliv.tag)}
-                  className="btn-secondary"
-                  style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '6px' }}
-                  title={`Disparar entregável ${deliv.name}`}
-                >
-                  {deliv.type === 'pdf' ? <FileText size={13} color="#60a5fa" /> : <ImageIcon size={13} color="#fbbf24" />}
-                  <span>Enviar {deliv.name}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Message Stream */}
+            {/* Chat Messages Body */}
             <div style={{
               flex: 1,
               overflowY: 'auto',
               padding: '20px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '12px'
+              gap: '12px',
+              background: 'radial-gradient(ellipse at center, rgba(16, 185, 129, 0.02) 0%, transparent 70%)'
             }}>
               {messages.length === 0 ? (
                 <div style={{ margin: 'auto', textAlign: 'center', color: '#64748b' }}>
-                  <Bot size={36} color="#334155" style={{ margin: '0 auto 10px' }} />
-                  <p style={{ fontSize: '0.9rem' }}>Nenhuma mensagem nesta conversa ainda.</p>
-                  <p style={{ fontSize: '0.75rem' }}>Envie uma mensagem abaixo para iniciar o atendimento ou aguarde mensagens no WhatsApp.</p>
+                  <p style={{ fontSize: '0.9rem', marginBottom: '6px' }}>Nenhuma mensagem nesta conversa ainda.</p>
+                  <span style={{ fontSize: '0.75rem' }}>As mensagens trocadas aparecerão aqui em tempo real via WhatsApp.</span>
                 </div>
               ) : (
                 messages.map((msg) => {
                   const isMe = msg.fromMe;
-                  const isAudio = msg.type === 'audio' || (msg.text && msg.text.startsWith('🎵 [Áudio]'));
+                  const isAudio = msg.type === 'audio';
                   const isDeliverable = msg.type === 'pdf' || msg.type === 'image' || msg.type === 'document';
 
                   return (
@@ -362,21 +529,18 @@ export default function LiveChatInbox({
                       key={msg.id}
                       style={{
                         display: 'flex',
-                        justifyContent: isMe ? 'flex-end' : 'flex-start',
-                        gap: '8px'
+                        flexDirection: 'column',
+                        alignItems: isMe ? 'flex-end' : 'flex-start',
+                        width: '100%'
                       }}
                     >
                       <div
                         style={{
                           maxWidth: '75%',
-                          padding: isAudio ? '12px 16px' : '10px 14px',
-                          borderRadius: isMe ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
-                          background: isMe
-                            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(6, 182, 212, 0.2) 100%)'
-                            : 'rgba(30, 41, 59, 0.8)',
-                          border: isMe
-                            ? '1px solid rgba(16, 185, 129, 0.3)'
-                            : '1px solid rgba(255, 255, 255, 0.08)',
+                          padding: '10px 14px',
+                          borderRadius: isMe ? '16px 16px 2px 16px' : '16px 16px 16px 2px',
+                          background: isMe ? 'linear-gradient(135deg, #065f46 0%, #047857 100%)' : 'rgba(30, 41, 59, 0.85)',
+                          border: isMe ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
                           color: '#f8fafc',
                           boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
                         }}
@@ -384,14 +548,14 @@ export default function LiveChatInbox({
                         {/* Header badge inside bubble */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '4px' }}>
                           <span style={{ fontSize: '0.68rem', fontWeight: 700, color: isMe ? '#34d399' : '#94a3b8' }}>
-                            {isMe ? '🤖 IA Zapix / Você' : activeLead.name || 'Lead WhatsApp'}
+                            {isMe ? '🤖 IA Zapix / Você' : (activeLead.name || formatPhoneNumber(activeLead.phone))}
                           </span>
                           <span style={{ fontSize: '0.65rem', color: '#64748b' }}>
                             {new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
 
-                        {/* Audio Message Player (Fish Audio PTT) */}
+                        {/* Audio Message Player (Fish Audio PTT / Groq STT) */}
                         {isAudio ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '220px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

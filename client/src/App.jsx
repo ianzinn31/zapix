@@ -82,6 +82,13 @@ export default function App() {
       fetchMetrics();
     });
 
+    socket.on('lead:deleted', ({ phone }) => {
+      setLeads((prev) => prev.filter((l) => l.phone !== phone));
+      setMessages((prev) => prev.filter((m) => m.phone !== phone));
+      setSelectedLeadPhone((curr) => (curr === phone ? null : curr));
+      fetchMetrics();
+    });
+
     socket.on('chat:message', (newMsg) => {
       setMessages((prev) => {
         // Prevent duplicate IDs
@@ -240,6 +247,51 @@ export default function App() {
       const updated = await res.json();
       setLeads((prev) => prev.map((l) => (l.phone === phone ? updated : l)));
       fetchMetrics();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleDeleteLead = async (phone) => {
+    try {
+      const res = await fetch(`/api/leads/${phone}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Falha ao excluir lead');
+      setLeads((prev) => prev.filter((l) => l.phone !== phone));
+      if (selectedLeadPhone === phone) {
+        setSelectedLeadPhone(null);
+        setMessages([]);
+      }
+      showToast('Lead e histórico excluídos com sucesso!');
+      fetchMetrics();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleUpdateLead = async (phone, updates) => {
+    try {
+      const res = await fetch(`/api/leads/${phone}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      if (!res.ok) throw new Error('Falha ao atualizar lead');
+      const updated = await res.json();
+      setLeads((prev) => prev.map((l) => (l.phone === phone ? updated : l)));
+      showToast('Lead atualizado com sucesso!');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleSyncLead = async (phone) => {
+    try {
+      showToast('Buscando dados no WhatsApp...', 'info');
+      const res = await fetch(`/api/leads/${phone}/sync`, { method: 'POST' });
+      if (!res.ok) throw new Error('Falha ao sincronizar com WhatsApp');
+      const updated = await res.json();
+      setLeads((prev) => prev.map((l) => (l.phone === phone ? { ...l, ...updated } : l)));
+      showToast('Dados sincronizados do WhatsApp!');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -472,6 +524,9 @@ export default function App() {
             onSendMessage={handleSendMessage}
             onToggleAi={handleToggleAi}
             onChangeLeadStage={handleChangeLeadStage}
+            onDeleteLead={handleDeleteLead}
+            onUpdateLead={handleUpdateLead}
+            onSyncLead={handleSyncLead}
             product={settings?.product}
             deliverables={deliverables}
           />

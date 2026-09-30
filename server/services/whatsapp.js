@@ -186,6 +186,7 @@ class WhatsAppService {
 
           const fromMe = Boolean(msg.key?.fromMe);
           const phone = jid.split('@')[0];
+          const pushName = (msg.pushName || msg.verifiedBizName || '').trim();
 
           // Extract text content
           let messageContent =
@@ -260,6 +261,11 @@ class WhatsAppService {
             audioDuration,
             timestamp: (Number(msg.messageTimestamp) * 1000) || Date.now()
           });
+
+          // Ensure lead exists with their actual WhatsApp pushName
+          if (pushName && !fromMe) {
+            storage.upsertLead(phone, { name: pushName, pushName });
+          }
 
           // Notify frontend dashboard in real-time
           this.emit('chat:message', savedMsg);
@@ -638,6 +644,42 @@ class WhatsAppService {
     } catch (err) {
       console.error('Error disconnecting WhatsApp:', err);
       return false;
+    }
+  }
+
+  // Fetch contact profile information (avatar, name) from WhatsApp
+  async fetchContactInfo(phone) {
+    if (!this.sock) {
+      return { phone, error: 'WhatsApp não está conectado no momento' };
+    }
+    try {
+      const cleanPhone = phone.replace(/[^0-9]/g, '');
+      const jid = `${cleanPhone}@s.whatsapp.net`;
+      
+      let avatarUrl = null;
+      try {
+        avatarUrl = await this.sock.profilePictureUrl(jid, 'image').catch(() => null);
+      } catch (e) {}
+
+      let pushName = null;
+      try {
+        const contact = this.sock.contacts?.[jid];
+        if (contact && (contact.name || contact.notify)) {
+          pushName = contact.name || contact.notify;
+        }
+      } catch (e) {}
+
+      const lead = storage.getLead(cleanPhone) || storage.getLead(phone);
+      const updated = storage.upsertLead(phone, {
+        ...(avatarUrl ? { avatarUrl } : {}),
+        ...(pushName ? { name: pushName, pushName } : {})
+      });
+
+      this.emit('lead:updated', updated);
+      return updated;
+    } catch (err) {
+      console.warn(`[WhatsApp] Erro ao sincronizar dados de ${phone}:`, err.message);
+      return { phone, error: err.message };
     }
   }
 

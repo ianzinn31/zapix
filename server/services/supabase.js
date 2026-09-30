@@ -132,6 +132,38 @@ export class SupabaseService {
     }
   }
 
+  async deleteLead(phone) {
+    if (!this.isConfigured || !phone) return false;
+    try {
+      const cleanPhone = phone.replace(/[^0-9]/g, '');
+      const { error } = await this.client
+        .from('zapix_leads')
+        .delete()
+        .or(`phone.eq.${phone},phone.eq.${cleanPhone}`);
+      if (error) console.warn('[Supabase] deleteLead error:', error.message);
+      return !error;
+    } catch (e) {
+      console.warn('[Supabase] deleteLead exception:', e.message);
+      return false;
+    }
+  }
+
+  async deleteMessagesByPhone(phone) {
+    if (!this.isConfigured || !phone) return false;
+    try {
+      const cleanPhone = phone.replace(/[^0-9]/g, '');
+      const { error } = await this.client
+        .from('zapix_messages')
+        .delete()
+        .or(`phone.eq.${phone},phone.eq.${cleanPhone}`);
+      if (error) console.warn('[Supabase] deleteMessagesByPhone error:', error.message);
+      return !error;
+    } catch (e) {
+      console.warn('[Supabase] deleteMessagesByPhone exception:', e.message);
+      return false;
+    }
+  }
+
   // --- Messages ---
   async getMessages(phone) {
     if (!this.isConfigured) return null;
