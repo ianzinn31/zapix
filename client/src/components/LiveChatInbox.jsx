@@ -483,6 +483,98 @@ export default function LiveChatInbox({
               <div ref={messagesEndRef} />
             </div>
 
+            {/* Quick Actions Toolbar */}
+            <div style={{
+              padding: '6px 20px',
+              background: 'rgba(15, 23, 42, 0.6)',
+              borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              overflowX: 'auto',
+              whiteSpace: 'nowrap'
+            }}>
+              <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Zap size={12} color="#fbbf24" />
+                Atalhos:
+              </span>
+
+              {product?.pixKey && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const beneficiaryText = product.pixBeneficiary ? ` (Titular: ${product.pixBeneficiary})` : '';
+                    const priceText = product.price ? `R$ ${Number(product.price).toFixed(2)}` : 'da oferta';
+                    setInputMessage(`🔑 Segue a nossa chave PIX para pagamento:\n\n${product.pixKey}${beneficiaryText}\nValor: ${priceText}\n\nAssim que fizer a transferência, me mande o comprovante aqui para liberarmos seu acesso imediatamente!`);
+                  }}
+                  style={{
+                    fontSize: '0.72rem',
+                    padding: '4px 10px',
+                    borderRadius: '14px',
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    color: '#34d399',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  title="Inserir chave PIX no campo de texto"
+                >
+                  <span>🔑 Enviar PIX</span>
+                </button>
+              )}
+
+              {product?.checkoutUrl && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputMessage(`💳 Segue o link seguro para garantir seu acesso com cartão ou parcelamento:\n\n${product.checkoutUrl}\n\nQualquer dúvida no preenchimento é só me chamar!`);
+                  }}
+                  style={{
+                    fontSize: '0.72rem',
+                    padding: '4px 10px',
+                    borderRadius: '14px',
+                    background: 'rgba(6, 182, 212, 0.12)',
+                    border: '1px solid rgba(6, 182, 212, 0.3)',
+                    color: '#22d3ee',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  title="Inserir link do checkout no campo de texto"
+                >
+                  <span>💳 Enviar Checkout</span>
+                </button>
+              )}
+
+              {deliverables && deliverables.length > 0 && deliverables.slice(0, 2).map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => {
+                    setInputMessage(`[ENVIAR_ARQUIVO: ${d.tag}]`);
+                  }}
+                  style={{
+                    fontSize: '0.72rem',
+                    padding: '4px 10px',
+                    borderRadius: '14px',
+                    background: 'rgba(168, 85, 247, 0.12)',
+                    border: '1px solid rgba(168, 85, 247, 0.3)',
+                    color: '#c084fc',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  title={`Despachar entregável ${d.name}`}
+                >
+                  <span>📎 {d.name.slice(0, 16)}</span>
+                </button>
+              ))}
+            </div>
+
             {/* Input Bar */}
             <form onSubmit={handleSend} style={{
               padding: '14px 20px',

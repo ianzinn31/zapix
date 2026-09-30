@@ -72,7 +72,12 @@ const DEFAULT_STATE = {
       targetAudience: '',
       price: 0,
       currency: 'BRL',
+      paymentMethod: 'both', // 'checkout' | 'pix' | 'both'
       checkoutUrl: '',
+      pixKey: '',
+      pixKeyType: 'aleatoria', // 'aleatoria' | 'cpf' | 'cnpj' | 'email' | 'telefone'
+      pixBeneficiary: '',
+      pixInstructions: 'Enviar o comprovante aqui no WhatsApp para liberação imediata do acesso.',
       guaranteeDays: 7,
       mainPainPoints: [],
       mainBenefits: [],

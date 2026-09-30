@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Package, 
   DollarSign, 
@@ -9,7 +9,13 @@ import {
   Trash2, 
   Save, 
   Mic,
-  CheckCircle2
+  CheckCircle2,
+  QrCode,
+  CreditCard,
+  Zap,
+  Key,
+  Copy,
+  Check
 } from 'lucide-react';
 
 export default function ProductSettings({ product, onSave }) {
@@ -19,7 +25,12 @@ export default function ProductSettings({ product, onSave }) {
     targetAudience: product?.targetAudience || '',
     price: product?.price ?? '',
     currency: product?.currency || 'BRL',
+    paymentMethod: product?.paymentMethod || 'both', // 'pix' | 'both' | 'checkout'
     checkoutUrl: product?.checkoutUrl || '',
+    pixKey: product?.pixKey || '',
+    pixKeyType: product?.pixKeyType || 'aleatoria', // 'aleatoria' | 'cpf' | 'cnpj' | 'email' | 'telefone'
+    pixBeneficiary: product?.pixBeneficiary || '',
+    pixInstructions: product?.pixInstructions || 'Enviar o comprovante aqui no WhatsApp para liberação imediata do acesso.',
     guaranteeDays: product?.guaranteeDays || 7,
     mainPainPoints: product?.mainPainPoints || [],
     mainBenefits: product?.mainBenefits || [],
@@ -32,9 +43,40 @@ export default function ProductSettings({ product, onSave }) {
   const [newObjectionTrigger, setNewObjectionTrigger] = useState('');
   const [newObjectionResponse, setNewObjectionResponse] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [copiedPix, setCopiedPix] = useState(false);
+
+  useEffect(() => {
+    if (product) {
+      setFormData({
+        name: product.name || '',
+        niche: product.niche || '',
+        targetAudience: product.targetAudience || '',
+        price: product.price ?? '',
+        currency: product.currency || 'BRL',
+        paymentMethod: product.paymentMethod || (product.pixKey ? 'both' : 'checkout'),
+        checkoutUrl: product.checkoutUrl || '',
+        pixKey: product.pixKey || '',
+        pixKeyType: product.pixKeyType || 'aleatoria',
+        pixBeneficiary: product.pixBeneficiary || '',
+        pixInstructions: product.pixInstructions || 'Enviar o comprovante aqui no WhatsApp para liberação imediata do acesso.',
+        guaranteeDays: product.guaranteeDays || 7,
+        mainPainPoints: product.mainPainPoints || [],
+        mainBenefits: product.mainBenefits || [],
+        objections: product.objections || [],
+        defaultAudioPitchText: product.defaultAudioPitchText || ''
+      });
+    }
+  }, [product]);
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleCopyPix = () => {
+    if (!formData.pixKey) return;
+    navigator.clipboard.writeText(formData.pixKey);
+    setCopiedPix(true);
+    setTimeout(() => setCopiedPix(false), 2000);
   };
 
   const handleAddPainPoint = () => {
@@ -109,7 +151,7 @@ export default function ProductSettings({ product, onSave }) {
                 Oferta & Infoproduto Ativo
               </h3>
               <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                A IA usará esses dados para apresentar o produto, convencer o lead e enviar o checkout.
+                A IA usará esses dados para apresentar o produto, convencer o lead e enviar o pagamento (PIX ou Checkout).
               </p>
             </div>
           </div>
@@ -121,7 +163,7 @@ export default function ProductSettings({ product, onSave }) {
         </div>
 
         {/* Basic Info Fields */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '24px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
               Nome do Infoproduto / Treinamento
@@ -145,7 +187,7 @@ export default function ProductSettings({ product, onSave }) {
               value={formData.niche}
               onChange={(e) => handleChange('niche', e.target.value)}
               className="input-field"
-              placeholder="Ex: Marketing Digital, Finanças, Emagrecimento"
+              placeholder="Ex: Marketing Digital, Finanças, Culinária"
               required
             />
           </div>
@@ -158,25 +200,211 @@ export default function ProductSettings({ product, onSave }) {
               type="number"
               step="0.01"
               value={formData.price}
-              onChange={(e) => handleChange('price', parseFloat(e.target.value))}
+              onChange={(e) => handleChange('price', parseFloat(e.target.value) || 0)}
               className="input-field"
+              placeholder="Ex: 37.90"
               required
             />
+          </div>
+        </div>
+
+        {/* PAYMENT METHOD / PIX OR CHECKOUT CONFIGURATION */}
+        <div style={{
+          background: 'rgba(6, 182, 212, 0.03)',
+          border: '1px solid rgba(6, 182, 212, 0.2)',
+          borderRadius: '12px',
+          padding: '20px',
+          marginBottom: '24px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <QrCode size={20} color="#22d3ee" />
+              <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#f8fafc' }}>
+                Forma de Cobrança & Fechamento da Venda
+              </h4>
+            </div>
+            <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>
+              A IA adapta a abordagem conforme o formato configurado
+            </span>
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-              Link de Checkout (Kiwify, Hotmart, PerfectPay, Cakto)
-            </label>
-            <input
-              type="url"
-              value={formData.checkoutUrl}
-              onChange={(e) => handleChange('checkoutUrl', e.target.value)}
-              className="input-field"
-              placeholder="https://pay.kiwify.com.br/..."
-              required
-            />
+          {/* Mode Selector Radio Pills */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '20px' }}>
+            <div
+              onClick={() => handleChange('paymentMethod', 'pix')}
+              style={{
+                padding: '12px 14px',
+                borderRadius: '8px',
+                background: formData.paymentMethod === 'pix' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                border: formData.paymentMethod === 'pix' ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.08)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <Key size={16} color={formData.paymentMethod === 'pix' ? '#34d399' : '#94a3b8'} />
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: formData.paymentMethod === 'pix' ? '#34d399' : '#f8fafc' }}>
+                  Apenas PIX Direto
+                </span>
+              </div>
+              <p style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                A IA envia a chave PIX no chat e pede o comprovante para liberação.
+              </p>
+            </div>
+
+            <div
+              onClick={() => handleChange('paymentMethod', 'both')}
+              style={{
+                padding: '12px 14px',
+                borderRadius: '8px',
+                background: formData.paymentMethod === 'both' ? 'rgba(6, 182, 212, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                border: formData.paymentMethod === 'both' ? '1px solid #06b6d4' : '1px solid rgba(255, 255, 255, 0.08)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <Zap size={16} color={formData.paymentMethod === 'both' ? '#22d3ee' : '#94a3b8'} />
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: formData.paymentMethod === 'both' ? '#22d3ee' : '#f8fafc' }}>
+                  PIX Direto + Link de Checkout
+                </span>
+              </div>
+              <p style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                Recomendado: PIX à vista ou Cartão/Parcelado no link conforme o lead preferir.
+              </p>
+            </div>
+
+            <div
+              onClick={() => handleChange('paymentMethod', 'checkout')}
+              style={{
+                padding: '12px 14px',
+                borderRadius: '8px',
+                background: formData.paymentMethod === 'checkout' ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                border: formData.paymentMethod === 'checkout' ? '1px solid #a855f7' : '1px solid rgba(255, 255, 255, 0.08)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <CreditCard size={16} color={formData.paymentMethod === 'checkout' ? '#c084fc' : '#94a3b8'} />
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: formData.paymentMethod === 'checkout' ? '#c084fc' : '#f8fafc' }}>
+                  Apenas Link de Checkout
+                </span>
+              </div>
+              <p style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                A IA conduz para a página externa (Kiwify, Hotmart, PerfectPay, Cakto).
+              </p>
+            </div>
           </div>
+
+          {/* PIX Fields (Visible when 'pix' or 'both') */}
+          {(formData.paymentMethod === 'pix' || formData.paymentMethod === 'both') && (
+            <div style={{
+              background: 'rgba(16, 185, 129, 0.04)',
+              border: '1px solid rgba(16, 185, 129, 0.2)',
+              borderRadius: '10px',
+              padding: '16px',
+              marginBottom: formData.paymentMethod === 'both' ? '16px' : '0'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#34d399', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Key size={15} />
+                  Dados da Chave PIX
+                </span>
+                {formData.pixKey && (
+                  <button
+                    type="button"
+                    onClick={handleCopyPix}
+                    className="btn-secondary"
+                    style={{ fontSize: '0.72rem', padding: '3px 8px' }}
+                  >
+                    {copiedPix ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
+                    <span>{copiedPix ? 'Copiada!' : 'Copiar Chave'}</span>
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
+                    Chave PIX
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.pixKey}
+                    onChange={(e) => handleChange('pixKey', e.target.value)}
+                    className="input-field"
+                    placeholder="Cole sua chave (CPF, CNPJ, E-mail, Celular ou Aleatória)"
+                    required={formData.paymentMethod === 'pix'}
+                    style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
+                    Tipo de Chave
+                  </label>
+                  <select
+                    value={formData.pixKeyType}
+                    onChange={(e) => handleChange('pixKeyType', e.target.value)}
+                    className="input-field"
+                    style={{ fontSize: '0.85rem' }}
+                  >
+                    <option value="aleatoria">Chave Aleatória (EVP)</option>
+                    <option value="cpf">CPF</option>
+                    <option value="cnpj">CNPJ</option>
+                    <option value="email">E-mail</option>
+                    <option value="telefone">Telefone / Celular</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
+                    Nome do Titular / Beneficiário da Conta
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.pixBeneficiary}
+                    onChange={(e) => handleChange('pixBeneficiary', e.target.value)}
+                    className="input-field"
+                    placeholder="Ex: João da Silva / Nome da Empresa"
+                    style={{ fontSize: '0.85rem' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
+                  Instruções de Fechamento com PIX
+                </label>
+                <input
+                  type="text"
+                  value={formData.pixInstructions}
+                  onChange={(e) => handleChange('pixInstructions', e.target.value)}
+                  className="input-field"
+                  placeholder="Ex: Enviar o comprovante aqui no WhatsApp para envio imediato do material."
+                  style={{ fontSize: '0.85rem' }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Checkout URL Field (Visible when 'checkout' or 'both') */}
+          {(formData.paymentMethod === 'checkout' || formData.paymentMethod === 'both') && (
+            <div>
+              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
+                Link de Checkout (Kiwify, Hotmart, PerfectPay, Cakto)
+              </label>
+              <input
+                type="url"
+                value={formData.checkoutUrl}
+                onChange={(e) => handleChange('checkoutUrl', e.target.value)}
+                className="input-field"
+                placeholder="https://pay.kiwify.com.br/... ou https://ggcheckout.app/..."
+                required={formData.paymentMethod === 'checkout'}
+              />
+            </div>
+          )}
         </div>
 
         {/* Target Audience & Guarantee */}
@@ -201,7 +429,7 @@ export default function ProductSettings({ product, onSave }) {
             <input
               type="number"
               value={formData.guaranteeDays}
-              onChange={(e) => handleChange('guaranteeDays', parseInt(e.target.value))}
+              onChange={(e) => handleChange('guaranteeDays', parseInt(e.target.value) || 7)}
               className="input-field"
             />
           </div>
@@ -218,119 +446,166 @@ export default function ProductSettings({ product, onSave }) {
             onChange={(e) => handleChange('defaultAudioPitchText', e.target.value)}
             className="input-field"
             rows={3}
-            placeholder="Texto exato que a IA falará com a voz do Fish Audio para fechar o lead..."
+            placeholder="Ex: Opa! Tudo bem? Vi que você tem interesse no método. Gravei esse áudio pra te explicar rapidinho como funciona..."
           />
-          <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
-            Dica: Use tom natural, coloquial e empático, como se estivesse mandando um áudio rápido no WhatsApp para um amigo.
-          </p>
         </div>
 
-        {/* Dores & Benefícios */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
-          {/* Dores do Lead */}
-          <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <h4 style={{ fontSize: '0.92rem', fontWeight: 700, color: '#fb7185', marginBottom: '10px' }}>
-              Dores Principais do Lead
-            </h4>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-              <input
-                type="text"
-                value={newPainPoint}
-                onChange={(e) => setNewPainPoint(e.target.value)}
-                placeholder="Ex: Falta de tempo livre..."
-                className="input-field"
-                style={{ fontSize: '0.82rem' }}
-              />
-              <button type="button" onClick={handleAddPainPoint} className="btn-secondary" style={{ padding: '0 12px' }}>
-                <Plus size={16} />
-              </button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {formData.mainPainPoints.map((pain, idx) => (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: '6px', fontSize: '0.8rem' }}>
-                  <span>• {pain}</span>
-                  <button type="button" onClick={() => handleRemovePainPoint(idx)} style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer' }}>
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Benefícios */}
-          <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <h4 style={{ fontSize: '0.92rem', fontWeight: 700, color: '#34d399', marginBottom: '10px' }}>
-              Benefícios & Soluções do Método
-            </h4>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-              <input
-                type="text"
-                value={newBenefit}
-                onChange={(e) => setNewBenefit(e.target.value)}
-                placeholder="Ex: Modelos prontos para copiar e colar..."
-                className="input-field"
-                style={{ fontSize: '0.82rem' }}
-              />
-              <button type="button" onClick={handleAddBenefit} className="btn-secondary" style={{ padding: '0 12px' }}>
-                <Plus size={16} />
-              </button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {formData.mainBenefits.map((benefit, idx) => (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: '6px', fontSize: '0.8rem' }}>
-                  <span>✓ {benefit}</span>
-                  <button type="button" onClick={() => handleRemoveBenefit(idx)} style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer' }}>
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Tratamento de Objeções */}
-        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '18px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-          <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc', marginBottom: '12px' }}>
-            Respostas para Objeções Comuns (Preço, Tempo, Desconfiança)
+        {/* Dores Principais (Pain Points) */}
+        <div style={{ marginBottom: '24px' }}>
+          <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#f8fafc', marginBottom: '12px' }}>
+            Dores Principais do Lead (Para a IA explorar na conversa)
           </h4>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr auto', gap: '10px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
             <input
               type="text"
-              placeholder="Palavra-chave (ex: dinheiro)"
-              value={newObjectionTrigger}
-              onChange={(e) => setNewObjectionTrigger(e.target.value)}
+              value={newPainPoint}
+              onChange={(e) => setNewPainPoint(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddPainPoint())}
               className="input-field"
-              style={{ fontSize: '0.82rem' }}
+              placeholder="Ex: Tenta vender na internet e não consegue retorno..."
             />
-            <input
-              type="text"
-              placeholder="Resposta persuasiva da IA..."
-              value={newObjectionResponse}
-              onChange={(e) => setNewObjectionResponse(e.target.value)}
-              className="input-field"
-              style={{ fontSize: '0.82rem' }}
-            />
-            <button type="button" onClick={handleAddObjection} className="btn-secondary" style={{ padding: '0 16px' }}>
+            <button
+              type="button"
+              onClick={handleAddPainPoint}
+              className="btn-secondary"
+            >
               <Plus size={16} />
               <span>Adicionar</span>
             </button>
           </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {formData.mainPainPoints.map((pain, index) => (
+              <span
+                key={index}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  borderRadius: '20px',
+                  color: '#fca5a5',
+                  fontSize: '0.8rem'
+                }}
+              >
+                <span>{pain}</span>
+                <Trash2
+                  size={13}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => handleRemovePainPoint(index)}
+                />
+              </span>
+            ))}
+          </div>
+        </div>
 
+        {/* Benefícios Principais (Benefits) */}
+        <div style={{ marginBottom: '24px' }}>
+          <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#f8fafc', marginBottom: '12px' }}>
+            Principais Benefícios e Transformação do Infoproduto
+          </h4>
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
+            <input
+              type="text"
+              value={newBenefit}
+              onChange={(e) => setNewBenefit(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddBenefit())}
+              className="input-field"
+              placeholder="Ex: Acesso vitalício com suporte individual..."
+            />
+            <button
+              type="button"
+              onClick={handleAddBenefit}
+              className="btn-secondary"
+            >
+              <Plus size={16} />
+              <span>Adicionar</span>
+            </button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {formData.mainBenefits.map((benefit, index) => (
+              <span
+                key={index}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  border: '1px solid rgba(16, 185, 129, 0.2)',
+                  borderRadius: '20px',
+                  color: '#6ee7b7',
+                  fontSize: '0.8rem'
+                }}
+              >
+                <span>{benefit}</span>
+                <Trash2
+                  size={13}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => handleRemoveBenefit(index)}
+                />
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Quebra de Objeções (Objections) */}
+        <div>
+          <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#f8fafc', marginBottom: '12px' }}>
+            Quebra de Objeções (Scripts para a IA contornar dúvidas)
+          </h4>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr auto', gap: '10px', marginBottom: '12px' }}>
+            <input
+              type="text"
+              value={newObjectionTrigger}
+              onChange={(e) => setNewObjectionTrigger(e.target.value)}
+              className="input-field"
+              placeholder="Gatilho (ex: Tá caro)"
+            />
+            <input
+              type="text"
+              value={newObjectionResponse}
+              onChange={(e) => setNewObjectionResponse(e.target.value)}
+              className="input-field"
+              placeholder="Resposta / Argumento da IA..."
+            />
+            <button
+              type="button"
+              onClick={handleAddObjection}
+              className="btn-secondary"
+            >
+              <Plus size={16} />
+              <span>Adicionar</span>
+            </button>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {formData.objections.map((obj, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            {formData.objections.map((obj, index) => (
+              <div
+                key={index}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 14px',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  borderRadius: '8px'
+                }}
+              >
                 <div>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase' }}>
-                    Gatilho: "{obj.trigger}"
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#38bdf8' }}>
+                    "{obj.trigger}":{' '}
                   </span>
-                  <p style={{ fontSize: '0.84rem', color: '#cbd5e1', marginTop: '3px' }}>
+                  <span style={{ fontSize: '0.82rem', color: '#cbd5e1' }}>
                     {obj.response}
-                  </p>
+                  </span>
                 </div>
-                <button type="button" onClick={() => handleRemoveObjection(idx)} style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer', marginLeft: '12px', marginTop: '2px' }}>
-                  <Trash2 size={15} />
-                </button>
+                <Trash2
+                  size={14}
+                  style={{ cursor: 'pointer', color: '#ef4444' }}
+                  onClick={() => handleRemoveObjection(index)}
+                />
               </div>
             ))}
           </div>

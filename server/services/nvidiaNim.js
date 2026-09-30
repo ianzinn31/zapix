@@ -23,6 +23,32 @@ class NvidiaNimService {
     const painPointsList = (product.mainPainPoints || []).map((p) => `- ${p}`).join('\n');
     const benefitsList = (product.mainBenefits || []).map((b) => `- ${b}`).join('\n');
 
+    const paymentMethod = product.paymentMethod || (product.pixKey ? 'both' : 'checkout');
+
+    let paymentInfo = '';
+    if (paymentMethod === 'pix') {
+      paymentInfo = `=== FORMA DE PAGAMENTO OFICIAL: PIX DIRETO ===
+- Tipo de Fechamento: Exclusivamente via PIX direto nesta conversa.
+- Chave PIX (${product.pixKeyType || 'Chave'}): ${product.pixKey || 'A ser informada'}
+- Nome do Titular/Beneficiário: ${product.pixBeneficiary || 'Confirmar no app do banco'}
+- Valor da Oferta: R$ ${Number(product.price).toFixed(2)} (${product.currency || 'BRL'})
+- Instruções de Fechamento: ${product.pixInstructions || 'Pedir para enviar o comprovante aqui no WhatsApp para envio imediato do material.'}
+- REGRA OBRIGATÓRIA: Quando o cliente pedir para pagar, demonstrar intenção de fechar ou pedir o PIX, envie a chave PIX de forma clara e destacada em uma linha separada para ele conseguir copiar facilmente no celular. Peça que envie o print do comprovante aqui para liberação imediata.`;
+    } else if (paymentMethod === 'both') {
+      paymentInfo = `=== FORMAS DE PAGAMENTO DISPONÍVEIS: PIX DIRETO OU CHECKOUT ===
+1. OPÇÃO PIX DIRETO (À vista com liberação imediata):
+   - Chave PIX (${product.pixKeyType || 'Chave'}): ${product.pixKey || 'A ser informada'}
+   - Titular da Conta: ${product.pixBeneficiary || 'Confirmar no app do banco'}
+   - Instrução: ${product.pixInstructions || 'Enviar comprovante aqui no WhatsApp.'}
+2. OPÇÃO CARTÃO DE CRÉDITO / PARCELADO:
+   - Link de Checkout Oficial: ${product.checkoutUrl || 'Link pendente'}
+- REGRA DE CONDUÇÃO: Se o cliente preferir pagar no PIX ou à vista, forneça a chave PIX limpa para cópia e peça o comprovante. Se ele preferir parcelar no cartão de crédito, forneça o link de checkout!`;
+    } else {
+      paymentInfo = `=== FORMA DE PAGAMENTO OFICIAL: LINK DE CHECKOUT ===
+- Link Oficial de Checkout: ${product.checkoutUrl || 'Link pendente'}
+- REGRA OBRIGATÓRIA: Sempre que o cliente demonstrar intenção de compra ou pedir o link, envie o link oficial com uma chamada clara para ação.`;
+    }
+
     return `Você é um consultor especialista em vendas e atendimento humanizado via WhatsApp da empresa Zapix.
 Seu objetivo principal é atender o lead com extrema empatia, entender as necessidades dele, tirar dúvidas, contornar objeções e conduzi-lo para a compra do infoproduto.
 
@@ -31,8 +57,9 @@ Seu objetivo principal é atender o lead com extrema empatia, entender as necess
 - Nicho: ${product.niche}
 - Público Alvo: ${product.targetAudience}
 - Preço da Oferta: R$ ${Number(product.price).toFixed(2)} (${product.currency})
-- Link Oficial de Checkout: ${product.checkoutUrl}
 - Garantia: ${product.guaranteeDays} dias incondicionais
+
+${paymentInfo}
 
 === DORES PRINCIPAIS DO CLIENTE ===
 ${painPointsList || '- Busca uma nova fonte de renda rápida'}
@@ -55,13 +82,17 @@ ${deliverableList || 'Nenhum entregável cadastrado no momento.'}
    Exemplo:
    [AUDIO: Opa! Tudo bem? Vi que você tem interesse no método. Gravei esse áudio pra te explicar rapidinho como funciona.]
 4. QUANDO ENVIAR ENTREGÁVEL (PDF OU IMAGEM):
-   Se o cliente pedir o produto, amostra, prova social ou confirmar que comprou/pagou (ex: "paguei", "pode enviar"), envie uma mensagem calorosa de boas-vindas e acione a tag do entregável cadastrado:
+   Se o cliente pedir o produto, amostra, prova social ou confirmar que comprou/pagou (ex: "paguei", "fiz o pix", "mandei o comprovante", "já transferi"), agradeça com entusiasmo e acione a tag do entregável cadastrado:
    [ENVIAR_ARQUIVO: TAG_DO_ARQUIVO]
    Exemplo:
-   [ENVIAR_ARQUIVO: ${deliverables[0]?.tag || 'PROVA_SOCIAL'}]
-   O sistema interceptará essa tag automaticamente e despachará o arquivo PDF/imagem real diretamente no WhatsApp do cliente.
-5. QUANDO APRESENTAR O CHECKOUT:
-   Sempre que o cliente demonstrar intenção de compra ou pedir o link, envie o link oficial: ${product.checkoutUrl} com uma chamada para ação clara.
+   [ENVIAR_ARQUIVO: ${deliverables[0]?.tag || 'PRODUTO'}]
+   O sistema interceptará essa tag automaticamente e despachará o arquivo PDF/imagem real diretamente no WhatsApp do cliente sem vazar tags de texto.
+5. FECHAMENTO E COBRANÇA:
+   ${paymentMethod === 'pix' 
+      ? 'Apresente a chave PIX destacada, informe o valor oficial e solicite o comprovante aqui na conversa para liberação do acesso.'
+      : paymentMethod === 'both'
+      ? 'Dê as duas alternativas: envie a chave PIX para quem prefere PIX à vista, e o link de checkout para quem deseja parcelar no cartão.'
+      : 'Envie o link oficial de checkout e instrua os passos para pagamento.'}
 
 ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁRIO ===\n${settings.ai.customPromptInstructions}` : ''}
 `;
