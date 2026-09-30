@@ -271,28 +271,42 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
     return `Olá! Que bom falar com você! 😊\n\nSou do time de atendimento do ${product.name}. Vi que você se interessou pelo nosso método prático de renda com IA.\n\nMe conta: você já tem alguma experiência ou está começando do absoluto zero?`;
   }
 
-  // Generate spoken remarketing script tailored to a lead and step
-  async generateRemarketingSpeech(instruction, lead, product) {
+  // Generate spoken remarketing script tailored dynamically to the lead's exact conversation history
+  async generateRemarketingSpeech(instruction, lead, product, conversationHistory = []) {
     const settings = storage.getSettings().ai;
     const leadFirstName = (lead.name || '').split(' ')[0] || '';
     const cleanLeadName = /^[0-9+() -]+$/.test(leadFirstName) ? '' : leadFirstName;
 
-    const systemPrompt = `Você é um atendente humanizado brasileiro enviando um áudio pessoal no WhatsApp para reengajar um cliente que não finalizou a compra ou não respondeu.
-Regras Absolutas:
-1. Responda APENAS com o texto exato que será falado em voz alta no áudio (sem aspas, sem [AUDIO:], sem emojis, sem links, sem asteriscos).
-2. O tom deve ser ultra-natural, brasileiro, empático, acolhedor e direto (entre 1 e 3 frases curtas no máximo, ideal para mensagem de voz de 10 a 18 segundos).
-3. Se houver nome (${cleanLeadName}), use no cumprimento inicial.
-4. Contexto: Produto "${product.name || 'nosso método'}", Preço R$ ${Number(product.price || 0).toFixed(2)}.`;
+    // Build context from recent messages so the audio is 100% personalized to what they actually discussed
+    const recentMessages = (conversationHistory || []).slice(-8).map(m => {
+      const sender = m.fromMe ? 'Atendente' : (cleanLeadName || 'Cliente');
+      return `${sender}: ${m.text || '[mídia/áudio]'}`;
+    }).join('\n');
 
-    const userPrompt = `Instrução desta etapa de recuperação: ${instruction}.
-Nome do cliente: ${cleanLeadName || 'amigo(a)'}.
-Gere o texto exato falado para ser gravado em áudio agora.`;
+    const systemPrompt = `Você é um atendente humanizado brasileiro enviando uma mensagem de voz curta e espontânea (áudio WhatsApp) para reengajar um cliente que parou de responder.
+Seu objetivo é analisar o histórico da conversa recente e falar um áudio 100% sob medida para essa pessoa, soando totalmente natural, acolhedor e pessoal.
+
+Regras Obrigatórias:
+1. Responda APENAS com o texto exato que será falado em voz alta no áudio (sem aspas, sem [AUDIO:], sem emojis, sem links, sem asteriscos).
+2. Conecte de forma sutil com o que foi conversado anteriormente (se o cliente mencionou uma dor, dúvida, se pediu PIX, se queria desconto, etc.).
+3. O tom deve ser ultra-natural, brasileiro, empático e direto (entre 1 e 3 frases curtas no máximo, ideal para um áudio de WhatsApp de 10 a 18 segundos).
+4. Cumprimente pelo primeiro nome (${cleanLeadName || 'Oi, tudo bem?'}) se souber.
+5. Contexto do Produto: "${product.name || 'nosso produto'}", Preço R$ ${Number(product.price || 0).toFixed(2)}.`;
+
+    const userPrompt = `Histórico recente da conversa com este cliente:
+${recentMessages || 'Nenhum histórico recente.'}
+
+Instrução desta etapa de recuperação: ${instruction}
+Nome do lead: ${cleanLeadName || 'amigo(a)'}
+
+Gere agora o texto exato falado para ser gravado em áudio sob medida para este lead:`;
 
     const messages = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ];
 
+    // Try Primary NVIDIA NIM Model
     try {
       const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
       if (primaryKey) {
@@ -308,8 +322,28 @@ Gere o texto exato falado para ser gravado em áudio agora.`;
         }
       }
     } catch (e) {
-      console.warn('[NVIDIA NIM Remarketing Error]:', e.message);
+      console.warn('[NVIDIA NIM Remarketing Primary Error]:', e.message);
     }
+
+    // Fallback NVIDIA NIM Model
+    try {
+      const fallbackKey = settings.fallbackApiKey || process.env.NVIDIA_NIM_FALLBACK_API_KEY || settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
+      if (fallbackKey) {
+        const generated = await this.callModel(
+          settings.fallbackModel || 'meta/llama-3.2-3b-instruct',
+          fallbackKey,
+          messages,
+          0.7,
+          150
+        );
+        if (generated && generated.length > 5) {
+          return generated.replace(/["'“”«»]/g, '').trim();
+        }
+      }
+    } catch (e2) {
+      console.warn('[NVIDIA NIM Remarketing Fallback Error]:', e2.message);
+    }
+
     return null;
   }
 }

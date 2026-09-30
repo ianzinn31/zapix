@@ -159,10 +159,10 @@ class RemarketingService {
           continue;
         }
 
-        // 5. Generate Speech / Text for this Step
+        // 5. Generate Speech / Text for this Step (Dynamically tailored to this lead's exact conversation!)
         let speechText = '';
         if (step.useAiGeneratedText && step.aiPromptInstruction) {
-          const aiSpeech = await nvidiaNim.generateRemarketingSpeech(step.aiPromptInstruction, lead, product);
+          const aiSpeech = await nvidiaNim.generateRemarketingSpeech(step.aiPromptInstruction, lead, product, messages);
           if (aiSpeech && aiSpeech.trim().length > 5) {
             speechText = aiSpeech.trim();
           }
@@ -279,7 +279,8 @@ class RemarketingService {
 
     let speechText = '';
     if (step.useAiGeneratedText && step.aiPromptInstruction) {
-      const aiSpeech = await nvidiaNim.generateRemarketingSpeech(step.aiPromptInstruction, dummyLead, product);
+      const history = storage.getMessages(cleanPhone);
+      const aiSpeech = await nvidiaNim.generateRemarketingSpeech(step.aiPromptInstruction, dummyLead, product, history);
       if (aiSpeech && aiSpeech.trim().length > 5) {
         speechText = aiSpeech.trim();
       }
