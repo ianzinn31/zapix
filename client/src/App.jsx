@@ -91,6 +91,15 @@ export default function App() {
       fetchMetrics();
     });
 
+    socket.on('lead:messages_cleared', ({ phone, rawPhone }) => {
+      setMessages((prev) => prev.filter((m) => {
+        const mClean = (m.phone || '').replace(/[^0-9]/g, '');
+        return mClean !== phone && m.phone !== phone && m.phone !== rawPhone;
+      }));
+      fetchMetrics();
+      fetchLogs();
+    });
+
     socket.on('chat:message', (newMsg) => {
       setMessages((prev) => {
         // Prevent duplicate IDs
@@ -265,6 +274,27 @@ export default function App() {
       }
       showToast('Lead e histórico excluídos com sucesso!');
       fetchMetrics();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleResetLead = async (phone) => {
+    try {
+      showToast('Resetando funil e limpando histórico...', 'info');
+      const res = await fetch(`/api/leads/${phone}/reset`, { method: 'POST' });
+      if (!res.ok) throw new Error('Falha ao resetar funil do lead');
+      const data = await res.json();
+      const updated = data.lead;
+      if (updated) {
+        setLeads((prev) => prev.map((l) => (l.phone === phone ? updated : l)));
+      }
+      if (selectedLeadPhone === phone) {
+        setMessages([]);
+      }
+      showToast('Funil resetado! Histórico limpo para testar do zero.', 'success');
+      fetchMetrics();
+      fetchLogs();
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -558,6 +588,7 @@ export default function App() {
             onToggleAi={handleToggleAi}
             onChangeLeadStage={handleChangeLeadStage}
             onDeleteLead={handleDeleteLead}
+            onResetLead={handleResetLead}
             onUpdateLead={handleUpdateLead}
             onSyncLead={handleSyncLead}
             product={settings?.product}

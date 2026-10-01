@@ -404,6 +404,53 @@ class StorageService {
     return true;
   }
 
+  deleteMessagesForPhone(phone) {
+    if (!phone) return false;
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    this.data.messages = this.data.messages.filter((m) => {
+      const mClean = (m.phone || '').replace(/[^0-9]/g, '');
+      return mClean !== cleanPhone && m.phone !== phone;
+    });
+    this.save();
+    supabaseService.deleteMessagesByPhone(phone);
+    return true;
+  }
+
+  resetLeadFunnel(phone) {
+    if (!phone) return null;
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    const lead = this.getLead(cleanPhone) || this.getLead(phone);
+    if (!lead) return null;
+
+    const resetData = {
+      ...lead,
+      stage: 'NOVO',
+      deliverableSent: false,
+      deliverableSentAt: null,
+      lastReceiptStatus: null,
+      lastReceiptAmount: null,
+      lastReceiptBank: null,
+      lastReceiptDate: null,
+      lastReceiptSummary: null,
+      lastReceiptExplanation: null,
+      lastRemarketingStep: -1,
+      lastRemarketingAt: null,
+      remarketingHistory: [],
+      lastMessage: '',
+      lastMessageFromMe: false,
+      unreadCount: 0,
+      updatedAt: Date.now()
+    };
+
+    this.data.leads[phone] = resetData;
+    if (this.data.leads[cleanPhone]) {
+      this.data.leads[cleanPhone] = resetData;
+    }
+    this.save();
+    supabaseService.upsertLead(resetData);
+    return resetData;
+  }
+
   setLeadAiActive(phone, isActive) {
     if (this.data.leads[phone]) {
       this.data.leads[phone].aiActive = isActive;

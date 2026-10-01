@@ -95,6 +95,36 @@ router.delete('/leads/:phone', (req, res) => {
   res.status(404).json({ error: 'Lead não encontrado' });
 });
 
+router.post('/leads/:phone/reset', async (req, res) => {
+  const { phone } = req.params;
+  try {
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+
+    // 1. Cancel ongoing AI execution / debounce for this phone
+    whatsapp.cancelActiveLeadProcess(cleanPhone);
+
+    // 2. Clear all chat messages from storage and Supabase
+    storage.deleteMessagesForPhone(cleanPhone);
+
+    // 3. Reset funnel stage, deliverables and receipt memory back to zero
+    const resetLead = storage.resetLeadFunnel(cleanPhone);
+
+    if (!resetLead) {
+      return res.status(404).json({ error: 'Lead não encontrado' });
+    }
+
+    // 4. Emit real-time updates to all connected dashboards
+    whatsapp.emit('lead:updated', resetLead);
+    whatsapp.emit('lead:messages_cleared', { phone: cleanPhone, rawPhone: phone });
+    storage.addLog('SUCCESS', `Funil do lead ${resetLead.name || cleanPhone} foi resetado com sucesso para novos testes do zero.`);
+
+    res.json({ success: true, lead: resetLead });
+  } catch (err) {
+    console.error(`[API] Erro ao resetar funil do lead ${phone}:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/leads/:phone/sync', async (req, res) => {
   const { phone } = req.params;
   try {

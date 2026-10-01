@@ -860,6 +860,30 @@ class WhatsAppService {
     });
   }
 
+  // Cancel any active AI processing, debounce, or typing presence for a lead
+  cancelActiveLeadProcess(phone) {
+    if (!phone) return;
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    for (const key of [phone, cleanPhone]) {
+      if (this.activeLeadControllers.has(key)) {
+        const ctrl = this.activeLeadControllers.get(key);
+        if (ctrl && !ctrl.signal.aborted) {
+          ctrl.abort();
+        }
+        this.activeLeadControllers.delete(key);
+      }
+      if (this.incomingDebounceMap.has(key)) {
+        const debounce = this.incomingDebounceMap.get(key);
+        if (debounce?.timer) clearTimeout(debounce.timer);
+        this.incomingDebounceMap.delete(key);
+      }
+    }
+    const jid = this.resolveJid(phone);
+    if (jid) {
+      this.safePresence(jid, 'paused').catch(() => {});
+    }
+  }
+
   // Infer and update lead funnel stage
   updateFunnelStage(phone, replyText) {
     const product = storage.getSettings().product;

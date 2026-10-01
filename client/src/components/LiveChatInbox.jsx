@@ -19,6 +19,7 @@ import {
   Trash2,
   Edit2,
   RefreshCw,
+  RotateCcw,
   Check,
   X,
   Phone
@@ -51,6 +52,7 @@ export default function LiveChatInbox({
   onToggleAi, 
   onChangeLeadStage,
   onDeleteLead,
+  onResetLead,
   onUpdateLead,
   onSyncLead,
   product,
@@ -62,6 +64,7 @@ export default function LiveChatInbox({
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [leadToDelete, setLeadToDelete] = useState(null);
+  const [leadToReset, setLeadToReset] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
   const audioRefs = useRef({});
@@ -203,6 +206,80 @@ export default function LiveChatInbox({
         </div>
       )}
 
+      {/* Reset Funnel Confirmation Modal */}
+      {leadToReset && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(5px)',
+          zIndex: 99999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div className="glass-card" style={{ maxWidth: '460px', width: '100%', padding: '24px', border: '1px solid rgba(99, 102, 241, 0.35)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+              <div style={{ padding: '10px', background: 'rgba(99, 102, 241, 0.15)', borderRadius: '10px', color: '#818cf8' }}>
+                <RotateCcw size={24} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc' }}>
+                  Resetar Funil e Testar do Zero?
+                </h3>
+                <p style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                  Limpa o histórico e reinicia a memória da IA.
+                </p>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.5', marginBottom: '20px' }}>
+              Você está resetando o lead <strong>{leadToReset.name || formatPhoneNumber(leadToReset.phone)}</strong> ({formatPhoneNumber(leadToReset.phone)}).
+              <br /><br />
+              Todas as mensagens desta conversa serão apagadas e o funil voltará ao estágio <strong>NOVO LEAD</strong>. A IA esquecerá os PDFs enviados, o PIX e comprovantes anteriores para você poder testar o atendimento do início no WhatsApp.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setLeadToReset(null)}
+                className="btn-secondary"
+                style={{ fontSize: '0.82rem' }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onResetLead) onResetLead(leadToReset.phone);
+                  setLeadToReset(null);
+                }}
+                style={{
+                  background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px 18px',
+                  fontWeight: 600,
+                  fontSize: '0.84rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <RotateCcw size={14} />
+                <span>Resetar e Testar do Zero</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Left Sidebar: Leads List */}
       <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Search Header */}
@@ -281,6 +358,25 @@ export default function LiveChatInbox({
                       <span className={`badge badge-${(lead.stage || 'novo').toLowerCase()}`} style={{ fontSize: '0.62rem' }}>
                         {lead.stage || 'NOVO'}
                       </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLeadToReset(lead);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#64748b',
+                          cursor: 'pointer',
+                          padding: '2px',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                        title="Resetar Funil (Testar do Zero)"
+                      >
+                        <RotateCcw size={13} />
+                      </button>
                       <button
                         type="button"
                         onClick={(e) => {
@@ -500,6 +596,29 @@ export default function LiveChatInbox({
                     <span className="toggle-slider"></span>
                   </label>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => setLeadToReset(activeLead)}
+                  style={{
+                    background: 'rgba(99, 102, 241, 0.12)',
+                    border: '1px solid rgba(99, 102, 241, 0.3)',
+                    borderRadius: '6px',
+                    padding: '5px 10px',
+                    color: '#a5b4fc',
+                    fontSize: '0.74rem',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  title="Apagar mensagens e resetar o funil deste lead para testar do zero no WhatsApp"
+                >
+                  <RotateCcw size={13} />
+                  <span>Resetar Funil (Testar do Zero)</span>
+                </button>
 
                 <button
                   type="button"
