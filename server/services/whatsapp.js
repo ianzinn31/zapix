@@ -1,7 +1,9 @@
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
-  downloadMediaMessage
+  downloadMediaMessage,
+  proto,
+  generateWAMessageFromContent
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import path from 'path';
@@ -678,6 +680,19 @@ class WhatsAppService {
           }
         }
 
+        // 4.1 Native PIX Copy Button (1-Click Clipboard Action)
+        if (
+          product.pixKey &&
+          (replyText.includes(product.pixKey) || leadObj?.stage === 'PIX_ENVIADO') &&
+          product.sendPixButton !== false &&
+          !signal.aborted
+        ) {
+          await antiBan.sleep(1200, signal);
+          if (!signal.aborted) {
+            await this.sendPixCopyButton(jid, product.pixKey, product.price, product.pixBeneficiary);
+          }
+        }
+
         // 5. Send Deliverable(s) if triggered
         for (const deliverableToSend of deliverablesToSend) {
           if (signal.aborted) break;
@@ -751,6 +766,64 @@ class WhatsAppService {
       storage.setLeadStage(phone, 'EM_CONVERSA');
     }
     this.emit('lead:updated', storage.getLead(phone));
+  }
+
+  // Send native WhatsApp Interactive Button for 1-click PIX key copying
+  async sendPixCopyButton(jid, pixKey, amount, beneficiary) {
+    if (!this.sock || !pixKey) return false;
+    try {
+      const formattedAmount = Number(amount || 15).toFixed(2).replace('.', ',');
+      const phone = jid.split('@')[0];
+
+      const interactiveMessage = proto.Message.InteractiveMessage.create({
+        body: proto.Message.InteractiveMessage.Body.create({
+          text: `Você também pode tocar no botão abaixo para copiar a chave PIX direto para o seu celular 👇\n\n*Valor:* R$ ${formattedAmount}\n*Nome:* ${beneficiary || 'ian alves dos anjos'}`
+        }),
+        footer: proto.Message.InteractiveMessage.Footer.create({
+          text: `Chave PIX: ${pixKey}`
+        }),
+        nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
+          buttons: [
+            {
+              name: 'cta_copy',
+              buttonParamsJson: JSON.stringify({
+                display_text: '📋 Copiar Chave PIX',
+                id: 'pix_key_copy',
+                copy_code: pixKey
+              })
+            }
+          ]
+        })
+      });
+
+      const content = {
+        viewOnceMessage: {
+          message: {
+            messageContextInfo: {
+              deviceListMetadata: {},
+              deviceListMetadataVersion: 2
+            },
+            interactiveMessage
+          }
+        }
+      };
+
+      const msg = generateWAMessageFromContent(jid, content, {});
+      await this.sock.relayMessage(jid, msg.message, { messageId: msg.key.id });
+
+      const sentMsg = storage.addMessage({
+        phone,
+        fromMe: true,
+        text: `🔘 [Botão Interativo]: Copiar Chave PIX (${pixKey})`,
+        type: 'text'
+      });
+      this.emit('chat:message', sentMsg);
+      storage.addLog('SUCCESS', `Botão nativo de copiar Chave PIX enviado com sucesso para ${phone}`);
+      return true;
+    } catch (btnErr) {
+      console.warn('[WhatsApp] Erro ao enviar botão interativo de PIX (fallback de texto mantido):', btnErr.message);
+      return false;
+    }
   }
 
   // Send manual message from Dashboard

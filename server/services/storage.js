@@ -117,7 +117,8 @@ const DEFAULT_STATE = {
       mainPainPoints: [],
       mainBenefits: [],
       objections: [],
-      defaultAudioPitchText: ''
+      defaultAudioPitchText: '',
+      sendPixButton: true
     },
     remarketing: {
       enabled: true,

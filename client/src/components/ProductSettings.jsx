@@ -34,6 +34,7 @@ export default function ProductSettings({ product, onSave }) {
     pixKeyType: product?.pixKeyType || 'aleatoria', // 'aleatoria' | 'cpf' | 'cnpj' | 'email' | 'telefone'
     pixBeneficiary: product?.pixBeneficiary || '',
     pixInstructions: product?.pixInstructions || 'Enviar o comprovante aqui no WhatsApp para liberação imediata do acesso.',
+    sendPixButton: product?.sendPixButton !== false,
     guaranteeDays: product?.guaranteeDays || 7,
     mainPainPoints: product?.mainPainPoints || [],
     mainBenefits: product?.mainBenefits || [],
@@ -63,6 +64,7 @@ export default function ProductSettings({ product, onSave }) {
         pixKeyType: product.pixKeyType || 'aleatoria',
         pixBeneficiary: product.pixBeneficiary || '',
         pixInstructions: product.pixInstructions || 'Enviar o comprovante aqui no WhatsApp para liberação imediata do acesso.',
+        sendPixButton: product.sendPixButton !== false,
         guaranteeDays: product.guaranteeDays || 7,
         mainPainPoints: product.mainPainPoints || [],
         mainBenefits: product.mainBenefits || [],
@@ -388,6 +390,23 @@ export default function ProductSettings({ product, onSave }) {
                   className="input-field"
                   placeholder="Ex: Enviar o comprovante aqui no WhatsApp para envio imediato do material."
                   style={{ fontSize: '0.85rem' }}
+                />
+              </div>
+
+              <div style={{ marginTop: '14px', padding: '12px 14px', background: 'rgba(59, 130, 246, 0.08)', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#93c5fd', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>🔘 Botão Nativo de Copiar PIX (1-Clique WhatsApp)</span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>
+                    Envia um botão interativo nativo no WhatsApp. O lead clica no botão e a chave PIX é copiada diretamente para a área de transferência do celular dele!
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formData.sendPixButton !== false}
+                  onChange={(e) => handleChange('sendPixButton', e.target.checked)}
+                  style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#3b82f6' }}
                 />
               </div>
             </div>
