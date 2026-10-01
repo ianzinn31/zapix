@@ -609,7 +609,7 @@ class WhatsAppService {
             .filter((m) => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'))
             .map((m) => m.text.toLowerCase());
 
-          const hasReceivedAny = sentTexts.length > 0 || leadObj?.deliverableSent === true;
+          const hasReceivedAny = sentTexts.length > 0 || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || leadObj?.deliverableSent === true;
           const isTriggeredByTag = tagMatches.length > 0 || deliverablesToSend.length > 0;
           const lowerUser = (userText || '').toLowerCase();
           const lowerReply = (replyText || '').toLowerCase();
@@ -760,7 +760,7 @@ class WhatsAppService {
         // Safeguard: Ensure PIX key is present during Phase 2 (AFTER deliverables have been sent, NOT during delivery), or when customer asked for PIX!
         const sentMsgsForPixCheck = storage.getMessages(phone) || [];
         const hasSentDeliverablesInHistory = sentMsgsForPixCheck.some((m) => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
-        const hasReceivedDeliverables = hasSentDeliverablesInHistory || leadObj?.stage === 'ENTREGUE' || leadObj?.deliverableSent === true;
+        const hasReceivedDeliverables = hasSentDeliverablesInHistory || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || leadObj?.deliverableSent === true;
 
         const isDeliverFirstPhase2 = deliveryStrategy === 'deliver_first' && hasReceivedDeliverables && deliverablesToSend.length === 0;
 
@@ -768,10 +768,18 @@ class WhatsAppService {
           const pixPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
           const pixBlock = `Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${pixPrice}\n\nAssim que você fizer, me envia o comprovante aqui tá bom? ❤️`;
 
+          const emotionalAppeal = `Eu confiei em você de olhos fechados e já te entreguei todo o material completo antes mesmo de você pagar! Fiz isso de coração aberto porque sei o quanto você se preocupa e quer o melhor para o seu pequeno... ❤️\n\nAgora estou aqui de coração te pedindo pra fazer a sua parte com essa contribuição simbólica de apenas R$ ${pixPrice}, que é o que mantém nosso trabalho vivo e de pé!`;
+
           if (!replyText || replyText.trim().length === 0) {
-            replyText = `Fico muito feliz que tenha gostado! 🥰\n\nEu confiei de olhos fechados em você e já te entreguei todo o material completo antes de qualquer valor. Agora peço de coração a sua contribuição simbólica de R$ ${pixPrice} para manter nosso projeto vivo!\n\n${pixBlock}`;
-          } else if (!replyText.includes(product.pixKey)) {
-            replyText += `\n\n${pixBlock}`;
+            replyText = `${emotionalAppeal}\n\n${pixBlock}`;
+          } else {
+            // Em Oferta Invertida Fase 2, se o lead não pediu o PIX diretamente e a IA não fez a chantagem emocional, garante o texto de apelo
+            if (isDeliverFirstPhase2 && !userWantsPix && !replyText.toLowerCase().includes('confi')) {
+              replyText = `${emotionalAppeal}\n\n${replyText}`;
+            }
+            if (!replyText.includes(product.pixKey)) {
+              replyText += `\n\n${pixBlock}`;
+            }
           }
 
           storage.upsertLead(phone, { stage: 'PIX_ENVIADO', deliverableSent: true });
@@ -956,19 +964,6 @@ class WhatsAppService {
       });
       this.emit('chat:message', sentMsg);
       storage.addLog('SUCCESS', `Botão nativo de copiar Chave PIX enviado com sucesso para ${phone}`);
-
-      // 2. Standalone clean PIX key message for instant 1-tap copy on mobile (Android/iOS) and WhatsApp Web
-      await antiBan.sleep(800);
-      if (this.sock && this.status === 'connected') {
-        await this.sock.sendMessage(jid, { text: pixKey });
-        const keyMsg = storage.addMessage({
-          phone,
-          fromMe: true,
-          text: pixKey,
-          type: 'text'
-        });
-        this.emit('chat:message', keyMsg);
-      }
 
       return true;
     } catch (btnErr) {

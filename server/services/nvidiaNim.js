@@ -346,7 +346,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
       const userIncomingMsgs = messagesHistory.filter(m => !m.fromMe);
       const hasSentBefore = messagesHistory.some(m => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
       const isUserAskingPix = /pix|pagar|pago|chave|valor|conta|manda.*pix|envia.*pix|passa.*pix|manda.*chave/i.test(userMessage || '');
-      const hasSentDeliverable = leadObj?.deliverableSent === true || hasSentBefore || isUserAskingPix;
+      const hasSentDeliverable = leadObj?.deliverableSent === true || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || hasSentBefore || isUserAskingPix;
       const isPaid = leadObj?.stage === 'APROVADO' || leadObj?.lastReceiptStatus === 'APROVADO';
       const allDelivTags = deliverables.length > 0
         ? deliverables.map(d => `[ENVIAR_ARQUIVO: ${d.tag}]`).join(' ')
@@ -418,22 +418,22 @@ ${allDelivTags}
 O cliente JÁ RECEBEU TUDO (todos os materiais e PDFs) antes de pagar!
 NUNCA diga "amostra" e NUNCA diga "libero o restante após o pagamento", pois você JÁ ENTREGOU TUDO!
 REGRA CRÍTICA: NÃO PERGUNTE SE ELE QUER A CHAVE PIX! NÃO PEÇA AUTORIZAÇÃO! ENVIE O PIX IMEDIATAMENTE NO TEXTO!
-ATENÇÃO: Você DEVE enviar o texto visível completo no chat e, depois do texto, a tag de áudio! O texto com a chave NÃO pode ficar só falado!
+ATENÇÃO SUPREMA: NUNCA responda apenas com a tag de áudio! Sua resposta DEVE OBRIGATORIAMENTE conter o texto escrito com o apelo de confiança e os dados do PIX, seguido da tag de áudio!
 
-Você DEVE estruturar sua resposta exatamente assim:
-1. Texto visível de apelo emocional de confiança, reciprocidade e pedido de ajuda sincero:
-   - Diga que confiou nele de olhos fechados e já entregou o material completo antes de qualquer pagamento, porque sentiu no coração que ele é uma pessoa do bem e quer o melhor para o futuro do filho.
-   - Peça com carinho a contribuição simbólica de apenas R$ ${formattedPrice}, que é o que mantém o projeto vivo e de pé.
-2. Bloco da Chave PIX destacado no texto visível, limpo e direto para cópia com 1 clique:
-   Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
-   Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
-   Valor: R$ ${formattedPrice}
-   Assim que você fizer, me envia o comprovante aqui tá bom? ❤️
-3. Logo abaixo do texto acima, insira a tag de [AUDIO: ...] emocionante com tom humano e pausado com reticências (...) e quebras de linha:
-   [AUDIO: Olha...
-   eu confiei de verdade em você e te entreguei tudo antes...
-   agora tô aqui de coração te pedindo pra fazer a sua parte...
-   faz com calma no app do seu banco e me manda o comprovante aqui, tá bom?]`
+Sua mensagem DEVE seguir rigorosamente esta estrutura:
+
+Eu confiei em você de olhos fechados e já te entreguei todo o material completo antes mesmo de você pagar! Fiz isso de coração aberto porque sei o quanto você se preocupa e quer o melhor para o seu filho... ❤️ Agora estou aqui de coração te pedindo pra fazer a sua parte e me ajudar com essa contribuição simbólica de apenas R$ ${formattedPrice}, que é o que mantém nosso projeto vivo de pé!
+
+Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
+Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
+Valor: R$ ${formattedPrice}
+
+Assim que você fizer, me envia o comprovante aqui tá bom? ❤️
+
+[AUDIO: Olha...
+eu confiei de verdade em você e te entreguei tudo antes...
+agora tô aqui de coração te pedindo pra fazer a sua parte...
+faz com calma no app do seu banco e me manda o comprovante aqui, tá bom?]`
         });
       }
     }
