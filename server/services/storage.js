@@ -18,6 +18,29 @@ const MEDIA_CACHE_DIR = path.join(DATA_DIR, 'media_cache');
   }
 });
 
+// Helper for exact phone matching with Brazilian 9th digit normalization
+export function isSamePhoneNumber(p1, p2) {
+  if (!p1 || !p2) return false;
+  const c1 = String(p1).replace(/[^0-9]/g, '');
+  const c2 = String(p2).replace(/[^0-9]/g, '');
+  if (!c1 || !c2) return false;
+  if (c1 === c2) return true;
+
+  // Brazilian mobile numbers: 55 + DDD (2 digits) + 8 or 9 digits
+  if (c1.startsWith('55') && c2.startsWith('55')) {
+    const ddd1 = c1.slice(2, 4);
+    const ddd2 = c2.slice(2, 4);
+    if (ddd1 === ddd2) {
+      const num1 = c1.slice(4);
+      const num2 = c2.slice(4);
+      if ((num1.length === 8 || num1.length === 9) && (num2.length === 8 || num2.length === 9)) {
+        return num1.slice(-8) === num2.slice(-8);
+      }
+    }
+  }
+  return false;
+}
+
 const DEFAULT_STATE = {
   settings: {
     ai: {
@@ -294,7 +317,16 @@ class StorageService {
   }
 
   getLead(phone) {
-    return this.data.leads[phone] || null;
+    if (!phone) return null;
+    const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+    if (this.data.leads[phone]) return this.data.leads[phone];
+    if (this.data.leads[cleanPhone]) return this.data.leads[cleanPhone];
+    for (const leadKey of Object.keys(this.data.leads)) {
+      if (isSamePhoneNumber(leadKey, cleanPhone)) {
+        return this.data.leads[leadKey];
+      }
+    }
+    return null;
   }
 
   upsertLead(phone, updates = {}) {
@@ -373,11 +405,9 @@ class StorageService {
   // Messages
   getMessages(phone) {
     if (!phone) return this.data.messages;
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
-    return this.data.messages.filter((m) => {
-      const mPhone = m.phone.replace(/[^0-9]/g, '');
-      return mPhone.includes(cleanPhone) || cleanPhone.includes(mPhone);
-    });
+    const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+    if (!cleanPhone) return [];
+    return this.data.messages.filter((m) => isSamePhoneNumber(m.phone, cleanPhone));
   }
 
   addMessage(msg) {
