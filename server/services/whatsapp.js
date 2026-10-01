@@ -571,10 +571,11 @@ class WhatsAppService {
           }
         }
 
-        // 3. Check for Deliverable Tags: [ENVIAR_ARQUIVO: tag], [ENVIAR_IMAGEM: tag], [PDF: tag], etc.
+        // 3. Deliverables Extraction & Matching (supports [ENVIAR_ARQUIVO: tag], [PDF: tag], and direct [TAG])
         const fileTagRegex = /\[(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE):\s*([^\]]+)\]/gi;
         const tagMatches = [...replyText.matchAll(fileTagRegex)];
         const deliverablesToSend = [];
+        const allDeliverables = storage.getDeliverables();
 
         for (const m of tagMatches) {
           const reqTag = m[1].trim();
@@ -584,28 +585,32 @@ class WhatsAppService {
           }
         }
 
+        // Also check if any known deliverable tag or identifier is written directly in brackets: [TAG]
+        for (const d of allDeliverables) {
+          const tagPattern = new RegExp(`\\[\\s*(?:(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE):\\s*)?${d.tag}\\s*\\]`, 'i');
+          if (tagPattern.test(replyText)) {
+            if (!deliverablesToSend.some((x) => x.id === d.id)) {
+              deliverablesToSend.push(d);
+            }
+          }
+        }
+
         // 3. Antifraud & Delivery Strategy Engine
         const settings = storage.getSettings();
         const product = settings.product || {};
         const deliveryStrategy = product.deliveryStrategy || 'require_payment'; // 'require_payment' | 'deliver_first' | 'per_deliverable'
         const leadObj = storage.getLead(phone);
+        const userWantsPix = /pix|pagar|pago|chave|valor|conta|manda.*pix|envia.*pix|passa.*pix|manda.*chave/i.test(userText || '');
 
         // If operation strategy is 'deliver_first' (entrega TUDO antes e cobra depois):
         if (deliveryStrategy === 'deliver_first') {
-          const allDeliverables = storage.getDeliverables();
           const sentMsgs = storage.getMessages(phone) || [];
           const sentTexts = sentMsgs
             .filter((m) => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'))
             .map((m) => m.text.toLowerCase());
 
-          // Check which registered deliverables have not been sent to this lead yet
-          const remainingDeliverables = allDeliverables.filter((d) => {
-            const cleanName = (d.name || d.filename).toLowerCase();
-            return !sentTexts.some((st) => st.includes(cleanName));
-          });
-
-          const hasReceivedAll = remainingDeliverables.length === 0 && leadObj?.deliverableSent === true;
-          const isTriggeredByTag = tagMatches.length > 0;
+          const hasReceivedAny = sentTexts.length > 0 || leadObj?.deliverableSent === true;
+          const isTriggeredByTag = tagMatches.length > 0 || deliverablesToSend.length > 0;
           const lowerUser = (userText || '').toLowerCase();
           const lowerReply = (replyText || '').toLowerCase();
           const isPositiveOrInterested =
@@ -629,10 +634,13 @@ class WhatsAppService {
             lowerReply.includes('preparei') ||
             lowerReply.includes('liberando');
 
-          if (!hasReceivedAll && (isTriggeredByTag || isPositiveOrInterested || !leadObj?.deliverableSent)) {
-            // Deliver ALL remaining registered deliverables upfront! No holding back!
+          // If the customer explicitly asked for the PIX and already received materials: don't resend materials!
+          if (userWantsPix && hasReceivedAny) {
             deliverablesToSend.length = 0;
-            deliverablesToSend.push(...(remainingDeliverables.length > 0 ? remainingDeliverables : allDeliverables));
+          } else if (!hasReceivedAny || isTriggeredByTag || (isPositiveOrInterested && !userWantsPix)) {
+            // Deliver ALL registered deliverables together upfront as the complete package (all 3 files)!
+            deliverablesToSend.length = 0;
+            deliverablesToSend.push(...allDeliverables);
           }
         } else {
           // Filter deliverables based on the chosen strategy (require_payment / per_deliverable)
@@ -686,25 +694,139 @@ class WhatsAppService {
           }
         }
 
-        // Safeguard: Ensure PIX key is ALWAYS present during Phase 2 of deliver_first
-        if (deliveryStrategy === 'deliver_first' && leadObj?.deliverableSent && product.pixKey) {
+        // ========================================================
+        // STEP 1: SEND DELIVERABLES (PDFs / Files) FIRST
+        // Deliverables arrive at the TOP of the conversation!
+        // ========================================================
+        if (deliverablesToSend.length > 0 && !signal.aborted) {
+          for (const deliverableToSend of deliverablesToSend) {
+            if (signal.aborted || this.status !== 'connected' || !this.sock) break;
+            await antiBan.sleep(1200, signal);
+            if (signal.aborted || this.status !== 'connected' || !this.sock) break;
+
+            let fullPath = path.join(UPLOADS_DIR, deliverableToSend.filename);
+            if (!fs.existsSync(fullPath)) {
+              fullPath = path.resolve(DATA_DIR, deliverableToSend.path.replace(/^\/?data\//, ''));
+            }
+
+            if (fs.existsSync(fullPath)) {
+              const fileBuffer = fs.readFileSync(fullPath);
+              const isPdf = deliverableToSend.type === 'pdf' || deliverableToSend.filename.toLowerCase().endsWith('.pdf');
+              let cleanFileName = deliverableToSend.name || deliverableToSend.filename;
+              if (isPdf && !cleanFileName.toLowerCase().endsWith('.pdf')) {
+                cleanFileName += '.pdf';
+              }
+
+              if (isPdf) {
+                await this.sock.sendMessage(jid, {
+                  document: fileBuffer,
+                  mimetype: 'application/pdf',
+                  fileName: cleanFileName
+                });
+              } else {
+                await this.sock.sendMessage(jid, {
+                  image: fileBuffer,
+                  caption: deliverableToSend.description || deliverableToSend.name
+                });
+              }
+
+              const delivMsg = storage.addMessage({
+                phone,
+                fromMe: true,
+                text: `📎 [Enviado]: ${cleanFileName}`,
+                type: deliverableToSend.type || (isPdf ? 'pdf' : 'image'),
+                mediaUrl: deliverableToSend.url
+              });
+              this.emit('chat:message', delivMsg);
+              storage.addLog('SUCCESS', `Entregável (${cleanFileName}) enviado com sucesso para ${phone}`);
+            } else {
+              console.error(`Deliverable file not found on disk: ${fullPath}`);
+              storage.addLog('ERROR', `Arquivo não encontrado no disco: ${deliverableToSend.filename}`);
+            }
+          }
+          storage.upsertLead(phone, { deliverableSent: true, deliverableSentAt: Date.now() });
+        }
+
+        // ========================================================
+        // STEP 2: SEND AUDIO NOTE (Voice Note)
+        // ========================================================
+        if (audioSpeechText && audioSpeechText.length > 0 && !signal.aborted) {
+          try {
+            const generatedAudio = await fishAudio.generateSpeech(audioSpeechText);
+            if (signal.aborted || this.status !== 'connected' || !this.sock) return;
+
+            const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
+            await antiBan.sleep(thinkingDelay, signal);
+            if (signal.aborted || this.status !== 'connected' || !this.sock) return;
+
+            await this.safePresence(jid, 'recording');
+            await antiBan.sleep(recordingDelay, signal);
+            await this.safePresence(jid, 'paused');
+            if (signal.aborted || this.status !== 'connected' || !this.sock) return;
+
+            const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
+            const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
+            await this.sock.sendMessage(jid, {
+              audio: audioBuffer,
+              mimetype: 'audio/ogg; codecs=opus',
+              ptt: true,
+              waveform
+            });
+
+            const audioMsg = storage.addMessage({
+              phone,
+              fromMe: true,
+              text: `🎵 [Áudio]: "${audioSpeechText}"`,
+              type: 'audio',
+              mediaUrl: generatedAudio.audioUrl,
+              audioDuration: generatedAudio.durationSec
+            });
+            this.emit('chat:message', audioMsg);
+            storage.addLog('SUCCESS', `Áudio humanizado Fish Audio enviado para ${phone}`);
+          } catch (audioErr) {
+            console.error('Failed to send voice note:', audioErr);
+            replyText = `${audioSpeechText}\n\n${replyText}`.trim();
+          }
+        }
+
+        // ========================================================
+        // STEP 3: CLEAN SYSTEM TAGS & GUARANTEE PIX BLOCK
+        // ========================================================
+        // Thoroughly strip all deliverable tags by known tag names so they NEVER leak as text bubbles!
+        for (const d of allDeliverables) {
+          const cleanTag = (d.tag || '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          if (cleanTag) {
+            replyText = replyText.replace(new RegExp(`[-•◆*]?\\s*\\[\\s*(?:(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE):\\s*)?${cleanTag}\\s*\\]`, 'gi'), '');
+          }
+        }
+
+        // Strip generic bracketed uppercase tags like [PRODUTO], [PDF], [ENVIAR_ARQUIVO: ...]
+        replyText = replyText.replace(/\[(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE|TODOS_ARQUIVOS|TODOS_ENTREGAVEIS|TUDO):[\s\S]*?(?:\]|$)/gi, '');
+        replyText = replyText.replace(/^[-•◆*]?\s*\[[A-Z0-9_]{3,}\]\s*$/gm, '');
+        replyText = replyText.replace(/\[[A-Z0-9_]{4,}\]/g, '');
+
+        // Strip orphaned bullets, intro lines or audio remnants
+        replyText = replyText.replace(/Aqui está (?:o seu |todo o )?material completo:?\s*$/gim, '');
+        replyText = replyText.replace(/^[-•◆*]\s*$/gm, '');
+        replyText = replyText.replace(/\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)[\s\S]*?(?:\]|$)/gi, '');
+        replyText = replyText.replace(/\[\s*(?:AUDIO|ÁUDIO)\s*\]:?\s*["'“”«»][\s\S]*?["'“”«»]/gi, '');
+        replyText = replyText.replace(/^[\s🎵🎶🎙️🎤🎧🔊🔈\-_*~]+/gm, '');
+        replyText = replyText.replace(/^\s*\d{2},\s*que é o que mantém[\s\S]*?(?:00|$)/gi, '');
+        replyText = replyText.replace(/\n{3,}/g, '\n\n').trim();
+
+        // Safeguard: Ensure PIX key is ALWAYS present whenever materials are delivered or customer asked for PIX!
+        const isDeliverFirstPhase2 = deliveryStrategy === 'deliver_first' && (leadObj?.deliverableSent || deliverablesToSend.length > 0 || userWantsPix);
+        if (product.pixKey && (isDeliverFirstPhase2 || userWantsPix)) {
           if (!replyText.includes(product.pixKey)) {
             const pixPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
-            const pixBlock = `\n\nChave PIX (${product.pixKeyType || 'Chave'}): ${product.pixKey}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${pixPrice}`;
+            const pixBlock = `\n\nChave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${pixPrice}\n\nAssim que você fizer, me envia o comprovante aqui tá bom? ❤️`;
             replyText += pixBlock;
           }
         }
 
-        // CRITICAL: Strip ALL system tags completely from replyText so they are NEVER sent as plain text bubbles!
-        replyText = replyText
-          .replace(/\[(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE|TODOS_ARQUIVOS|TODOS_ENTREGAVEIS|TUDO):[\s\S]*?(?:\]|$)/gi, '')
-          .replace(/\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)[\s\S]*?(?:\]|$)/gi, '')
-          .replace(/\[\s*(?:AUDIO|ÁUDIO)\s*\]:?\s*["'“”«»][\s\S]*?["'“”«»]/gi, '')
-          .replace(/^[\s🎵🎶🎙️🎤🎧🔊🔈\-_*~]+/gm, '')
-          .replace(/^\s*\d{2},\s*que é o que mantém[\s\S]*?(?:00|$)/gi, '')
-          .trim();
-
-        // 4. Send Text Messages with Natural Anti-Ban Bubbles & Typing Simulation
+        // ========================================================
+        // STEP 4: SEND TEXT MESSAGE BUBBLES
+        // ========================================================
         if (replyText && replyText.length > 0 && !signal.aborted) {
           const bubbles = antiBan.splitIntoNaturalBubbles(replyText);
 
@@ -745,63 +867,18 @@ class WhatsAppService {
           }
         }
 
-        // 4.1 Native PIX Copy Button (1-Click Clipboard Action)
+        // ========================================================
+        // STEP 5: NATIVE 1-CLICK PIX COPY BUTTON
+        // ========================================================
         if (
           product.pixKey &&
-          (replyText.includes(product.pixKey) || leadObj?.stage === 'PIX_ENVIADO') &&
+          (replyText.includes(product.pixKey) || userWantsPix || leadObj?.stage === 'PIX_ENVIADO') &&
           product.sendPixButton !== false &&
           !signal.aborted
         ) {
           await antiBan.sleep(1200, signal);
-          if (!signal.aborted) {
+          if (!signal.aborted && this.status === 'connected' && this.sock) {
             await this.sendPixCopyButton(jid, product.pixKey, product.price, product.pixBeneficiary);
-          }
-        }
-
-        // 5. Send Deliverable(s) if triggered
-        for (const deliverableToSend of deliverablesToSend) {
-          if (signal.aborted) break;
-          await antiBan.sleep(2000, signal);
-          if (signal.aborted) break;
-          let fullPath = path.join(UPLOADS_DIR, deliverableToSend.filename);
-          if (!fs.existsSync(fullPath)) {
-            fullPath = path.resolve(DATA_DIR, deliverableToSend.path.replace(/^\/?data\//, ''));
-          }
-
-          if (fs.existsSync(fullPath)) {
-            const fileBuffer = fs.readFileSync(fullPath);
-            const isPdf = deliverableToSend.type === 'pdf' || deliverableToSend.filename.toLowerCase().endsWith('.pdf');
-            let cleanFileName = deliverableToSend.name || deliverableToSend.filename;
-            if (isPdf && !cleanFileName.toLowerCase().endsWith('.pdf')) {
-              cleanFileName += '.pdf';
-            }
-
-            if (isPdf) {
-              await this.sock?.sendMessage(jid, {
-                document: fileBuffer,
-                mimetype: 'application/pdf',
-                fileName: cleanFileName
-              });
-            } else {
-              await this.sock?.sendMessage(jid, {
-                image: fileBuffer,
-                caption: deliverableToSend.description || deliverableToSend.name
-              });
-            }
-
-            const delivMsg = storage.addMessage({
-              phone,
-              fromMe: true,
-              text: `📎 [Enviado]: ${cleanFileName}`,
-              type: deliverableToSend.type || (isPdf ? 'pdf' : 'image'),
-              mediaUrl: deliverableToSend.url
-            });
-            this.emit('chat:message', delivMsg);
-            storage.upsertLead(phone, { deliverableSent: true, deliverableSentAt: Date.now() });
-            storage.addLog('SUCCESS', `Entregável (${cleanFileName}) enviado com sucesso para ${phone}`);
-          } else {
-            console.error(`Deliverable file not found on disk: ${fullPath}`);
-            storage.addLog('ERROR', `Arquivo não encontrado no disco: ${deliverableToSend.filename}`);
           }
         }
 

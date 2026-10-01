@@ -294,14 +294,32 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
     const deliveryStrategy = product.deliveryStrategy || 'require_payment';
 
     if (deliveryStrategy === 'deliver_first') {
-      const hasSentDeliverable = leadObj?.deliverableSent === true;
+      const messagesHistory = conversationHistory || [];
+      const hasSentBefore = messagesHistory.some(m => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
+      const isUserAskingPix = /pix|pagar|pago|chave|valor|conta|manda.*pix|envia.*pix|passa.*pix|manda.*chave/i.test(userMessage || '');
+      const hasSentDeliverable = leadObj?.deliverableSent === true || hasSentBefore || isUserAskingPix;
       const isPaid = leadObj?.stage === 'APROVADO' || leadObj?.lastReceiptStatus === 'APROVADO';
       const allDelivTags = deliverables.length > 0
         ? deliverables.map(d => `[ENVIAR_ARQUIVO: ${d.tag}]`).join(' ')
         : '[ENVIAR_ARQUIVO: PRODUTO]';
       const formattedPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
 
-      if (!hasSentDeliverable) {
+      if (isUserAskingPix) {
+        messages.push({
+          role: 'system',
+          content: `[DIRETRIZ DE FECHAMENTO URGENTE - O CLIENTE PEDIU O PIX]:
+O cliente está pedindo o PIX diretamente para pagar ("${userMessage}")!
+REGRA ABSOLUTA: NÃO enrole, NÃO pergunte se ele quer o PIX e NÃO tente reenviar arquivos! Envie o PIX agora mesmo!
+Estrutura OBRIGATÓRIA da sua resposta:
+1. Uma frase curta e muito carinhosa agradecendo a ajuda e a confiança no projeto.
+2. O bloco oficial da Chave PIX destacado e limpo para cópia:
+Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
+Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
+Valor: R$ ${formattedPrice}
+3. Instrução para enviar o comprovante: "Assim que você fizer, me envia o comprovante aqui tá bom? ❤️"
+4. [AUDIO: [grateful] Muito obrigada mesmo pelo carinho e pela ajuda... [break] O PIX tá certinho aí no texto pra você... [break] faz com calma no app do seu banco e me manda o comprovante aqui tá bom?]`
+        });
+      } else if (!hasSentDeliverable) {
         messages.push({
           role: 'system',
           content: `[DIRETRIZ DE FUNIL - OFERTA INVERTIDA - FASE 1: LIBERAÇÃO DE TUDO DE UMA VEZ]:
@@ -310,7 +328,8 @@ Nesta operação a ordem é 100% invertida: NÓS ENTREGAMOS TUDO, TUDO MESMO DE 
 Você AINDA NÃO enviou os materiais para este lead!
 LIBERE TODOS OS MATERIAIS AGORA MESMO com as tags:
 ${allDelivTags}
-Diga com carinho e entusiasmo que você já está entregando todo o material completo com todas as atividades e PDFs para ele aproveitar com o filho agora mesmo!`
+Diga com carinho e entusiasmo que você já está entregando todo o material completo com todas as atividades e PDFs para ele aproveitar com o filho agora mesmo!
+NUNCA escreva os nomes das tags ou colchetes no texto visível para o cliente.`
         });
       } else if (!isPaid) {
         messages.push({
