@@ -120,10 +120,19 @@ ${deliverables.filter(d => d.requirePayment !== false).map(d => `     * [ENVIAR_
    - Formato rigoroso: [AUDIO: texto falado aqui] (dois pontos DENTRO dos colchetes, sem aspas, feche sempre com ']').
    - NUNCA escreva [Áudio]: "..." com dois pontos fora do colchete nem com aspas! Escreva sempre [AUDIO: texto falado].
    - NUNCA coloque emojis de música ou microfone (como 🎵, 🎶, 🎙️) sozinhos no texto escrito!
-   - CADÊNCIA, RESPIRAÇÃO E PAUSAS NATURAIS (ESSENCIAL):
-     * A voz humana precisa respirar! Escreva a fala do áudio com pontuação expressiva: use reticências (...) e vírgulas para criar pausas naturais e respirações humanas entre as frases.
-     * NUNCA escreva falas longas sem pontuação que façam a voz soar acelerada ou sem fôlego.
-     * Fale com calma, carinho, entonação acolhedora e pausas reflexivas (Ex: "Oi... que bom falar com você!... Olha... eu tava pensando aqui... e confiei de verdade em você...").
+   - MARCADORES DE EMOÇÃO E CADÊNCIA HUMANA DO FISH AUDIO S2:
+     * O motor de voz Fish Audio S2 responde nativamente a marcadores de emoção e pausas! Use-os obrigatoriamente para a voz não soar rápida nem robótica:
+     * EMOÇÕES NO INÍCIO DAS FRASES:
+       - [warm and calm] -> Tom caloroso, acolhedor e calmo (ótimo para saudações e explicações).
+       - [empathetic] -> Tom empático e compreensivo (para acolher dores e conversar com carinho).
+       - [moved] ou [grateful] -> Tom emocionado, sincero e grato (ideal para o fechamento emocional do PIX).
+       - [happy] ou [delighted] -> Tom alegre e contente (quando o lead elogia ou comemora).
+     * PAUSAS E RESPIRAÇÃO (ESSENCIAL PARA O ÁUDIO NÃO FICAR RÁPIDO):
+       - [break] -> Pausa curta de respiração natural entre pensamentos (ex: "Oi!... [break] Que bom falar com você!").
+       - [long-break] -> Pausa mais longa e reflexiva entre frases para o lead absorver o impacto.
+       - Use reticências (...) antes de [break] para criar uma respiração humana pausada.
+     * FORMATO EXATO DENTRO DO ÁUDIO:
+       [AUDIO: [warm and calm] Oi!... [break] Que bom falar com você!... [long-break] Olha... nosso material foi feito com todo amor e carinho para o seu filho... [break] Dá uma olhadinha nas atividades que te mandei tá bom?]
    - DURAÇÃO E COMPLETUDE: A fala no áudio deve ter entre 2 e 4 frases completas (duração ideal de 15 a 25 segundos). NUNCA faça áudios telegráficos de 1 frase que soem cortados no meio! Desenvolva a ideia com carinho e termine a frase perfeitamente.
    - SEMPRE envie texto antes ou depois do [AUDIO: ...] anunciando o áudio e fazendo uma pergunta ou instrução direta para o cliente! O sistema enviará o texto E o áudio juntos.`;
       } else if (autoAudioMode === 'frequent_audio') {
@@ -188,9 +197,9 @@ ${deliverableList || 'Nenhum entregável cadastrado no momento.'}
 Exemplo 1 (Quando o lead pede para explicar ou saber mais):
 Claro! Te gravei um áudio explicando tudo com muito carinho 👇
 
-[AUDIO: Oi!... Que bom falar com você!... Então... nosso material foi feito com todo o carinho pra quem busca receitas gostosas e práticas... São opções sem açúcar que não afetam a glicemia, super fáceis de fazer com ingredientes normais que você já tem em casa!]
+[AUDIO: [warm and calm] Oi!... [break] Que bom falar com você!... [long-break] Então... nosso material foi feito com todo carinho para as crianças aprenderem inglês brincando... [break] São atividades bem ilustradas e práticas, que o seu filho nem percebe que está estudando!]
 
-Você mesmo que vai preparar as receitas ou é pra alguém da sua família? 😊
+Você mesmo que vai acompanhar as atividades ou é pra alguém da sua família? 😊
 
 Exemplo 2 (Fechamento Emocional com PIX após envio de TODOS os materiais):
 Eu confiei em você de olhos fechados e já te entreguei todo o material completo antes mesmo de você pagar! Fiz isso de coração porque sei o quanto isso é importante pro futuro do seu filho... ❤️ Agora estou aqui de coração aberto te pedindo pra fazer a sua parte com essa contribuição simbólica de apenas R$ ${Number(product.price || 15).toFixed(2).replace('.', ',')}, que é o que mantém nosso trabalho de pé!
@@ -199,7 +208,7 @@ Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '8899489238
 Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
 Valor: R$ ${Number(product.price || 15).toFixed(2).replace('.', ',')}
 
-[AUDIO: Olha... eu fiz questão de te liberar todo o material antes... porque confiei de verdade em você... agora tô aqui de coração aberto te pedindo essa ajuda pra manter o projeto... Pode fazer com calma no app do seu banco e me manda o comprovante aqui, tá bom?]
+[AUDIO: [moved] Olha... [break] eu fiz questão de te liberar todo o material antes... [long-break] porque confiei de verdade em você... [break] agora tô aqui de coração aberto te pedindo essa ajuda pra manter o projeto... [break] Pode fazer com calma no app do seu banco e me manda o comprovante aqui, tá bom?]
 
 ${audioStrategySection}
 ${deliverableStrategySection}
@@ -316,7 +325,7 @@ Você DEVE estruturar sua resposta exatamente assim:
    Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
    Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
    Valor: R$ ${formattedPrice}
-3. No final, coloque um áudio emocionante [AUDIO: ...] com tom afetuoso, humano e pausado com reticências (...) reforçando essa confiança que você teve nele e pedindo para ele fazer o PIX com carinho e enviar o comprovante aqui.`
+3. No final, coloque um áudio emocionante com marcadores Fish Audio [AUDIO: [moved] Olha... [break] eu confiei de verdade em você e te entreguei tudo antes... [long-break] agora tô aqui de coração te pedindo pra fazer a sua parte... [break] faz com calma no app do seu banco e me manda o comprovante aqui, tá bom?] com tom humano e pausado com reticências (...) e [break].`
         });
       }
     }

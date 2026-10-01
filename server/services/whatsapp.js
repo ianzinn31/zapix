@@ -440,6 +440,7 @@ class WhatsAppService {
         //    b) [AUDIO: ...] or [ÁUDIO: ...] (bracketed text)
         //    c) [ENVIAR_AUDIO: ...]
         let audioSpeechText = null;
+        // Check for quoted format: [Áudio]: "..." or [AUDIO]: "..."
         const quotedRegex = /\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)\s*\]:?\s*["'“”«»]([\s\S]*?)["'“”«»]/i;
         const quotedMatch = replyText.match(quotedRegex);
 
@@ -447,11 +448,32 @@ class WhatsAppService {
           audioSpeechText = quotedMatch[1].trim();
           replyText = replyText.replace(quotedMatch[0], '').trim();
         } else {
-          const bracketRegex = /\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)\s*([\s\S]*?)(?:\]|$)/i;
-          const bracketMatch = replyText.match(bracketRegex);
-          if (bracketMatch) {
-            audioSpeechText = bracketMatch[1].trim().replace(/^["'“”«»]+|["'“”«»]+$/g, '').trim();
-            replyText = replyText.replace(bracketMatch[0], '').trim();
+          // Balanced bracket extraction to safely capture nested emotion/pause tags like [warm and calm], [break], etc.
+          const tagStartRegex = /\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)\s*/i;
+          const startMatch = replyText.match(tagStartRegex);
+          if (startMatch) {
+            const startIndex = startMatch.index;
+            const contentStartIndex = startIndex + startMatch[0].length;
+
+            let depth = 1;
+            let endIndex = contentStartIndex;
+            while (endIndex < replyText.length && depth > 0) {
+              if (replyText[endIndex] === '[') {
+                depth++;
+              } else if (replyText[endIndex] === ']') {
+                depth--;
+                if (depth === 0) break;
+              }
+              endIndex++;
+            }
+
+            audioSpeechText = replyText
+              .slice(contentStartIndex, endIndex)
+              .trim()
+              .replace(/^["'“”«»]+|["'“”«»]+$/g, '')
+              .trim();
+            const fullTag = replyText.slice(startIndex, endIndex + 1);
+            replyText = replyText.replace(fullTag, '').trim();
           }
         }
 

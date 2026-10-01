@@ -13,33 +13,65 @@ class FishAudioService {
     this.directFishUrl = 'https://api.fish.audio/v1/tts';
   }
 
-  // Format text to induce natural breathing pauses, paragraph breaks, and relaxed human tempo in TTS
+  // Format text to induce natural breathing pauses, Fish Audio emotion tags, and relaxed human tempo in TTS
   formatSpeechCadence(text) {
     if (!text || typeof text !== 'string') return '';
     let formatted = text
       // Remove emojis which can confuse TTS engines or sound robotic
       .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F018}-\u{1F270}\u{2388}\u{2B05}\u{2B06}\u{2B07}\u{2B1B}\u{2B1C}\u{2B50}\u{2B55}]/gu, '')
-      // Convert double line breaks / paragraph breaks into audible breathing pauses with ellipsis
-      .replace(/\n\s*\n+/g, ' ... ... ')
-      // Convert single line breaks to pause commas
-      .replace(/\n+/g, ', ')
-      // Ensure space and breathing pause after punctuation
-      .replace(/([?!])\s+(?=[A-ZÀ-Úa-zà-ú0-9])/g, '$1 ... ')
-      // Clean duplicate consecutive dots to 3
-      .replace(/\.{4,}/g, '...')
       // Clean multiple spaces
       .replace(/\s{2,}/g, ' ')
       .trim();
 
-    return formatted;
+    // Convert double line breaks / paragraph breaks into Fish Audio native [long-break]
+    formatted = formatted.replace(/\n\s*\n+/g, ' [long-break] ');
+    // Convert single line breaks to pause [break]
+    formatted = formatted.replace(/\n+/g, ' [break] ');
+
+    // Induce natural breathing pause after ellipsis
+    formatted = formatted.replace(/\.{3,}/g, '... [break]');
+
+    // Clean duplicate consecutive break tags
+    formatted = formatted
+      .replace(/\[break\]\s*\[break\]/g, '[long-break]')
+      .replace(/\[break\]\s*\[long-break\]/g, '[long-break]')
+      .replace(/\[long-break\]\s*\[break\]/g, '[long-break]')
+      .replace(/\s{2,}/g, ' ');
+
+    // If text does not start with a Fish Audio emotion tag, inject one based on sales conversation context
+    if (!formatted.startsWith('[')) {
+      const lower = formatted.toLowerCase();
+      let defaultEmotion = '[warm and calm]';
+      if (
+        lower.includes('confiei') ||
+        lower.includes('coração') ||
+        lower.includes('ajuda') ||
+        lower.includes('pix') ||
+        lower.includes('apoio') ||
+        lower.includes('contribui')
+      ) {
+        defaultEmotion = '[empathetic]';
+      } else if (
+        lower.includes('parabéns') ||
+        lower.includes('adorei') ||
+        lower.includes('maravilha') ||
+        lower.includes('ótimo') ||
+        lower.includes('show')
+      ) {
+        defaultEmotion = '[happy]';
+      }
+      formatted = `${defaultEmotion} ${formatted}`;
+    }
+
+    return formatted.trim();
   }
 
   // Convert any audio (mp3, wav) to WhatsApp PTT Opus Ogg format using local ffmpeg
   async convertToWhatsAppOpus(inputPath, outputPath, customSpeed = null) {
     try {
       const config = storage.getSettings().fishAudio || {};
-      const speed = customSpeed || config.speed || 0.92;
-      const validSpeed = (typeof speed === 'number' && speed >= 0.7 && speed <= 1.5) ? speed : 0.92;
+      const speed = customSpeed || config.speed || 0.88;
+      const validSpeed = (typeof speed === 'number' && speed >= 0.7 && speed <= 1.5) ? speed : 0.88;
 
       const args = [
         '-y',
@@ -146,7 +178,7 @@ class FishAudioService {
     }
 
     const speechText = this.formatSpeechCadence(text);
-    const speechSpeed = config.speed || 0.92;
+    const speechSpeed = config.speed || 0.88;
 
     const filePrefix = `fish_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
     const tempMp3Path = path.join(AUDIO_CACHE_DIR, `${filePrefix}.mp3`);
