@@ -4,6 +4,7 @@ import { storage } from './storage.js';
 class NvidiaNimService {
   constructor() {
     this.endpoint = 'https://integrate.api.nvidia.com/v1/chat/completions';
+    this.openRouterEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
     this.lastPrimaryFailureTime = 0;
     this.primaryCooldownMs = 600000; // 10 minutes circuit breaker cooldown
   }
@@ -249,10 +250,12 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
 
     if (response.data && response.data.choices && response.data.choices[0]?.message?.content) {
       let content = response.data.choices[0].message.content.trim();
-      // Anti-Leak: Strip any <think> tags or reasoning blocks
+      // Anti-Leak: Strip any <think> tags, reasoning blocks or chain-of-thought headers
       content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
       content = content.replace(/```(?:thought|thinking)[\s\S]*?```/gi, '').trim();
       content = content.replace(/^(?:thought|thinking):\s*[\s\S]*?\n\n/gi, '').trim();
+      content = content.replace(/^Here's a thinking process:[\s\S]*?(?:\n\n|\n[A-Z0-9#*-])/i, '').trim();
+      content = content.replace(/^Here's a thinking process:[\s\S]*/i, '').trim();
 
       if (content.length > 0) {
         return content;
@@ -261,6 +264,49 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
 
     // NEVER return reasoning_content or internal thinking to WhatsApp!
     throw new Error('Modelo retornou conteúdo vazio ou apenas tokens de raciocínio interno.');
+  }
+
+  // Call OpenRouter tertiary fallback model (e.g. nvidia/nemotron-3.5-lightning:free)
+  async callOpenRouterModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 18000) {
+    if (!apiKey) {
+      throw new Error(`OpenRouter API Key não configurada para o modelo ${model}`);
+    }
+
+    const payload = {
+      model,
+      messages,
+      temperature,
+      max_tokens: maxTokens,
+      top_p: 0.95
+    };
+
+    const response = await axios.post(this.openRouterEndpoint, payload, {
+      headers: {
+        Authorization: `Bearer ${apiKey.trim()}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://zapix.ai',
+        'X-Title': 'Zapix AI'
+      },
+      timeout: timeoutMs
+    });
+
+    if (response.data && response.data.choices && response.data.choices[0]?.message) {
+      const choice = response.data.choices[0];
+      let content = (choice.message.content || '').trim();
+
+      // Anti-Leak: Strip any <think> tags, reasoning blocks or chain-of-thought headers
+      content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+      content = content.replace(/```(?:thought|thinking)[\s\S]*?```/gi, '').trim();
+      content = content.replace(/^(?:thought|thinking):\s*[\s\S]*?\n\n/gi, '').trim();
+      content = content.replace(/^Here's a thinking process:[\s\S]*?(?:\n\n|\n[A-Z0-9#*-])/i, '').trim();
+      content = content.replace(/^Here's a thinking process:[\s\S]*/i, '').trim();
+
+      if (content.length > 0) {
+        return content;
+      }
+    }
+
+    throw new Error('Modelo OpenRouter retornou conteúdo vazio ou apenas tokens de raciocínio interno.');
   }
 
   // Generate sales response with automatic primary -> secondary fallback
@@ -409,22 +455,52 @@ Você DEVE estruturar sua resposta exatamente assim:
           settings.maxTokens || 1500,
           15000 // 15s fallback timeout
         );
-        return { text: responseText, modelUsed, fallbackTriggered: true };
+        return { text: responseText, modelUsed, fallbackTriggered: true, fallbackTier: 'secondary_nvidia' };
       }
     } catch (fallbackErr) {
       console.error(`[NVIDIA NIM Fallback Error]: ${fallbackErr.message}`);
       storage.addLog(
-        'ERROR',
-        `Ambos os modelos NVIDIA NIM falharam! Erro no fallback: ${fallbackErr.message}`
+        'WARNING',
+        `NVIDIA NIM Secundário falhou (${fallbackErr.message}). Acionando 3º Fallback via OpenRouter (${settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free'}).`
       );
     }
 
-    // 3. Smart Rule-Based Engine Backup (if both keys are missing or offline during demo)
+    // 3. Try Tertiary Fallback: OpenRouter (nvidia/nemotron-3.5-lightning:free)
+    try {
+      const allSettings = storage.getSettings();
+      const tertiaryKey = settings.tertiaryApiKey || process.env.OPENROUTER_API_KEY || allSettings.fishAudio?.apiKey || allSettings.vision?.apiKey;
+      const tertiaryModel = settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free';
+      if (tertiaryKey && tertiaryModel) {
+        modelUsed = tertiaryModel;
+        responseText = await this.callOpenRouterModel(
+          tertiaryModel,
+          tertiaryKey,
+          messages,
+          settings.temperature ?? 0.7,
+          settings.maxTokens || 1500,
+          18000 // 18s timeout for OpenRouter
+        );
+        storage.addLog(
+          'FALLBACK_TRIGGERED',
+          `Modelos NVIDIA NIM indisponíveis. Resposta atendida com sucesso pelo 3º Fallback OpenRouter (${tertiaryModel}).`
+        );
+        return { text: responseText, modelUsed, fallbackTriggered: true, fallbackTier: 'tertiary_openrouter' };
+      }
+    } catch (tertiaryErr) {
+      console.error(`[OpenRouter Tertiary Fallback Error]: ${tertiaryErr.message}`);
+      storage.addLog(
+        'ERROR',
+        `Todas as 3 IAs falharam (NVIDIA Primário, NVIDIA Secundário e OpenRouter ${settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free'}): ${tertiaryErr.message}`
+      );
+    }
+
+    // 4. Smart Rule-Based Engine Backup (if all 3 AI models failed or offline)
     const backupReply = this.generateOfflineSmartReply(userMessage);
     return {
       text: backupReply,
       modelUsed: 'offline-sales-fallback',
-      fallbackTriggered: true
+      fallbackTriggered: true,
+      fallbackTier: 'offline_rules'
     };
   }
 
@@ -547,6 +623,28 @@ Gere agora o texto exato falado para ser gravado em áudio sob medida para este 
       }
     } catch (e2) {
       console.warn('[NVIDIA NIM Remarketing Fallback Error]:', e2.message);
+    }
+
+    // Tertiary OpenRouter Model (nvidia/nemotron-3.5-lightning:free)
+    try {
+      const allSettings = storage.getSettings();
+      const tertiaryKey = settings.tertiaryApiKey || process.env.OPENROUTER_API_KEY || allSettings.fishAudio?.apiKey || allSettings.vision?.apiKey;
+      const tertiaryModel = settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free';
+      if (tertiaryKey && tertiaryModel) {
+        const generated = await this.callOpenRouterModel(
+          tertiaryModel,
+          tertiaryKey,
+          messages,
+          0.7,
+          1200,
+          15000 // 15s timeout
+        );
+        if (generated && generated.length > 5) {
+          return generated.replace(/["'“”«»]/g, '').trim();
+        }
+      }
+    } catch (e3) {
+      console.warn('[OpenRouter Remarketing Tertiary Error]:', e3.message);
     }
 
     return null;

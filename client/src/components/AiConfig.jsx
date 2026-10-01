@@ -10,7 +10,8 @@ import {
   Eye, 
   EyeOff,
   Zap,
-  RefreshCw
+  RefreshCw,
+  Globe
 } from 'lucide-react';
 
 export default function AiConfig({ aiSettings, onSave }) {
@@ -19,6 +20,8 @@ export default function AiConfig({ aiSettings, onSave }) {
     primaryApiKey: aiSettings?.primaryApiKey || '',
     fallbackModel: aiSettings?.fallbackModel || 'google/diffusiongemma-26b-a4b-it',
     fallbackApiKey: aiSettings?.fallbackApiKey || '',
+    tertiaryModel: aiSettings?.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free',
+    tertiaryApiKey: aiSettings?.tertiaryApiKey || '',
     temperature: aiSettings?.temperature ?? 0.7,
     maxTokens: aiSettings?.maxTokens || 1500,
     customPromptInstructions: aiSettings?.customPromptInstructions || ''
@@ -26,12 +29,18 @@ export default function AiConfig({ aiSettings, onSave }) {
 
   const [showPrimaryKey, setShowPrimaryKey] = useState(false);
   const [showFallbackKey, setShowFallbackKey] = useState(false);
+  const [showTertiaryKey, setShowTertiaryKey] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
-  const availableModels = [
+  const nimModels = [
     { id: 'z-ai/glm-5.3-flash', name: 'GLM 5.3 Flash (Recomendado Principal - Raciocínio & Alta Inteligência)', tag: 'Raciocínio & Persuasão' },
     { id: 'google/diffusiongemma-26b-a4b-it', name: 'Google DiffusionGemma 26B (Recomendado Fallback - Sub-segundo)', tag: 'Google 26B & Rápido' },
     { id: 'meta/llama-3.2-11b-vision-instruct', name: 'Meta Llama 3.2 11B Vision Instruct', tag: 'Meta 11B' }
+  ];
+
+  const openRouterModels = [
+    { id: 'nvidia/nemotron-3.5-lightning:free', name: 'NVIDIA Nemotron 3.5 Lightning (Gratuito - Recomendado Fallback 3)', tag: 'NVIDIA Free' },
+    { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Meta Llama 3.3 70B Instruct (Gratuito)', tag: 'Meta Free' }
   ];
 
   const handleSubmit = (e) => {
@@ -52,10 +61,10 @@ export default function AiConfig({ aiSettings, onSave }) {
             </div>
             <div>
               <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#f8fafc' }}>
-                Cérebro de IA: NVIDIA NIM Dual Fallback
+                Cérebro de IA: NVIDIA NIM + OpenRouter Triplo Fallback
               </h3>
               <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                Alta disponibilidade com duas APIs da NVIDIA NIM para nunca perder vendas quando uma API oscilar.
+                Alta disponibilidade com 3 níveis de contingência: Primário (GLM 5.3), Secundário (DiffusionGemma 26B) e Terciário Gratuito via OpenRouter (Nemotron 3.5 Lightning).
               </p>
             </div>
           </div>
@@ -86,13 +95,13 @@ export default function AiConfig({ aiSettings, onSave }) {
             <div>
               <div style={{ fontSize: '0.88rem', fontWeight: 700, color: aiSettings?.isFallbackActive ? '#fbbf24' : '#34d399' }}>
                 {aiSettings?.isFallbackActive
-                  ? 'Fallback Acionado: Operando com Modelo Secundário'
+                  ? 'Fallback Acionado: Operando em Modo Contingência'
                   : 'Sistema Estável: Operando com Modelo Primário'}
               </div>
               <p style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>
                 {aiSettings?.isFallbackActive
                   ? `Motivo: ${aiSettings.lastFallbackReason || 'Erro temporário na rota primária'}`
-                  : 'Se o modelo primário sofrer timeout ou limite de requisições, o segundo assume instantaneamente sem o cliente perceber.'}
+                  : 'Cascata de segurança ativa: se o Primário falhar, o Secundário assume; se ambos oscilarem, o 3º Fallback OpenRouter atende automaticamente.'}
               </p>
             </div>
           </div>
@@ -109,8 +118,8 @@ export default function AiConfig({ aiSettings, onSave }) {
           )}
         </div>
 
-        {/* 2-Column: Primary & Fallback */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+        {/* 3-Column Cascade Grid: Primary, Fallback 2, Fallback 3 */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '24px' }}>
           {/* Primary Model Card */}
           <div style={{
             background: 'rgba(255, 255, 255, 0.02)',
@@ -124,8 +133,8 @@ export default function AiConfig({ aiSettings, onSave }) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Zap size={18} color="#c084fc" />
-                <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#f8fafc' }}>
-                  1. Modelo Primário (NVIDIA NIM)
+                <h4 style={{ fontSize: '0.96rem', fontWeight: 700, color: '#f8fafc' }}>
+                  1. Primário (NVIDIA NIM)
                 </h4>
               </div>
               <span className="badge badge-conversa">Rota Principal</span>
@@ -133,7 +142,7 @@ export default function AiConfig({ aiSettings, onSave }) {
 
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                Selecione o Modelo Primário
+                Modelo Primário
               </label>
               <select
                 value={formData.primaryModel}
@@ -141,7 +150,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                 className="input-field"
                 style={{ fontSize: '0.84rem' }}
               >
-                {availableModels.map((m) => (
+                {nimModels.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name}
                   </option>
@@ -151,7 +160,7 @@ export default function AiConfig({ aiSettings, onSave }) {
 
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                NVIDIA NIM API Key (Primária)
+                NVIDIA NIM API Key (1ª Chave)
               </label>
               <div style={{ position: 'relative' }}>
                 <input
@@ -171,7 +180,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                 </button>
               </div>
               <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
-                Obtenha gratuitamente em <a href="https://build.nvidia.com" target="_blank" rel="noreferrer" style={{ color: '#c084fc' }}>build.nvidia.com</a>
+                Obtenha em <a href="https://build.nvidia.com" target="_blank" rel="noreferrer" style={{ color: '#c084fc' }}>build.nvidia.com</a>
               </p>
             </div>
           </div>
@@ -189,16 +198,16 @@ export default function AiConfig({ aiSettings, onSave }) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <ShieldCheck size={18} color="#fbbf24" />
-                <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#f8fafc' }}>
-                  2. Modelo Fallback (Backup Automático)
+                <h4 style={{ fontSize: '0.96rem', fontWeight: 700, color: '#f8fafc' }}>
+                  2. Fallback 2 (NVIDIA NIM)
                 </h4>
               </div>
-              <span className="badge badge-pitch">Rota Contingência</span>
+              <span className="badge badge-pitch">Contingência 1</span>
             </div>
 
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                Selecione o Modelo de Fallback
+                Modelo Fallback 2
               </label>
               <select
                 value={formData.fallbackModel}
@@ -206,7 +215,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                 className="input-field"
                 style={{ fontSize: '0.84rem' }}
               >
-                {availableModels.map((m) => (
+                {nimModels.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name}
                   </option>
@@ -216,7 +225,7 @@ export default function AiConfig({ aiSettings, onSave }) {
 
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                NVIDIA NIM API Key (Fallback / Secundária)
+                NVIDIA NIM API Key (2ª Chave)
               </label>
               <div style={{ position: 'relative' }}>
                 <input
@@ -236,7 +245,72 @@ export default function AiConfig({ aiSettings, onSave }) {
                 </button>
               </div>
               <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
-                Pode ser de outra conta NVIDIA ou a mesma chave reserva.
+                Outra conta NVIDIA ou chave reserva.
+              </p>
+            </div>
+          </div>
+
+          {/* Tertiary / OpenRouter Fallback Model Card */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.02)',
+            padding: '20px',
+            borderRadius: '12px',
+            border: '1px solid rgba(16, 185, 129, 0.25)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Globe size={18} color="#34d399" />
+                <h4 style={{ fontSize: '0.96rem', fontWeight: 700, color: '#f8fafc' }}>
+                  3. Fallback 3 (OpenRouter)
+                </h4>
+              </div>
+              <span className="badge badge-meta">Contingência 2</span>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
+                Modelo Fallback 3 (OpenRouter)
+              </label>
+              <select
+                value={formData.tertiaryModel}
+                onChange={(e) => setFormData({ ...formData, tertiaryModel: e.target.value })}
+                className="input-field"
+                style={{ fontSize: '0.84rem' }}
+              >
+                {openRouterModels.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
+                OpenRouter API Key (Terciária)
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showTertiaryKey ? 'text' : 'password'}
+                  value={formData.tertiaryApiKey}
+                  onChange={(e) => setFormData({ ...formData, tertiaryApiKey: e.target.value })}
+                  placeholder="sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxx"
+                  className="input-field"
+                  style={{ paddingRight: '40px', fontSize: '0.84rem' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowTertiaryKey(!showTertiaryKey)}
+                  style={{ position: 'absolute', right: '10px', top: '10px', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}
+                >
+                  {showTertiaryKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
+                Obtenha em <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" style={{ color: '#34d399' }}>openrouter.ai/keys</a> (modelo 100% gratuito)
               </p>
             </div>
           </div>

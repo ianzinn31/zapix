@@ -48,6 +48,9 @@ const DEFAULT_STATE = {
       primaryApiKey: process.env.NVIDIA_NIM_PRIMARY_API_KEY || '',
       fallbackModel: 'google/diffusiongemma-26b-a4b-it',
       fallbackApiKey: process.env.NVIDIA_NIM_FALLBACK_API_KEY || '',
+      tertiaryModel: 'nvidia/nemotron-3.5-lightning:free',
+      tertiaryApiKey: process.env.OPENROUTER_API_KEY || '',
+      tertiaryProvider: 'openrouter',
       temperature: 0.7,
       maxTokens: 1500,
       isFallbackActive: false,
@@ -194,6 +197,12 @@ class StorageService {
           }
           if (!this.data.settings.ai.fallbackApiKey && process.env.NVIDIA_NIM_FALLBACK_API_KEY) {
             this.data.settings.ai.fallbackApiKey = process.env.NVIDIA_NIM_FALLBACK_API_KEY;
+          }
+          if (!this.data.settings.ai.tertiaryApiKey && process.env.OPENROUTER_API_KEY) {
+            this.data.settings.ai.tertiaryApiKey = process.env.OPENROUTER_API_KEY;
+          }
+          if (!this.data.settings.ai.tertiaryModel) {
+            this.data.settings.ai.tertiaryModel = 'nvidia/nemotron-3.5-lightning:free';
           }
           if (!this.data.settings.fishAudio.apiKey && process.env.OPENROUTER_API_KEY) {
             this.data.settings.fishAudio.apiKey = process.env.OPENROUTER_API_KEY;
