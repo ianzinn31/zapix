@@ -228,8 +228,8 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
 `;
   }
 
-  // Call single NIM model with configurable timeout
-  async callModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 12000) {
+  // Call single NIM model with configurable timeout (default 60s)
+  async callModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 60000) {
     if (!apiKey) {
       throw new Error(`API Key não configurada para o modelo ${model}`);
     }
@@ -452,7 +452,7 @@ Você DEVE estruturar sua resposta exatamente assim:
             messages,
             settings.temperature ?? 0.7,
             settings.maxTokens || 1500,
-            7000 // 7s primary timeout for rapid fallback
+            60000 // 60s (1 min) primary timeout before switching to fallback
           );
           // Primary succeeded - reset cooldown and ensure fallback state is inactive
           this.lastPrimaryFailureTime = 0;
@@ -467,7 +467,7 @@ Você DEVE estruturar sua resposta exatamente assim:
         console.warn(`[NVIDIA NIM Primary Error]: ${primaryErr.message}`);
         storage.addLog(
           'FALLBACK_TRIGGERED',
-          `NVIDIA NIM Primário (${settings.primaryModel || 'z-ai/glm-5.3-flash'}) instável (${primaryErr.message}). Circuito de proteção ativado por 10 min: usando fallback (${settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it'}).`
+          `NVIDIA NIM Primário (${settings.primaryModel || 'z-ai/glm-5.3-flash'}) não respondeu em 1 min (${primaryErr.message}). Ativando fallback (${settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it'}).`
         );
         storage.updateSettings({
           ai: {
@@ -634,7 +634,7 @@ Gere agora o texto exato falado para ser gravado em áudio sob medida para este 
           messages,
           0.7,
           500,
-          10000 // 10s timeout
+          60000 // 60s (1 min) timeout
         );
         if (generated && generated.length > 5) {
           return generated.replace(/["'“”«»]/g, '').trim();
