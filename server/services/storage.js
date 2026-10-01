@@ -225,9 +225,13 @@ class StorageService {
           await supabaseService.saveSettings(this.data.settings);
         }
 
+        const localLeads = { ...this.data.leads };
         this.data.leads = {};
         if (cloudLeads && cloudLeads.length > 0) {
-          cloudLeads.forEach((l) => { this.data.leads[l.phone] = l; });
+          cloudLeads.forEach((l) => {
+            const local = localLeads[l.phone] || {};
+            this.data.leads[l.phone] = { ...local, ...l };
+          });
         }
 
         this.data.messages = cloudMessages || [];

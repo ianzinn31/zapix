@@ -372,9 +372,12 @@ class WhatsAppService {
             timestamp: (Number(msg.messageTimestamp) * 1000) || Date.now()
           });
 
-          // Ensure lead exists with their actual WhatsApp pushName
-          if (pushName && !fromMe) {
-            storage.upsertLead(phone, { name: pushName, pushName });
+          // Ensure lead exists with their actual WhatsApp pushName and exact routing JID
+          if (!fromMe) {
+            storage.upsertLead(phone, {
+              jid,
+              ...(pushName ? { name: pushName, pushName } : {})
+            });
           }
 
           // Notify frontend dashboard in real-time
@@ -1129,13 +1132,34 @@ class WhatsAppService {
     }
   }
 
+  // Resolve correct WhatsApp JID (supports standard phone numbers and modern WhatsApp LIDs)
+  resolveJid(phoneOrJid) {
+    if (!phoneOrJid) return null;
+    const str = String(phoneOrJid).trim();
+    if (str.includes('@')) {
+      return str;
+    }
+    const clean = str.replace(/[^0-9]/g, '');
+    const lead = storage.getLead(clean) || storage.getLead(str);
+    if (lead?.jid && String(lead.jid).includes('@')) {
+      return lead.jid;
+    }
+    // WhatsApp Privacy LID heuristic (14+ digits not starting with 55)
+    if (clean.length >= 14 && !clean.startsWith('55')) {
+      return `${clean}@lid`;
+    }
+    return `${clean}@s.whatsapp.net`;
+  }
+
   // Send a voice note directly to a contact (e.g. for Remarketing or manual triggers)
   async sendVoiceNoteDirect(phone, speechText) {
     if (!this.sock || this.status !== 'connected') {
       throw new Error('WhatsApp não está conectado no momento.');
     }
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
-    const jid = `${cleanPhone}@s.whatsapp.net`;
+    const jid = this.resolveJid(phone);
+    if (!jid) {
+      throw new Error(`JID inválido para o contato: ${phone}`);
+    }
 
     const generatedAudio = await fishAudio.generateSpeech(speechText);
     const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
@@ -1175,17 +1199,19 @@ class WhatsAppService {
     if (!this.sock || this.status !== 'connected') {
       throw new Error('WhatsApp não está conectado no momento.');
     }
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
-    const jid = `${cleanPhone}@s.whatsapp.net`;
+    const jid = this.resolveJid(phone);
+    if (!jid) {
+      throw new Error(`JID inválido para o contato: ${phone}`);
+    }
     const bubbles = antiBan.splitIntoNaturalBubbles(text);
 
     for (let i = 0; i < bubbles.length; i++) {
       const bubble = bubbles[i];
       const { baseThinking, typingTime } = antiBan.calculateTypingDelay(bubble);
       await antiBan.sleep(baseThinking);
-      await this.sock.sendPresenceUpdate('composing', jid);
+      await this.safePresence(jid, 'composing');
       await antiBan.sleep(typingTime);
-      await this.sock.sendPresenceUpdate('paused', jid);
+      await this.safePresence(jid, 'paused');
 
       await this.sock.sendMessage(jid, { text: bubble });
       const sentMsg = storage.addMessage({
@@ -1206,8 +1232,8 @@ class WhatsAppService {
       return { phone, error: 'WhatsApp não está conectado no momento' };
     }
     try {
-      const cleanPhone = phone.replace(/[^0-9]/g, '');
-      const jid = `${cleanPhone}@s.whatsapp.net`;
+      const jid = this.resolveJid(phone);
+      if (!jid) return { phone, error: 'JID inválido' };
       
       let avatarUrl = null;
       try {
