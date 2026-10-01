@@ -53,22 +53,27 @@ class NvidiaNimService {
 
     let deliverableStrategySection = '';
     if (deliveryStrategy === 'deliver_first') {
-      deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: ENTREGAR ANTES E COBRAR DEPOIS (RECIPROCIDADE MÁXIMA & PEDIDO DE AJUDA)
-   - Nesta operação, seu objetivo é encantar e desarmar o lead entregando o material/amostra O QUANTO ANTES (logo na 1ª ou 2ª resposta)!
-   - REGRA 1 - LIBERAÇÃO ANTECIPADA IMEDIATA:
-     * Assim que o lead mandar a primeira mensagem, responder ou demonstrar qualquer interesse, dor ou curiosidade, LIBERE O MATERIAL IMEDIATAMENTE com a tag:
-       [ENVIAR_ARQUIVO: ${deliverables[0]?.tag || 'PRODUTO'}]
-     * Não fique enrolando nem pergunte "quer que eu te mostre?". Já envie o material com muito carinho e entusiasmo: "Olha, pra você ver a qualidade do que preparei, já tô te mandando o material aqui agora! Dá uma olhadinha 👇".
-   - REGRA 2 - JOGO EMOCIONAL DE CONFIANÇA E COBRANÇA DO PIX LOGO DEPOIS (MUITO IMPORTANTE):
-     * Assim que o material for enviado (ou assim que o lead responder / elogiar / agradecer):
-     * É TERMINANTEMENTE PROIBIDO perguntar: "Quer que eu envie a chave PIX?" ou "Posso te mandar o PIX?". NUNCA peça autorização para cobrar!
-     * VOCÊ DEVE ENVIAR A CHAVE PIX IMEDIATAMENTE NO TEXTO, junto com o gatilho da Reciprocidade e Pedido de Ajuda:
-       1) Texto com apelo emocional: "Eu confiei em você de olhos fechados e já te mandei o material antes mesmo de você pagar, porque vi que você é uma pessoa de bem e quer o melhor pra sua família... Fiz de coração aberto! Agora tô aqui de coração te pedindo pra fazer a sua parte e me ajudar com essa contribuição simbólica de apenas R$ ${Number(product.price).toFixed(2)}, que é o que mantém nosso projeto vivo. Segue a chave PIX para você fazer com calma no app do seu banco 👇"
-       2) Chave PIX limpa destacada para cópia com 1 toque:
-          Chave PIX (${product.pixKeyType || 'Chave'}): ${product.pixKey}
-          Nome: ${product.pixBeneficiary || 'Titular'}
-          Valor: R$ ${Number(product.price).toFixed(2)}
-       3) Áudio emotivo e caloroso [AUDIO: ...] com voz calma, respirações e pausas (...) reforçando a confiança que teve nele e pedindo a contribuição com afeto.`;
+      const allDelivTags = deliverables.map(d => `[ENVIAR_ARQUIVO: ${d.tag}]`).join(' ');
+      const formattedPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
+      deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: ENTREGAR TUDO ANTES E COBRAR DEPOIS (OFERTA INVERTIDA)
+   - NESTA OPERAÇÃO A ORDEM É 100% INVERTIDA: NÓS ENTREGAMOS TUDO, TUDO MESMO DE UMA VEZ SÓ!
+   - REGRA SUPREMA: NUNCA DIGA "amostra" E NUNCA DIGA "vou te entregar o resto depois de pagar" OU "libero o restante após o pagamento"!
+   - Não existe "resto para depois". Você já entrega o pacote completo com TODOS os materiais, atividades e PDFs de uma vez só!
+   - REGRA 1 - LIBERAÇÃO DE TUDO IMEDIATAMENTE:
+     * Assim que o lead mandar mensagem, responder ou demonstrar interesse/dúvida/dor, entregue TODOS os materiais agora mesmo com as tags:
+       ${allDelivTags || '[ENVIAR_ARQUIVO: PRODUTO]'}
+     * Diga com entusiasmo e carinho: "Olha, para te ajudar de verdade e você ver o quanto esse material é maravilhoso, eu já estou te entregando TUDO aqui agora! O pacote completo com todas as atividades e PDFs para o seu filho começar! Dá uma olhadinha 👇"
+   - REGRA 2 - FECHAMENTO EMOCIONAL COM PIX DIRETO (SEM PEDIR PERMISSÃO):
+     * Assim que os materiais forem entregues (ou quando o lead reagir/elogiar/agradecer):
+     * NUNCA pergunte se ele quer a chave PIX! NUNCA peça autorização!
+     * FAÇA O JOGO EMOCIONAL DE CONFIANÇA TOTAL:
+       "Eu confiei em você de olhos fechados e já te entreguei TUDO de uma vez só antes mesmo de você pagar! Fiz isso de coração aberto porque vi o quanto você se preocupa e quer o melhor para o seu filho... ❤️
+       Agora estou aqui de coração te pedindo pra fazer a sua parte e me ajudar com esse valor simbólico de apenas R$ ${formattedPrice}, que é o que mantém nosso projeto vivo. Segue a chave PIX para você fazer com calma no app do seu banco 👇"
+     * Envie a chave PIX destacada e limpa para cópia:
+       Chave PIX (${product.pixKeyType || 'Chave'}): ${product.pixKey || '88994892385'}
+       Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
+       Valor: R$ ${formattedPrice}
+     * Coloque no final da mensagem um áudio [AUDIO: ...] afetuoso, humano e pausado com reticências (...) reforçando a confiança e pedindo a contribuição.`;
     } else if (deliveryStrategy === 'per_deliverable') {
       deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: LIBERAÇÃO HÍBRIDA POR ENTREGÁVEL
    - Entregáveis de Amostra/Isca Gratuita (sem exigência de pagamento): Você pode e DEVE enviar antes do pagamento para gerar encantamento:
@@ -187,14 +192,14 @@ Claro! Te gravei um áudio explicando tudo com muito carinho 👇
 
 Você mesmo que vai preparar as receitas ou é pra alguém da sua família? 😊
 
-Exemplo 2 (Fechamento Emocional com PIX após envio do material):
-Eu confiei em você de olhos fechados e já te mandei o material antes mesmo de você pagar! Fiz isso de coração porque sei o quanto isso é importante pra você... Agora conto com a sua ajuda e compromisso pra fazer a sua parte com esse valor simbólico de apenas R$ ${Number(product.price || 37.9).toFixed(2)} que mantém nosso trabalho de pé! ❤️
+Exemplo 2 (Fechamento Emocional com PIX após envio de TODOS os materiais):
+Eu confiei em você de olhos fechados e já te entreguei todo o material completo antes mesmo de você pagar! Fiz isso de coração porque sei o quanto isso é importante pro futuro do seu filho... ❤️ Agora estou aqui de coração aberto te pedindo pra fazer a sua parte com essa contribuição simbólica de apenas R$ ${Number(product.price || 15).toFixed(2).replace('.', ',')}, que é o que mantém nosso trabalho de pé!
 
-Chave PIX (${product.pixKeyType || 'Chave'}): ${product.pixKey || '8895959574451'}
+Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
 Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
-Valor: R$ ${Number(product.price || 37.9).toFixed(2)}
+Valor: R$ ${Number(product.price || 15).toFixed(2).replace('.', ',')}
 
-[AUDIO: Olha... eu fiz questão de te liberar o material antes... porque eu confiei de verdade em você... agora tô aqui de coração aberto te pedindo essa ajuda pra manter o projeto... Pode fazer com calma no app do seu banco e me manda o comprovante aqui, tá bom?]
+[AUDIO: Olha... eu fiz questão de te liberar todo o material antes... porque confiei de verdade em você... agora tô aqui de coração aberto te pedindo essa ajuda pra manter o projeto... Pode fazer com calma no app do seu banco e me manda o comprovante aqui, tá bom?]
 
 ${audioStrategySection}
 ${deliverableStrategySection}
@@ -280,30 +285,38 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
     if (deliveryStrategy === 'deliver_first') {
       const hasSentDeliverable = leadObj?.deliverableSent === true;
       const isPaid = leadObj?.stage === 'APROVADO' || leadObj?.lastReceiptStatus === 'APROVADO';
+      const allDelivTags = deliverables.length > 0
+        ? deliverables.map(d => `[ENVIAR_ARQUIVO: ${d.tag}]`).join(' ')
+        : '[ENVIAR_ARQUIVO: PRODUTO]';
+      const formattedPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
 
       if (!hasSentDeliverable) {
         messages.push({
           role: 'system',
-          content: `[DIRETRIZ DE FUNIL - FASE 1: LIBERAÇÃO ANTECIPADA IMEDIATA]:
-Você AINDA NÃO enviou o entregável para este lead!
-LIBERE O ENTREGÁVEL IMEDIATAMENTE agora nesta resposta com a tag [ENVIAR_ARQUIVO: ${deliverables[0]?.tag || 'PRODUTO'}].
-Diga em texto curto e caloroso que você já está liberando o material aqui agora para ele ver a qualidade e se encantar antes de pagar!`
+          content: `[DIRETRIZ DE FUNIL - OFERTA INVERTIDA - FASE 1: LIBERAÇÃO DE TUDO DE UMA VEZ]:
+Nesta operação a ordem é 100% invertida: NÓS ENTREGAMOS TUDO, TUDO MESMO DE UMA VEZ SÓ ANTES DE COBRAR!
+É TERMINANTEMENTE PROIBIDO falar "amostra" ou dizer "vou te entregar o resto depois de pagar" / "libero o restante depois"! Não existe amostra nem nada para depois.
+Você AINDA NÃO enviou os materiais para este lead!
+LIBERE TODOS OS MATERIAIS AGORA MESMO com as tags:
+${allDelivTags}
+Diga com carinho e entusiasmo que você já está entregando todo o material completo com todas as atividades e PDFs para ele aproveitar com o filho agora mesmo!`
         });
       } else if (!isPaid) {
         messages.push({
           role: 'system',
-          content: `[DIRETRIZ DE FUNIL - FASE 2: FECHAMENTO EMOCIONAL E COBRANÇA DO PIX]:
-O cliente JÁ RECEBEU o entregável/material antes!
-REGRA CRÍTICA: NÃO PERGUNTE SE ELE QUER A CHAVE PIX! NÃO PEÇA AUTORIZAÇÃO!
-Você DEVE nesta resposta:
-1. Fazer o apelo emocional profundo de reciprocidade, confiança e pedido de ajuda:
-   - Destaque que você confiou nele primeiro de olhos fechados e já entregou o material antes mesmo de ele pagar, porque você sentiu que ele é uma pessoa boa e quer o melhor para a família dele.
-   - Diga com o coração aberto que agora você pede a ajuda e compromisso dele com essa contribuição / valor simbólico de apenas R$ ${Number(product.price || 37.9).toFixed(2)}, que é o que mantém o projeto vivo e permite continuar ajudando.
-2. ENVIAR A CHAVE PIX IMEDIATAMENTE no texto, limpa para cópia:
-   Chave PIX (${product.pixKeyType || 'Chave'}): ${product.pixKey || '8895959574451'}
-   Nome: ${product.pixBeneficiary || 'Titular'}
-   Valor: R$ ${Number(product.price || 37.9).toFixed(2)}
-3. ENVIAR UM ÁUDIO EMOCIONANTE [AUDIO: ...] com voz calma, respiração pausada com reticências (...) e tom de carinho/confiança, reforçando que você confiou nele primeiro e agora conta com o apoio dele para fazer o PIX com tranquilidade e enviar o comprovante.`
+          content: `[DIRETRIZ DE FUNIL - OFERTA INVERTIDA - FASE 2: FECHAMENTO EMOCIONAL E ENVIO DO PIX]:
+O cliente JÁ RECEBEU TUDO (todos os materiais e PDFs) antes de pagar!
+NUNCA diga "amostra" e NUNCA diga "libero o restante após o pagamento", pois você JÁ ENTREGOU TUDO!
+REGRA CRÍTICA: NÃO PERGUNTE SE ELE QUER A CHAVE PIX! NÃO PEÇA AUTORIZAÇÃO! ENVIE O PIX IMEDIATAMENTE NO TEXTO!
+Você DEVE estruturar sua resposta exatamente assim:
+1. Apelo emocional de confiança, reciprocidade e pedido de ajuda sincero:
+   - Diga que confiou nele de olhos fechados e já entregou o material completo antes de qualquer pagamento, porque sentiu no coração que ele é uma pessoa do bem e quer o melhor para o futuro do filho.
+   - Peça com carinho a contribuição simbólica de apenas R$ ${formattedPrice}, que é o que mantém o projeto vivo e de pé.
+2. Bloco da Chave PIX destacado no texto, limpo e direto para cópia com 1 clique:
+   Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
+   Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
+   Valor: R$ ${formattedPrice}
+3. No final, coloque um áudio emocionante [AUDIO: ...] com tom afetuoso, humano e pausado com reticências (...) reforçando essa confiança que você teve nele e pedindo para ele fazer o PIX com carinho e enviar o comprovante aqui.`
         });
       }
     }
@@ -378,10 +391,36 @@ Você DEVE nesta resposta:
   // Backup sales responses when no API keys are provided or offline
   generateOfflineSmartReply(userMessage = '') {
     const text = (userMessage || '').toLowerCase();
-    const product = storage.getSettings().product;
+    const product = storage.getSettings().product || {};
+    const deliverables = storage.getDeliverables();
+    const allTags = deliverables.map((d) => `[ENVIAR_ARQUIVO: ${d.tag}]`).join(' ');
+    const formattedPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
+
+    if (product.deliveryStrategy === 'deliver_first') {
+      if (
+        text.includes('sim') ||
+        text.includes('quero') ||
+        text.includes('material') ||
+        text.includes('pdf') ||
+        text.includes('atividades') ||
+        text.includes('como funciona')
+      ) {
+        return `${allTags || '[ENVIAR_ARQUIVO: PRODUTO]'}\nClaro! Estou te enviando o material completo agora mesmo com todas as atividades e PDFs para você já aproveitar com o seu filho! Dá uma olhadinha e depois me diz o que achou, tá bom? 😊`;
+      }
+      if (
+        text.includes('lindo') ||
+        text.includes('gostei') ||
+        text.includes('maravilha') ||
+        text.includes('obrigad') ||
+        text.includes('adorei') ||
+        text.includes('que lindo')
+      ) {
+        return `Fico muito feliz que tenha gostado! ❤️ Eu confiei em você de olhos fechados e já te entreguei tudo antes mesmo de você pagar, porque sei o quanto isso é importante para o futuro do seu filho...\n\nAgora estou aqui de coração te pedindo pra fazer a sua parte e me ajudar com essa contribuição simbólica de apenas R$ ${formattedPrice}, que é o que mantém nosso trabalho de pé!\n\nChave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${formattedPrice}\n\n[AUDIO: Oi!... Fiz questão de te mandar todo o material antes... porque confiei de olhos fechados em você... Dá uma olhadinha na chave PIX que te mandei e assim que você fizer me envia o comprovante aqui tá bom? Um abraço grande!]`;
+      }
+    }
 
     if (text.includes('preço') || text.includes('quanto custa') || text.includes('valor')) {
-      return `O investimento no ${product.name} está em condição especial hoje por apenas R$ ${Number(product.price).toFixed(2)}!\n\nVocê tem acesso completo a todo o passo a passo com garantia incondicional de ${product.guaranteeDays} dias.\n\nQuer garantir sua vaga com esse valor promocional agora? É só acessar: ${product.checkoutUrl}`;
+      return `O investimento no ${product.name} está em condição especial hoje por apenas R$ ${formattedPrice}!\n\nVocê tem acesso completo a todo o passo a passo com garantia incondicional de ${product.guaranteeDays} dias.\n\nQuer garantir sua vaga com esse valor promocional agora? É só acessar: ${product.checkoutUrl}`;
     }
 
     if (text.includes('link') || text.includes('comprar') || text.includes('quero') || text.includes('pix')) {
@@ -392,11 +431,7 @@ Você DEVE nesta resposta:
       return `[ENVIAR_IMAGEM: PROVA_SOCIAL]\nSim, funciona com certeza! Temos alunos de todas as idades aplicando o método passo a passo.\n\nDá uma olhada nesses resultados acima! O que você mais busca no momento com o método?`;
     }
 
-    if (text.includes('amostra') || text.includes('gratis') || text.includes('pdf') || text.includes('material')) {
-      return `[ENVIAR_ARQUIVO: GUIA_AMOSTRA]\nCom certeza! Acabei de te mandar o guia em PDF com os primeiros passos para você dar uma olhada.\n\nDepois que ler me fala aqui o que achou!`;
-    }
-
-    return `Olá! Que bom falar com você! 😊\n\nSou do time de atendimento do ${product.name}. Vi que você se interessou pelo nosso método prático de renda com IA.\n\nMe conta: você já tem alguma experiência ou está começando do absoluto zero?`;
+    return `Olá! Que bom falar com você! 😊\n\nSou do time de atendimento do ${product.name}. Vi que você se interessou pelo nosso material.\n\nComo posso te ajudar hoje?`;
   }
 
   // Generate spoken remarketing script tailored dynamically to the lead's exact conversation history

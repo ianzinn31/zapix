@@ -523,56 +523,82 @@ class WhatsAppService {
         const deliveryStrategy = product.deliveryStrategy || 'require_payment'; // 'require_payment' | 'deliver_first' | 'per_deliverable'
         const leadObj = storage.getLead(phone);
 
-        // Filter deliverables based on the chosen strategy
-        const verifiedDeliverables = deliverablesToSend.filter((deliv) => {
-          // If operation strategy is 'deliver_first' (entrega antes e cobra depois)
-          if (deliveryStrategy === 'deliver_first') {
-            return true; // Allowed to send before payment!
-          }
+        // If operation strategy is 'deliver_first' (entrega TUDO antes e cobra depois):
+        if (deliveryStrategy === 'deliver_first') {
+          const allDeliverables = storage.getDeliverables();
+          const sentMsgs = storage.getMessages(phone) || [];
+          const sentTexts = sentMsgs
+            .filter((m) => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'))
+            .map((m) => m.text.toLowerCase());
 
-          // If operation strategy is 'per_deliverable'
-          if (deliveryStrategy === 'per_deliverable') {
-            if (deliv.requirePayment === false) {
-              return true; // Freebie / Sample / Lead magnet - allowed before payment!
-            }
-          }
+          // Check which registered deliverables have not been sent to this lead yet
+          const remainingDeliverables = allDeliverables.filter((d) => {
+            const cleanName = (d.name || d.filename).toLowerCase();
+            return !sentTexts.some((st) => st.includes(cleanName));
+          });
 
-          // Otherwise (require_payment or paid deliverable):
-          // Check if lead sent a fake or scheduled receipt
-          const isBlockedByReceipt =
-            leadObj?.lastReceiptStatus &&
-            ['AGENDADO', 'VALOR_INCORRETO', 'DESTINATARIO_INCORRETO', 'FALSO_OU_ADULTERADO', 'NAO_E_COMPROVANTE'].includes(leadObj.lastReceiptStatus);
-
-          if (isBlockedByReceipt) {
-            storage.addLog(
-              'WARNING',
-              `Bloqueio Antifraude: Envio do entregável pago (${deliv.name}) cancelado para ${phone} pois o comprovante está com status: ${leadObj.lastReceiptStatus}.`
-            );
-            return false;
-          }
-
-          return true;
-        });
-
-        deliverablesToSend.length = 0;
-        deliverablesToSend.push(...verifiedDeliverables);
-
-        // Contextual fallback: if customer asked for the file or confirmed purchase
-        if (deliverablesToSend.length === 0) {
+          const hasReceivedAll = remainingDeliverables.length === 0 && leadObj?.deliverableSent === true;
+          const isTriggeredByTag = tagMatches.length > 0;
           const lowerUser = (userText || '').toLowerCase();
           const lowerReply = (replyText || '').toLowerCase();
+          const isPositiveOrInterested =
+            lowerUser.includes('sim') ||
+            lowerUser.includes('quero') ||
+            lowerUser.includes('manda') ||
+            lowerUser.includes('envia') ||
+            lowerUser.includes('como funciona') ||
+            lowerUser.includes('pode ser') ||
+            lowerUser.includes('mostra') ||
+            lowerUser.includes('material') ||
+            lowerUser.includes('atividades') ||
+            lowerUser.includes('pdf') ||
+            lowerUser.includes('outro') ||
+            lowerUser.includes('resto') ||
+            lowerUser.includes('todos') ||
+            lowerReply.includes('material') ||
+            lowerReply.includes('atividades') ||
+            lowerReply.includes('enviando') ||
+            lowerReply.includes('entregando') ||
+            lowerReply.includes('preparei') ||
+            lowerReply.includes('liberando');
 
-          // Strategy A: 'deliver_first' -> send deliverable as early as possible to delight the lead!
-          if (deliveryStrategy === 'deliver_first') {
-            const hasSentAlready = leadObj?.deliverableSent === true;
-            if (!hasSentAlready) {
-              const defaultDeliv = resolveDeliverable('AMOSTRA') || resolveDeliverable('PRODUTO') || storage.getDeliverables()[0];
-              if (defaultDeliv) {
-                deliverablesToSend.push(defaultDeliv);
+          if (!hasReceivedAll && (isTriggeredByTag || isPositiveOrInterested || !leadObj?.deliverableSent)) {
+            // Deliver ALL remaining registered deliverables upfront! No holding back!
+            deliverablesToSend.length = 0;
+            deliverablesToSend.push(...(remainingDeliverables.length > 0 ? remainingDeliverables : allDeliverables));
+          }
+        } else {
+          // Filter deliverables based on the chosen strategy (require_payment / per_deliverable)
+          const verifiedDeliverables = deliverablesToSend.filter((deliv) => {
+            if (deliveryStrategy === 'per_deliverable') {
+              if (deliv.requirePayment === false) {
+                return true; // Freebie / Lead magnet - allowed before payment!
               }
             }
-          } else {
-            // Strategy B: 'require_payment' or 'per_deliverable' -> only release paid product if receipt is APROVADO
+
+            // Otherwise (require_payment or paid deliverable):
+            const isBlockedByReceipt =
+              leadObj?.lastReceiptStatus &&
+              ['AGENDADO', 'VALOR_INCORRETO', 'DESTINATARIO_INCORRETO', 'FALSO_OU_ADULTERADO', 'NAO_E_COMPROVANTE'].includes(leadObj.lastReceiptStatus);
+
+            if (isBlockedByReceipt) {
+              storage.addLog(
+                'WARNING',
+                `Bloqueio Antifraude: Envio do entregável pago (${deliv.name}) cancelado para ${phone} pois o comprovante está com status: ${leadObj.lastReceiptStatus}.`
+              );
+              return false;
+            }
+
+            return true;
+          });
+
+          deliverablesToSend.length = 0;
+          deliverablesToSend.push(...verifiedDeliverables);
+
+          // Contextual fallback for require_payment
+          if (deliverablesToSend.length === 0) {
+            const lowerUser = (userText || '').toLowerCase();
+            const lowerReply = (replyText || '').toLowerCase();
             const isPurchaseConfirmed =
               leadObj?.lastReceiptStatus === 'APROVADO' &&
               (lowerUser.includes('paguei') ||
@@ -593,12 +619,22 @@ class WhatsAppService {
           }
         }
 
+        // Safeguard: Ensure PIX key is ALWAYS present during Phase 2 of deliver_first
+        if (deliveryStrategy === 'deliver_first' && leadObj?.deliverableSent && product.pixKey) {
+          if (!replyText.includes(product.pixKey)) {
+            const pixPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
+            const pixBlock = `\n\nChave PIX (${product.pixKeyType || 'Chave'}): ${product.pixKey}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${pixPrice}`;
+            replyText += pixBlock;
+          }
+        }
+
         // CRITICAL: Strip ALL system tags completely from replyText so they are NEVER sent as plain text bubbles!
         replyText = replyText
-          .replace(/\[(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE):[\s\S]*?(?:\]|$)/gi, '')
+          .replace(/\[(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE|TODOS_ARQUIVOS|TODOS_ENTREGAVEIS|TUDO):[\s\S]*?(?:\]|$)/gi, '')
           .replace(/\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)[\s\S]*?(?:\]|$)/gi, '')
           .replace(/\[\s*(?:AUDIO|ÁUDIO)\s*\]:?\s*["'“”«»][\s\S]*?["'“”«»]/gi, '')
           .replace(/^[\s🎵🎶🎙️🎤🎧🔊🔈\-_*~]+/gm, '')
+          .replace(/^\s*\d{2},\s*que é o que mantém[\s\S]*?(?:00|$)/gi, '')
           .trim();
 
         // 4. Send Text Messages with Natural Anti-Ban Bubbles & Typing Simulation

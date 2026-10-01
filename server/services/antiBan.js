@@ -64,8 +64,8 @@ class AntiBanService {
       if (paragraph.length <= config.maxCharsPerBubble) {
         bubbles.push(paragraph);
       } else {
-        // Break long paragraph by punctuation (. ! ?)
-        const sentences = paragraph.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) || [paragraph];
+        // Break long paragraph by punctuation (. ! ?), protecting decimal numbers like 15.00 or 15,00
+        const sentences = paragraph.match(/(?:[^.!?]+|\d+[.,]\d+)+[.!?]+(?:\s+|$)|.+$/g) || [paragraph];
         let currentBubble = '';
 
         for (const sentence of sentences) {
