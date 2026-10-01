@@ -36,7 +36,11 @@ router.get('/whatsapp/status', (req, res) => {
 });
 
 router.post('/whatsapp/connect', async (req, res) => {
-  whatsapp.initialize();
+  if (typeof whatsapp.reconnect === 'function') {
+    whatsapp.reconnect();
+  } else {
+    whatsapp.initialize();
+  }
   res.json({ message: 'Conexão iniciada' });
 });
 

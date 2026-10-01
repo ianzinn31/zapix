@@ -101,9 +101,23 @@ class WhatsAppService {
     };
   }
 
+  // Force clean reconnect
+  async reconnect() {
+    try {
+      if (this.sock) {
+        this.sock.end(undefined);
+        this.sock = null;
+      }
+    } catch (e) {}
+    this.status = 'disconnected';
+    this.isInitializing = false;
+    this.reconnectAttempts = 0;
+    return this.initialize();
+  }
+
   // Initialize and connect WhatsApp socket
   async initialize() {
-    if (this.isInitializing) return;
+    if (this.isInitializing || this.status === 'connected') return;
     this.isInitializing = true;
 
     try {
@@ -157,11 +171,23 @@ class WhatsAppService {
 
         if (connection === 'close') {
           const statusCode = lastDisconnect?.error?.output?.statusCode;
-          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+          const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+          const isConnectionReplaced = statusCode === DisconnectReason.connectionReplaced || statusCode === 440;
+          const shouldReconnect = !isLoggedOut && !isConnectionReplaced;
 
           this.connectedNumber = null;
           this.status = 'disconnected';
           this.emit('whatsapp:status', { status: 'disconnected' });
+
+          if (isConnectionReplaced) {
+            this.isInitializing = false;
+            this.reconnectAttempts = 0;
+            storage.addLog(
+              'WARNING',
+              'Conexão substituída por outra instância ou processo (code 440). Reconexão em repouso para evitar conflito. Verifique se há múltiplos processos no PM2.'
+            );
+            return;
+          }
 
           if (shouldReconnect) {
             this.reconnectAttempts++;
