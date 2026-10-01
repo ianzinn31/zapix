@@ -28,7 +28,7 @@ export default function FishAudioConfig({ fishSettings, transcriptionSettings, o
     voiceId: fishSettings?.voiceId || '7f92f8afb8ec43bf81429cc1c9199cb1',
     enabled: fishSettings?.enabled ?? true,
     autoAudioMode: fishSettings?.autoAudioMode || 'pitch_and_welcome',
-    speed: fishSettings?.speed || 1.0
+    speed: fishSettings?.speed || 0.85
   });
 
   // Groq Whisper (STT) state
@@ -61,7 +61,7 @@ export default function FishAudioConfig({ fishSettings, transcriptionSettings, o
         voiceId: fishSettings.voiceId || '7f92f8afb8ec43bf81429cc1c9199cb1',
         enabled: fishSettings.enabled ?? true,
         autoAudioMode: fishSettings.autoAudioMode || 'pitch_and_welcome',
-        speed: fishSettings.speed || 1.0
+        speed: fishSettings.speed || 0.85
       });
     }
   }, [fishSettings]);
@@ -445,6 +445,30 @@ export default function FishAudioConfig({ fishSettings, transcriptionSettings, o
                 <option value="mirror_only">👂 Espelhamento (Apenas quando o lead mandar áudio ou pedir)</option>
                 <option value="manual_only">🔒 Desativar Áudios Automáticos (Apenas Texto)</option>
               </select>
+            </div>
+
+            {/* Voice Speed / Tempo Control */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#cbd5e1' }}>
+                  Velocidade da Voz: {formData.speed || 0.85}x
+                </label>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: (formData.speed || 0.85) <= 0.88 ? '#34d399' : '#fbbf24' }}>
+                  {(formData.speed || 0.85) <= 0.85 ? 'Calmo & Pausado (Recomendado)' : (formData.speed || 0.85) <= 0.95 ? 'Moderado' : 'Rápido'}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0.75"
+                max="1.10"
+                step="0.05"
+                value={formData.speed || 0.85}
+                onChange={(e) => setFormData({ ...formData, speed: parseFloat(e.target.value) })}
+                style={{ width: '100%', accentColor: '#10b981', cursor: 'pointer' }}
+              />
+              <p style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px' }}>
+                0.85x desacelera a fala naturalmente, tornando o áudio calmo, humano e sem pressa.
+              </p>
             </div>
           </div>
 

@@ -64,7 +64,7 @@ const DEFAULT_STATE = {
       voiceId: process.env.FISH_AUDIO_VOICE_ID || '7f92f8afb8ec43bf81429cc1c9199cb1',
       enabled: true,
       autoAudioMode: 'hybrid_high_conversion',
-      speed: 0.88
+      speed: 0.85
     },
     antiBan: {
       minThinkingDelay: 1800, // 1.8s
@@ -255,7 +255,13 @@ class StorageService {
             ...DEFAULT_STATE.settings,
             ...(parsed.settings || {}),
             ai: { ...DEFAULT_STATE.settings.ai, ...(parsed.settings?.ai || {}) },
-            fishAudio: { ...DEFAULT_STATE.settings.fishAudio, ...(parsed.settings?.fishAudio || {}) },
+            fishAudio: {
+              ...DEFAULT_STATE.settings.fishAudio,
+              ...(parsed.settings?.fishAudio || {}),
+              speed: (parsed.settings?.fishAudio?.speed && parsed.settings?.fishAudio?.speed < 1.0)
+                ? parsed.settings.fishAudio.speed
+                : 0.85
+            },
             transcription: { ...DEFAULT_STATE.settings.transcription, ...(parsed.settings?.transcription || {}) },
             antiBan: { ...DEFAULT_STATE.settings.antiBan, ...(parsed.settings?.antiBan || {}) },
             metaAds: { ...DEFAULT_STATE.settings.metaAds, ...(parsed.settings?.metaAds || {}) },
