@@ -72,6 +72,15 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3001;
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ [Zapix Server] ERRO: A porta ${PORT} já está em uso por outro aplicativo!`);
+    console.error(`👉 Dica: Se o navegador Dolphin Anty estiver aberto, ele costuma usar a porta 3001 por padrão. Feche-o ou encerre o processo anterior para liberar a porta.\n`);
+  } else {
+    console.error('[Zapix Server] Erro ao iniciar servidor HTTP:', err);
+  }
+});
+
 server.listen(PORT, () => {
   console.log(`=======================================================`);
   console.log(`🚀 Zapix AI - WhatsApp Sales Agent Server rodando!`);
