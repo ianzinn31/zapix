@@ -562,26 +562,10 @@ class WhatsAppService {
           const lowerUser = (userText || '').toLowerCase();
           const lowerReply = (replyText || '').toLowerCase();
 
-          // Strategy A: 'deliver_first' -> allow sending sample / product if customer wants it, before charging!
+          // Strategy A: 'deliver_first' -> send deliverable as early as possible to delight the lead!
           if (deliveryStrategy === 'deliver_first') {
-            const wantsFile =
-              (lowerUser.includes('manda') ||
-               lowerUser.includes('envia') ||
-               lowerUser.includes('quero ver') ||
-               lowerUser.includes('pode me enviar') ||
-               lowerUser.includes('me passa') ||
-               lowerUser.includes('manda a amostra') ||
-               lowerUser.includes('envia a amostra')) &&
-              (lowerUser.includes('amostra') ||
-               lowerUser.includes('receita') ||
-               lowerUser.includes('material') ||
-               lowerUser.includes('guia') ||
-               lowerUser.includes('pdf')) ||
-              lowerReply.includes('vou te enviar o material') ||
-              lowerReply.includes('vou te mandar o material') ||
-              lowerReply.includes('estou te enviando o arquivo');
-
-            if (wantsFile) {
+            const hasSentAlready = leadObj?.deliverableSent === true;
+            if (!hasSentAlready) {
               const defaultDeliv = resolveDeliverable('AMOSTRA') || resolveDeliverable('PRODUTO') || storage.getDeliverables()[0];
               if (defaultDeliv) {
                 deliverablesToSend.push(defaultDeliv);
@@ -614,6 +598,7 @@ class WhatsAppService {
           .replace(/\[(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE):[\s\S]*?(?:\]|$)/gi, '')
           .replace(/\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)[\s\S]*?(?:\]|$)/gi, '')
           .replace(/\[\s*(?:AUDIO|ÁUDIO)\s*\]:?\s*["'“”«»][\s\S]*?["'“”«»]/gi, '')
+          .replace(/^[\s🎵🎶🎙️🎤🎧🔊🔈\-_*~]+/gm, '')
           .trim();
 
         // 4. Send Text Messages with Natural Anti-Ban Bubbles & Typing Simulation
@@ -696,6 +681,7 @@ class WhatsAppService {
               mediaUrl: deliverableToSend.url
             });
             this.emit('chat:message', delivMsg);
+            storage.upsertLead(phone, { deliverableSent: true, deliverableSentAt: Date.now() });
             storage.addLog('SUCCESS', `Entregável (${cleanFileName}) enviado com sucesso para ${phone}`);
           } else {
             console.error(`Deliverable file not found on disk: ${fullPath}`);

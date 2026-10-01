@@ -38,7 +38,7 @@ const DEFAULT_STATE = {
       voiceId: process.env.FISH_AUDIO_VOICE_ID || '7f92f8afb8ec43bf81429cc1c9199cb1',
       enabled: true,
       autoAudioMode: 'hybrid_high_conversion',
-      speed: 1.0
+      speed: 0.92
     },
     antiBan: {
       minThinkingDelay: 1800, // 1.8s

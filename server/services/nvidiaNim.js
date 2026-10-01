@@ -53,12 +53,22 @@ class NvidiaNimService {
 
     let deliverableStrategySection = '';
     if (deliveryStrategy === 'deliver_first') {
-      deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: ENTREGAR ANTES E COBRAR DEPOIS (ISCA DE VALOR)
-   - Nesta operação, seu objetivo é encantar o cliente entregando o material ANTECIPADAMENTE!
-   - Quando o cliente demonstrar interesse ou pedir as receitas/material, envie IMEDIATAMENTE usando a tag do entregável:
-     [ENVIAR_ARQUIVO: ${deliverables[0]?.tag || 'PRODUTO'}]
-   - Após enviar, demonstre carinho, pergunte o que ele achou e conduza para o fechamento/cobrança oficial (PIX ou checkout) para liberar os bônus, acompanhamento ou pacote completo.
-   - Caso o cliente envie um agendamento de PIX na cobrança posterior, oriente com simpatia que precisa ser o PIX compensado na hora.`;
+      deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: ENTREGAR ANTES E COBRAR DEPOIS (RECIPROCIDADE MÁXIMA & PEDIDO DE AJUDA)
+   - Nesta operação, seu objetivo é encantar e desarmar o lead entregando o material/amostra O QUANTO ANTES (logo na 1ª ou 2ª resposta)!
+   - REGRA 1 - LIBERAÇÃO ANTECIPADA IMEDIATA:
+     * Assim que o lead mandar a primeira mensagem, responder ou demonstrar qualquer interesse, dor ou curiosidade, LIBERE O MATERIAL IMEDIATAMENTE com a tag:
+       [ENVIAR_ARQUIVO: ${deliverables[0]?.tag || 'PRODUTO'}]
+     * Não fique enrolando nem pergunte "quer que eu te mostre?". Já envie o material com muito carinho e entusiasmo: "Olha, pra você ver a qualidade do que preparei, já tô te mandando o material aqui agora! Dá uma olhadinha 👇".
+   - REGRA 2 - JOGO EMOCIONAL DE CONFIANÇA E COBRANÇA DO PIX LOGO DEPOIS (MUITO IMPORTANTE):
+     * Assim que o material for enviado (ou assim que o lead responder / elogiar / agradecer):
+     * É TERMINANTEMENTE PROIBIDO perguntar: "Quer que eu envie a chave PIX?" ou "Posso te mandar o PIX?". NUNCA peça autorização para cobrar!
+     * VOCÊ DEVE ENVIAR A CHAVE PIX IMEDIATAMENTE NO TEXTO, junto com o gatilho da Reciprocidade e Pedido de Ajuda:
+       1) Texto com apelo emocional: "Eu confiei em você de olhos fechados e já te mandei o material antes mesmo de você pagar, porque vi que você é uma pessoa de bem e quer o melhor pra sua família... Fiz de coração aberto! Agora tô aqui de coração te pedindo pra fazer a sua parte e me ajudar com essa contribuição simbólica de apenas R$ ${Number(product.price).toFixed(2)}, que é o que mantém nosso projeto vivo. Segue a chave PIX para você fazer com calma no app do seu banco 👇"
+       2) Chave PIX limpa destacada para cópia com 1 toque:
+          Chave PIX (${product.pixKeyType || 'Chave'}): ${product.pixKey}
+          Nome: ${product.pixBeneficiary || 'Titular'}
+          Valor: R$ ${Number(product.price).toFixed(2)}
+       3) Áudio emotivo e caloroso [AUDIO: ...] com voz calma, respirações e pausas (...) reforçando a confiança que teve nele e pedindo a contribuição com afeto.`;
     } else if (deliveryStrategy === 'per_deliverable') {
       deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: LIBERAÇÃO HÍBRIDA POR ENTREGÁVEL
    - Entregáveis de Amostra/Isca Gratuita (sem exigência de pagamento): Você pode e DEVE enviar antes do pagamento para gerar encantamento:
@@ -98,20 +108,24 @@ ${deliverables.filter(d => d.requirePayment !== false).map(d => `     * [ENVIAR_
    d) Apresentação da Oferta & Desconto: Apresente o valor especial e os bônus falando em áudio com entusiasmo de quem quer ajudar.
    e) Fechamento / Envio do PIX:
       - Escreva a chave PIX no texto limpo (para facilitar a cópia com 1 clique no celular).
-      - JUNTO com o texto do PIX, envie um áudio curto de 8 a 12 segundos:
-        [AUDIO: Prontinho! Te mandei a chave pix aqui no texto, pode fazer com calma no app do seu banco que eu já tô aqui de plantão pra liberar seu acesso na hora que você mandar o comprovante!]
+      - JUNTO com o texto do PIX, envie um áudio curto e emotivo de 10 a 15 segundos reforçando a confiança e o pedido de contribuição.
    f) Espelhamento: Se o cliente mandar um áudio ou pedir áudio, SEMPRE responda com [AUDIO: ...] também!
 
    REGRAS OBRIGATÓRIAS DO ÁUDIO:
    - Formato rigoroso: [AUDIO: texto falado aqui] (dois pontos DENTRO dos colchetes, sem aspas, feche sempre com ']').
    - NUNCA escreva [Áudio]: "..." com dois pontos fora do colchete nem com aspas! Escreva sempre [AUDIO: texto falado].
+   - NUNCA coloque emojis de música ou microfone (como 🎵, 🎶, 🎙️) sozinhos no texto escrito!
+   - CADÊNCIA, RESPIRAÇÃO E PAUSAS NATURAIS (ESSENCIAL):
+     * A voz humana precisa respirar! Escreva a fala do áudio com pontuação expressiva: use reticências (...) e vírgulas para criar pausas naturais e respirações humanas entre as frases.
+     * NUNCA escreva falas longas sem pontuação que façam a voz soar acelerada ou sem fôlego.
+     * Fale com calma, carinho, entonação acolhedora e pausas reflexivas (Ex: "Oi... que bom falar com você!... Olha... eu tava pensando aqui... e confiei de verdade em você...").
    - DURAÇÃO E COMPLETUDE: A fala no áudio deve ter entre 2 e 4 frases completas (duração ideal de 15 a 25 segundos). NUNCA faça áudios telegráficos de 1 frase que soem cortados no meio! Desenvolva a ideia com carinho e termine a frase perfeitamente.
-   - SEMPRE envie texto antes ou depois do [AUDIO: ...] anunciando o áudio e fazendo uma pergunta para o cliente! O sistema enviará o texto E o áudio juntos.`;
+   - SEMPRE envie texto antes ou depois do [AUDIO: ...] anunciando o áudio e fazendo uma pergunta ou instrução direta para o cliente! O sistema enviará o texto E o áudio juntos.`;
       } else if (autoAudioMode === 'frequent_audio') {
         audioStrategySection = `3. ESTRATÉGIA ATIVA DE ÁUDIO (MODO FREQUENTE - 80%+ EM ÁUDIO):
    O cliente prefere atendimento quase 100% em áudio de voz!
    Quase todas as suas respostas devem conter a tag [AUDIO: texto falado], especialmente qualquer explicação de receitas, produtos ou dúvidas!
-   A fala no áudio deve ser completa (2 a 4 frases, 15 a 25 segundos).
+   A fala no áudio deve ser completa (2 a 4 frases, 15 a 25 segundos) com pausas naturais e reticências (...).
    Use texto apenas para enviar links, chaves PIX ou dados que o cliente precise copiar e colar, e fale todo o restante através de [AUDIO: ...].`;
       } else if (autoAudioMode === 'pitch_and_welcome') {
         audioStrategySection = `3. ESTRATÉGIA DE ÁUDIO (BOAS-VINDAS E PITCH):
@@ -169,16 +183,18 @@ ${deliverableList || 'Nenhum entregável cadastrado no momento.'}
 Exemplo 1 (Quando o lead pede para explicar ou saber mais):
 Claro! Te gravei um áudio explicando tudo com muito carinho 👇
 
-[AUDIO: Oi! Que bom falar com você! Então, nosso material foi feito com todo o carinho pra quem busca receitas gostosas e práticas. São opções sem açúcar que não afetam a glicemia, super fáceis de fazer com ingredientes normais que você já tem em casa!]
+[AUDIO: Oi!... Que bom falar com você!... Então... nosso material foi feito com todo o carinho pra quem busca receitas gostosas e práticas... São opções sem açúcar que não afetam a glicemia, super fáceis de fazer com ingredientes normais que você já tem em casa!]
 
 Você mesmo que vai preparar as receitas ou é pra alguém da sua família? 😊
 
-Exemplo 2 (Quando o lead pergunta como recebe):
-Te gravei um áudio rapidinho aqui explicando como é a entrega! 👆
+Exemplo 2 (Fechamento Emocional com PIX após envio do material):
+Eu confiei em você de olhos fechados e já te mandei o material antes mesmo de você pagar! Fiz isso de coração porque sei o quanto isso é importante pra você... Agora conto com a sua ajuda e compromisso pra fazer a sua parte com esse valor simbólico de apenas R$ ${Number(product.price || 37.9).toFixed(2)} que mantém nosso trabalho de pé! ❤️
 
-[AUDIO: O envio é 100% digital e imediato! Assim que confirmado, você recebe o material completo em PDF aqui mesmo no WhatsApp e também no seu e-mail pra acessar sempre que quiser no celular, com garantia total de 7 dias!]
+Chave PIX (${product.pixKeyType || 'Chave'}): ${product.pixKey || '8895959574451'}
+Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
+Valor: R$ ${Number(product.price || 37.9).toFixed(2)}
 
-Quer que eu já te passe a chave PIX pra você garantir seu acesso hoje?
+[AUDIO: Olha... eu fiz questão de te liberar o material antes... porque eu confiei de verdade em você... agora tô aqui de coração aberto te pedindo essa ajuda pra manter o projeto... Pode fazer com calma no app do seu banco e me manda o comprovante aqui, tá bom?]
 
 ${audioStrategySection}
 ${deliverableStrategySection}
@@ -253,6 +269,43 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
     // Add the current incoming message if not already included
     if (userMessage && (!recentHistory.length || recentHistory[recentHistory.length - 1].text !== userMessage)) {
       messages.push({ role: 'user', content: userMessage });
+    }
+
+    // Contextual Phase Injection for Deliver-First Funnel
+    const leadObj = storage.getLead(phone);
+    const product = storage.getSettings().product || {};
+    const deliverables = storage.getDeliverables();
+    const deliveryStrategy = product.deliveryStrategy || 'require_payment';
+
+    if (deliveryStrategy === 'deliver_first') {
+      const hasSentDeliverable = leadObj?.deliverableSent === true;
+      const isPaid = leadObj?.stage === 'APROVADO' || leadObj?.lastReceiptStatus === 'APROVADO';
+
+      if (!hasSentDeliverable) {
+        messages.push({
+          role: 'system',
+          content: `[DIRETRIZ DE FUNIL - FASE 1: LIBERAÇÃO ANTECIPADA IMEDIATA]:
+Você AINDA NÃO enviou o entregável para este lead!
+LIBERE O ENTREGÁVEL IMEDIATAMENTE agora nesta resposta com a tag [ENVIAR_ARQUIVO: ${deliverables[0]?.tag || 'PRODUTO'}].
+Diga em texto curto e caloroso que você já está liberando o material aqui agora para ele ver a qualidade e se encantar antes de pagar!`
+        });
+      } else if (!isPaid) {
+        messages.push({
+          role: 'system',
+          content: `[DIRETRIZ DE FUNIL - FASE 2: FECHAMENTO EMOCIONAL E COBRANÇA DO PIX]:
+O cliente JÁ RECEBEU o entregável/material antes!
+REGRA CRÍTICA: NÃO PERGUNTE SE ELE QUER A CHAVE PIX! NÃO PEÇA AUTORIZAÇÃO!
+Você DEVE nesta resposta:
+1. Fazer o apelo emocional profundo de reciprocidade, confiança e pedido de ajuda:
+   - Destaque que você confiou nele primeiro de olhos fechados e já entregou o material antes mesmo de ele pagar, porque você sentiu que ele é uma pessoa boa e quer o melhor para a família dele.
+   - Diga com o coração aberto que agora você pede a ajuda e compromisso dele com essa contribuição / valor simbólico de apenas R$ ${Number(product.price || 37.9).toFixed(2)}, que é o que mantém o projeto vivo e permite continuar ajudando.
+2. ENVIAR A CHAVE PIX IMEDIATAMENTE no texto, limpa para cópia:
+   Chave PIX (${product.pixKeyType || 'Chave'}): ${product.pixKey || '8895959574451'}
+   Nome: ${product.pixBeneficiary || 'Titular'}
+   Valor: R$ ${Number(product.price || 37.9).toFixed(2)}
+3. ENVIAR UM ÁUDIO EMOCIONANTE [AUDIO: ...] com voz calma, respiração pausada com reticências (...) e tom de carinho/confiança, reforçando que você confiou nele primeiro e agora conta com o apoio dele para fazer o PIX com tranquilidade e enviar o comprovante.`
+        });
+      }
     }
 
     let responseText = null;

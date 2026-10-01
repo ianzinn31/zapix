@@ -13,12 +13,38 @@ class FishAudioService {
     this.directFishUrl = 'https://api.fish.audio/v1/tts';
   }
 
+  // Format text to induce natural breathing pauses, paragraph breaks, and relaxed human tempo in TTS
+  formatSpeechCadence(text) {
+    if (!text || typeof text !== 'string') return '';
+    let formatted = text
+      // Remove emojis which can confuse TTS engines or sound robotic
+      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F018}-\u{1F270}\u{2388}\u{2B05}\u{2B06}\u{2B07}\u{2B1B}\u{2B1C}\u{2B50}\u{2B55}]/gu, '')
+      // Convert double line breaks / paragraph breaks into audible breathing pauses with ellipsis
+      .replace(/\n\s*\n+/g, ' ... ... ')
+      // Convert single line breaks to pause commas
+      .replace(/\n+/g, ', ')
+      // Ensure space and breathing pause after punctuation
+      .replace(/([?!])\s+(?=[A-ZÀ-Úa-zà-ú0-9])/g, '$1 ... ')
+      // Clean duplicate consecutive dots to 3
+      .replace(/\.{4,}/g, '...')
+      // Clean multiple spaces
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
+    return formatted;
+  }
+
   // Convert any audio (mp3, wav) to WhatsApp PTT Opus Ogg format using local ffmpeg
-  async convertToWhatsAppOpus(inputPath, outputPath) {
+  async convertToWhatsAppOpus(inputPath, outputPath, customSpeed = null) {
     try {
+      const config = storage.getSettings().fishAudio || {};
+      const speed = customSpeed || config.speed || 0.92;
+      const validSpeed = (typeof speed === 'number' && speed >= 0.7 && speed <= 1.5) ? speed : 0.92;
+
       const args = [
         '-y',
         '-i', inputPath,
+        '-filter:a', `atempo=${validSpeed.toFixed(2)}`,
         '-c:a', 'libopus',
         '-b:a', '32k',
         '-vbr', 'on',
@@ -119,6 +145,9 @@ class FishAudioService {
       throw new Error('Texto para conversão em áudio não fornecido.');
     }
 
+    const speechText = this.formatSpeechCadence(text);
+    const speechSpeed = config.speed || 0.92;
+
     const filePrefix = `fish_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
     const tempMp3Path = path.join(AUDIO_CACHE_DIR, `${filePrefix}.mp3`);
     const finalOggPath = path.join(AUDIO_CACHE_DIR, `${filePrefix}.ogg`);
@@ -128,7 +157,7 @@ class FishAudioService {
       try {
         const payload = {
           model: model.trim(),
-          input: text.trim(),
+          input: speechText,
           response_format: 'mp3'
         };
 
@@ -149,10 +178,10 @@ class FishAudioService {
 
         fs.writeFileSync(tempMp3Path, Buffer.from(response.data));
 
-        // Convert MP3 to WhatsApp native Opus PTT
-        await this.convertToWhatsAppOpus(tempMp3Path, finalOggPath);
+        // Convert MP3 to WhatsApp native Opus PTT with natural human tempo
+        await this.convertToWhatsAppOpus(tempMp3Path, finalOggPath, speechSpeed);
 
-        const durationSec = Math.max(Math.ceil(text.length / 15), 3);
+        const durationSec = Math.max(Math.ceil(text.length / 13), 3);
         const waveform = await this.extractWaveform(finalOggPath);
 
         return {
@@ -177,7 +206,7 @@ class FishAudioService {
         if (apiKey.startsWith('fa_') || !apiKey.startsWith('sk-or-')) {
           try {
             const directPayload = {
-              text: text.trim(),
+              text: speechText,
               reference_id: voiceId.trim(),
               format: 'mp3'
             };
@@ -190,8 +219,8 @@ class FishAudioService {
               timeout: 25000
             });
             fs.writeFileSync(tempMp3Path, Buffer.from(directRes.data));
-            await this.convertToWhatsAppOpus(tempMp3Path, finalOggPath);
-            const durationSec = Math.max(Math.ceil(text.length / 15), 3);
+            await this.convertToWhatsAppOpus(tempMp3Path, finalOggPath, speechSpeed);
+            const durationSec = Math.max(Math.ceil(text.length / 13), 3);
             const waveform = await this.extractWaveform(finalOggPath);
             return {
               oggPath: finalOggPath,

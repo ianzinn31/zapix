@@ -84,7 +84,15 @@ class AntiBanService {
       }
     }
 
-    return bubbles.length > 0 ? bubbles : [fullText.trim()];
+    // Filter out useless bubbles (e.g. standalone audio emoji markers like 🎵, blank/punctuation remnants)
+    const validBubbles = bubbles
+      .map((b) => b.trim())
+      .filter((b) => {
+        const clean = b.replace(/[\s\n\r\t.,!?;:🎵🎶🎙️🎤🎧🔊🔈\-_*~]/g, '');
+        return clean.length > 0;
+      });
+
+    return validBubbles.length > 0 ? validBubbles : (fullText.trim() ? [fullText.trim()] : []);
   }
 
   // Queue message action sequentially per contact to prevent collisions and rate violations
