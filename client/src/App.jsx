@@ -305,7 +305,20 @@ export default function App() {
       method: 'POST',
       body: formData
     });
-    if (!res.ok) throw new Error('Falha no upload');
+    if (!res.ok) {
+      if (res.status === 413) {
+        throw new Error('Arquivo excede o limite do Nginx na VPS (413 Request Entity Too Large). É necessário aumentar "client_max_body_size" no Nginx.');
+      }
+      let errMsg = 'Falha no upload';
+      try {
+        const data = await res.json();
+        if (data && data.error) errMsg = data.error;
+      } catch {
+        const text = await res.text();
+        if (text) errMsg = `Erro (${res.status}): ${text.slice(0, 150)}`;
+      }
+      throw new Error(errMsg);
+    }
     const newDeliv = await res.json();
     setDeliverables((prev) => [...prev, newDeliv]);
     showToast('Entregável cadastrado com sucesso!');

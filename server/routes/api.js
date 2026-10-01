@@ -14,6 +14,9 @@ const router = Router();
 // Multer storage for PDF and Image deliverables
 const uploadStorage = multer.diskStorage({
   destination: (req, file, cb) => {
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    }
     cb(null, UPLOADS_DIR);
   },
   filename: (req, file, cb) => {
@@ -24,7 +27,7 @@ const uploadStorage = multer.diskStorage({
 });
 const upload = multer({
   storage: uploadStorage,
-  limits: { fileSize: 25 * 1024 * 1024 } // 25MB
+  limits: { fileSize: 100 * 1024 * 1024 } // 100MB
 });
 
 // === WhatsApp Connection Status & Controls ===
@@ -169,29 +172,42 @@ router.get('/deliverables', (req, res) => {
   res.json(storage.getDeliverables());
 });
 
-router.post('/deliverables', upload.single('file'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'Nenhum arquivo enviado' });
-  }
+router.post('/deliverables', (req, res) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      console.error('[DELIVERABLES UPLOAD ERROR]', err);
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ error: 'Arquivo excede o tamanho máximo suportado (100MB).' });
+        }
+        return res.status(400).json({ error: `Erro no upload: ${err.message}` });
+      }
+      return res.status(500).json({ error: `Erro interno no upload: ${err.message}` });
+    }
 
-  const { name, tag, description, requirePayment } = req.body;
-  const isPdf = req.file.mimetype.includes('pdf');
-  const type = isPdf ? 'pdf' : 'image';
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+    }
 
-  const newDeliverable = storage.addDeliverable({
-    name: name || req.file.originalname,
-    filename: req.file.filename,
-    type,
-    tag: (tag || name || 'ARQUIVO').toUpperCase().replace(/[^A-Z0-9_]/g, '_'),
-    description: description || '',
-    requirePayment: requirePayment !== 'false' && requirePayment !== false,
-    url: `/uploads/${req.file.filename}`,
-    path: `/data/uploads/${req.file.filename}`,
-    size: req.file.size
+    const { name, tag, description, requirePayment } = req.body;
+    const isPdf = req.file.mimetype.includes('pdf');
+    const type = isPdf ? 'pdf' : 'image';
+
+    const newDeliverable = storage.addDeliverable({
+      name: name || req.file.originalname,
+      filename: req.file.filename,
+      type,
+      tag: (tag || name || 'ARQUIVO').toUpperCase().replace(/[^A-Z0-9_]/g, '_'),
+      description: description || '',
+      requirePayment: requirePayment !== 'false' && requirePayment !== false,
+      url: `/uploads/${req.file.filename}`,
+      path: `/data/uploads/${req.file.filename}`,
+      size: req.file.size
+    });
+
+    storage.addLog('SUCCESS', `Entregável adicionado: ${newDeliverable.name} (${newDeliverable.type}) - ${newDeliverable.requirePayment ? 'Exige Pagamento' : 'Liberação Antecipada/Isca'}`);
+    res.json(newDeliverable);
   });
-
-  storage.addLog('SUCCESS', `Entregável adicionado: ${newDeliverable.name} (${newDeliverable.type}) - ${newDeliverable.requirePayment ? 'Exige Pagamento' : 'Liberação Antecipada/Isca'}`);
-  res.json(newDeliverable);
 });
 
 router.patch('/deliverables/:id', (req, res) => {
