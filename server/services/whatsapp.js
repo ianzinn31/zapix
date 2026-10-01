@@ -115,6 +115,17 @@ class WhatsAppService {
     return this.initialize();
   }
 
+  // Safe presence update that never throws or crashes on closed/dead sockets
+  async safePresence(jid, type) {
+    try {
+      if (this.sock && this.status === 'connected') {
+        await this.sock.sendPresenceUpdate(type, jid);
+      }
+    } catch (err) {
+      console.warn(`[WhatsApp] Presença (${type}) ignorada:`, err.message);
+    }
+  }
+
   // Initialize and connect WhatsApp socket
   async initialize() {
     if (this.isInitializing || this.status === 'connected') return;
@@ -432,12 +443,18 @@ class WhatsAppService {
 
   // Handle AI Sales Response with Human Pacing and Anti-Ban
   async handleAiResponse(phone, jid, userText) {
+    if (this.status !== 'connected' || !this.sock) {
+      console.warn(`[WhatsApp] Ignorando resposta para ${phone}: WhatsApp não está conectado.`);
+      return;
+    }
+
     antiBan.enqueueForLead(phone, async () => {
       const abortController = new AbortController();
       this.activeLeadControllers.set(phone, abortController);
       const signal = abortController.signal;
 
       try {
+        if (this.status !== 'connected' || !this.sock) return;
         const lead = storage.getLead(phone);
         // Double check if operator paused AI in the meantime
         if (lead && lead.aiActive === false) return;
@@ -518,18 +535,18 @@ class WhatsAppService {
             // Anti-ban: Simulate human recording voice note
             const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
             await antiBan.sleep(thinkingDelay, signal);
-            if (signal.aborted) return;
+            if (signal.aborted || this.status !== 'connected' || !this.sock) return;
 
             // WhatsApp presence: 'recording'
-            await this.sock?.sendPresenceUpdate('recording', jid);
+            await this.safePresence(jid, 'recording');
             await antiBan.sleep(recordingDelay, signal);
-            await this.sock?.sendPresenceUpdate('paused', jid);
-            if (signal.aborted) return;
+            await this.safePresence(jid, 'paused');
+            if (signal.aborted || this.status !== 'connected' || !this.sock) return;
 
             // Send native WhatsApp Voice Note (PTT) with animated waveform
             const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
             const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
-            await this.sock?.sendMessage(jid, {
+            await this.sock.sendMessage(jid, {
               audio: audioBuffer,
               mimetype: 'audio/ogg; codecs=opus',
               ptt: true,
@@ -701,16 +718,16 @@ class WhatsAppService {
 
             // Thinking pause (human reading / deciding)
             await antiBan.sleep(baseThinking, signal);
-            if (signal.aborted) break;
+            if (signal.aborted || this.status !== 'connected' || !this.sock) break;
 
             // Typing presence update
-            await this.sock?.sendPresenceUpdate('composing', jid);
+            await this.safePresence(jid, 'composing');
             await antiBan.sleep(typingTime, signal);
-            await this.sock?.sendPresenceUpdate('paused', jid);
-            if (signal.aborted) break;
+            await this.safePresence(jid, 'paused');
+            if (signal.aborted || this.status !== 'connected' || !this.sock) break;
 
             // Send bubble
-            await this.sock?.sendMessage(jid, { text: bubble });
+            await this.sock.sendMessage(jid, { text: bubble });
 
             // Store message and emit to live chat
             const sentMsg = storage.addMessage({
@@ -1032,9 +1049,12 @@ class WhatsAppService {
     const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
     
     await antiBan.sleep(thinkingDelay);
-    await this.sock.sendPresenceUpdate('recording', jid);
+    await this.safePresence(jid, 'recording');
     await antiBan.sleep(recordingDelay);
-    await this.sock.sendPresenceUpdate('paused', jid);
+    await this.safePresence(jid, 'paused');
+    if (!this.sock || this.status !== 'connected') {
+      throw new Error('Conexão perdida durante gravação.');
+    }
 
     const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
     const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);

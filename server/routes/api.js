@@ -30,6 +30,16 @@ const upload = multer({
   limits: { fileSize: 100 * 1024 * 1024 } // 100MB
 });
 
+// === System Health & Watchdog Check ===
+router.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: Math.floor(process.uptime()),
+    whatsapp: whatsapp.getStatus(),
+    memory: process.memoryUsage().rss
+  });
+});
+
 // === WhatsApp Connection Status & Controls ===
 router.get('/whatsapp/status', (req, res) => {
   res.json(whatsapp.getStatus());

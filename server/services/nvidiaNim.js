@@ -5,7 +5,7 @@ class NvidiaNimService {
   constructor() {
     this.endpoint = 'https://integrate.api.nvidia.com/v1/chat/completions';
     this.lastPrimaryFailureTime = 0;
-    this.primaryCooldownMs = 120000; // 2 minutes circuit breaker cooldown
+    this.primaryCooldownMs = 600000; // 10 minutes circuit breaker cooldown
   }
 
   // Construct sales-focused prompt with product context, deliverables, and behavioral rules
@@ -348,7 +348,7 @@ Você DEVE estruturar sua resposta exatamente assim:
             messages,
             settings.temperature ?? 0.7,
             settings.maxTokens || 1500,
-            12000 // 12s primary timeout for rapid fallback
+            7000 // 7s primary timeout for rapid fallback
           );
           // Primary succeeded - reset cooldown and ensure fallback state is inactive
           this.lastPrimaryFailureTime = 0;
@@ -363,7 +363,7 @@ Você DEVE estruturar sua resposta exatamente assim:
         console.warn(`[NVIDIA NIM Primary Error]: ${primaryErr.message}`);
         storage.addLog(
           'FALLBACK_TRIGGERED',
-          `NVIDIA NIM Primário (${settings.primaryModel || 'z-ai/glm-5.3-flash'}) instável (${primaryErr.message}). Circuito de proteção ativado por 2 min: usando fallback (${settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it'}).`
+          `NVIDIA NIM Primário (${settings.primaryModel || 'z-ai/glm-5.3-flash'}) instável (${primaryErr.message}). Circuito de proteção ativado por 10 min: usando fallback (${settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it'}).`
         );
         storage.updateSettings({
           ai: {
