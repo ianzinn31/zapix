@@ -341,17 +341,48 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
     const deliverables = storage.getDeliverables();
     const deliveryStrategy = product.deliveryStrategy || 'require_payment';
 
-    if (deliveryStrategy === 'deliver_first') {
+    const isReceiptAnalysis = (userMessage || '').includes('[COMPROVANTE DE PAGAMENTO ANALISADO]');
+    const formattedPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
+    const allDelivTags = deliverables.length > 0
+      ? deliverables.map(d => `[ENVIAR_ARQUIVO: ${d.tag}]`).join(' ')
+      : '[ENVIAR_ARQUIVO: PRODUTO]';
+
+    if (isReceiptAnalysis) {
+      messages.push({
+        role: 'system',
+        content: `[DIRETRIZ MÁXIMA DE COMPROVANTE RECEBIDO]:
+O cliente enviou um comprovante de pagamento que foi inspecionado em tempo real pelo sistema de visão computacional:
+${userMessage}
+
+SUA RESPOSTA OBRIGATÓRIA CONFORME O STATUS ANALISADO:
+1. SE O STATUS FOR "AGENDADO":
+   - NUNCA libere produtos nem confirme o pagamento! O dinheiro AINDA NÃO caiu na conta!
+   - Explique com extrema simpatia, educação e carinho que você recebeu o comprovante, mas ele é um AGENDAMENTO (programado para data futura), e por isso o pagamento ainda não foi concluído.
+   - Peça com gentileza para o cliente entrar no aplicativo do banco dele, cancelar o agendamento e realizar a transferência PIX imediata (na hora).
+   - Reenvie a Chave PIX oficial limpa no texto:
+Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
+Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
+Valor: R$ ${formattedPrice}
+   - Coloque uma tag de áudio no final com voz compreensiva e doce:
+[AUDIO: Olha... eu vi o comprovante que você me mandou, mas ele tá como agendamento...
+Como o sistema só faz o envio automático quando o PIX compensa na hora, você consegue cancelar esse agendamento no app do seu banco e fazer a transferência normal agora?
+Assim que você fizer me manda o comprovante aqui que já libero tudo certinho pra você, tá bom?]
+
+2. SE O STATUS FOR "APROVADO":
+   - Comemore e agradeça de coração pelo pagamento aprovado!
+   - Confirme a liberação do acesso e acione a entrega caso ainda não tenha sido feita: ${allDelivTags}
+   - Coloque um áudio caloroso de boas-vindas e parabéns!
+
+3. SE O STATUS FOR "VALOR_INCORRETO" OU "DESTINATARIO_INCORRETO":
+   - Explique com respeito a divergência encontrada e informe o valor/chave correto.`
+      });
+    } else if (deliveryStrategy === 'deliver_first') {
       const messagesHistory = conversationHistory || [];
       const userIncomingMsgs = messagesHistory.filter(m => !m.fromMe);
       const hasSentBefore = messagesHistory.some(m => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
       const isUserAskingPix = /pix|pagar|pago|chave|valor|conta|manda.*pix|envia.*pix|passa.*pix|manda.*chave/i.test(userMessage || '');
       const hasSentDeliverable = leadObj?.deliverableSent === true || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || hasSentBefore || isUserAskingPix;
       const isPaid = leadObj?.stage === 'APROVADO' || leadObj?.lastReceiptStatus === 'APROVADO';
-      const allDelivTags = deliverables.length > 0
-        ? deliverables.map(d => `[ENVIAR_ARQUIVO: ${d.tag}]`).join(' ')
-        : '[ENVIAR_ARQUIVO: PRODUTO]';
-      const formattedPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
 
       const lowerUserMsg = (userMessage || '').toLowerCase();
       const isExplicitDeliveryRequest = /pode mandar|manda|envia|quero ver|me passa|mostra|como são|quero|sim|pode ser/i.test(lowerUserMsg);

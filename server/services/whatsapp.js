@@ -308,7 +308,7 @@ class WhatsAppService {
 
                   if (analysis) {
                     // Update lead with receipt analysis
-                    storage.updateLead(phone, {
+                    storage.upsertLead(phone, {
                       lastReceiptStatus: analysis.status,
                       lastReceiptAmount: analysis.amount,
                       lastReceiptBank: analysis.bank,

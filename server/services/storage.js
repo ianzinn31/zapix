@@ -382,6 +382,10 @@ class StorageService {
     return updated;
   }
 
+  updateLead(phone, updates = {}) {
+    return this.upsertLead(phone, updates);
+  }
+
   deleteLead(phone) {
     if (!phone) return false;
     const cleanPhone = phone.replace(/[^0-9]/g, '');
