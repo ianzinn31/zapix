@@ -10,7 +10,7 @@ import dotenv from 'dotenv';
 import apiRouter from './routes/api.js';
 import webhooksRouter from './routes/webhooks.js';
 import { whatsapp } from './services/whatsapp.js';
-import { storage, UPLOADS_DIR, AUDIO_CACHE_DIR, MEDIA_CACHE_DIR } from './services/storage.js';
+import { storage, DATA_DIR, UPLOADS_DIR, AUDIO_CACHE_DIR, MEDIA_CACHE_DIR } from './services/storage.js';
 import { remarketingService } from './services/remarketingService.js';
 
 dotenv.config();
@@ -86,4 +86,11 @@ server.listen(PORT, () => {
   
   // Start background remarketing monitor
   remarketingService.init();
+
+  // Auto-connect WhatsApp if saved session credentials exist
+  const authCredsPath = path.join(DATA_DIR, 'auth_info_baileys', 'creds.json');
+  if (fs.existsSync(authCredsPath)) {
+    console.log('[WhatsApp] Sessão salva encontrada em disco. Conectando automaticamente...');
+    whatsapp.initialize();
+  }
 });

@@ -4,6 +4,8 @@ import { storage } from './storage.js';
 class NvidiaNimService {
   constructor() {
     this.endpoint = 'https://integrate.api.nvidia.com/v1/chat/completions';
+    this.lastPrimaryFailureTime = 0;
+    this.primaryCooldownMs = 120000; // 2 minutes circuit breaker cooldown
   }
 
   // Construct sales-focused prompt with product context, deliverables, and behavioral rules
@@ -223,8 +225,8 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
 `;
   }
 
-  // Call single NIM model with timeout
-  async callModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500) {
+  // Call single NIM model with configurable timeout
+  async callModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 12000) {
     if (!apiKey) {
       throw new Error(`API Key não configurada para o modelo ${model}`);
     }
@@ -242,7 +244,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
         Authorization: `Bearer ${apiKey.trim()}`,
         'Content-Type': 'application/json'
       },
-      timeout: 40000 // 40s timeout for reasoning models like GLM 5.3 Flash
+      timeout: timeoutMs
     });
 
     if (response.data && response.data.choices && response.data.choices[0]?.message?.content) {
@@ -333,36 +335,45 @@ Você DEVE estruturar sua resposta exatamente assim:
     let responseText = null;
     let modelUsed = settings.primaryModel || 'z-ai/glm-5.3-flash';
 
-    // 1. Try Primary NVIDIA NIM Model (z-ai/glm-5.3-flash)
-    try {
-      const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
-      if (primaryKey) {
-        responseText = await this.callModel(
-          settings.primaryModel || 'z-ai/glm-5.3-flash',
-          primaryKey,
-          messages,
-          settings.temperature ?? 0.7,
-          settings.maxTokens || 1500
+    const isPrimaryInCooldown = (Date.now() - this.lastPrimaryFailureTime) < this.primaryCooldownMs;
+
+    // 1. Try Primary NVIDIA NIM Model (if not in circuit breaker cooldown)
+    if (!isPrimaryInCooldown) {
+      try {
+        const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
+        if (primaryKey) {
+          responseText = await this.callModel(
+            settings.primaryModel || 'z-ai/glm-5.3-flash',
+            primaryKey,
+            messages,
+            settings.temperature ?? 0.7,
+            settings.maxTokens || 1500,
+            12000 // 12s primary timeout for rapid fallback
+          );
+          // Primary succeeded - reset cooldown and ensure fallback state is inactive
+          this.lastPrimaryFailureTime = 0;
+          if (settings.isFallbackActive) {
+            storage.updateSettings({ ai: { isFallbackActive: false, lastFallbackReason: null } });
+            storage.addLog('INFO', `Modelo Primário NVIDIA NIM (${modelUsed}) restabelecido com sucesso.`);
+          }
+          return { text: responseText, modelUsed, fallbackTriggered: false };
+        }
+      } catch (primaryErr) {
+        this.lastPrimaryFailureTime = Date.now();
+        console.warn(`[NVIDIA NIM Primary Error]: ${primaryErr.message}`);
+        storage.addLog(
+          'FALLBACK_TRIGGERED',
+          `NVIDIA NIM Primário (${settings.primaryModel || 'z-ai/glm-5.3-flash'}) instável (${primaryErr.message}). Circuito de proteção ativado por 2 min: usando fallback (${settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it'}).`
         );
-        // Primary succeeded - ensure fallback state is marked inactive
-        if (settings.isFallbackActive) {
-          storage.updateSettings({ ai: { isFallbackActive: false, lastFallbackReason: null } });
-          storage.addLog('INFO', `Modelo Primário NVIDIA NIM (${modelUsed}) operando normalmente.`);
-        }
-        return { text: responseText, modelUsed, fallbackTriggered: false };
+        storage.updateSettings({
+          ai: {
+            isFallbackActive: true,
+            lastFallbackReason: primaryErr.message
+          }
+        });
       }
-    } catch (primaryErr) {
-      console.warn(`[NVIDIA NIM Primary Error]: ${primaryErr.message}`);
-      storage.addLog(
-        'FALLBACK_TRIGGERED',
-        `NVIDIA NIM Primário (${settings.primaryModel || 'z-ai/glm-5.3-flash'}) falhou: ${primaryErr.message}. Ativando Fallback para (${settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it'}).`
-      );
-      storage.updateSettings({
-        ai: {
-          isFallbackActive: true,
-          lastFallbackReason: primaryErr.message
-        }
-      });
+    } else {
+      console.log(`[NVIDIA NIM Circuit Breaker] Primário em cooldown temporário. Roteando direto para fallback rápido.`);
     }
 
     // 2. Try Fallback NVIDIA NIM Model (google/diffusiongemma-26b-a4b-it)
@@ -376,7 +387,8 @@ Você DEVE estruturar sua resposta exatamente assim:
           fallbackKey,
           messages,
           settings.temperature ?? 0.7,
-          settings.maxTokens || 1500
+          settings.maxTokens || 1500,
+          15000 // 15s fallback timeout
         );
         return { text: responseText, modelUsed, fallbackTriggered: true };
       }
@@ -487,7 +499,8 @@ Gere agora o texto exato falado para ser gravado em áudio sob medida para este 
           primaryKey,
           messages,
           0.7,
-          500
+          500,
+          10000 // 10s timeout
         );
         if (generated && generated.length > 5) {
           return generated.replace(/["'“”«»]/g, '').trim();
@@ -506,7 +519,8 @@ Gere agora o texto exato falado para ser gravado em áudio sob medida para este 
           fallbackKey,
           messages,
           0.7,
-          500
+          500,
+          12000 // 12s timeout
         );
         if (generated && generated.length > 5) {
           return generated.replace(/["'“”«»]/g, '').trim();
