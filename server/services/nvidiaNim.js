@@ -418,16 +418,18 @@ ${allDelivTags}
 O cliente JÁ RECEBEU TUDO (todos os materiais e PDFs) antes de pagar!
 NUNCA diga "amostra" e NUNCA diga "libero o restante após o pagamento", pois você JÁ ENTREGOU TUDO!
 REGRA CRÍTICA: NÃO PERGUNTE SE ELE QUER A CHAVE PIX! NÃO PEÇA AUTORIZAÇÃO! ENVIE O PIX IMEDIATAMENTE NO TEXTO!
+ATENÇÃO: Você DEVE enviar o texto visível completo no chat e, depois do texto, a tag de áudio! O texto com a chave NÃO pode ficar só falado!
+
 Você DEVE estruturar sua resposta exatamente assim:
-1. Apelo emocional de confiança, reciprocidade e pedido de ajuda sincero:
+1. Texto visível de apelo emocional de confiança, reciprocidade e pedido de ajuda sincero:
    - Diga que confiou nele de olhos fechados e já entregou o material completo antes de qualquer pagamento, porque sentiu no coração que ele é uma pessoa do bem e quer o melhor para o futuro do filho.
    - Peça com carinho a contribuição simbólica de apenas R$ ${formattedPrice}, que é o que mantém o projeto vivo e de pé.
-2. Bloco da Chave PIX destacado no texto, limpo e direto para cópia com 1 clique:
+2. Bloco da Chave PIX destacado no texto visível, limpo e direto para cópia com 1 clique:
    Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
    Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
    Valor: R$ ${formattedPrice}
    Assim que você fizer, me envia o comprovante aqui tá bom? ❤️
-3. No final, coloque um áudio emocionante com tom humano e pausado com reticências (...) e quebras de linha:
+3. Logo abaixo do texto acima, insira a tag de [AUDIO: ...] emocionante com tom humano e pausado com reticências (...) e quebras de linha:
    [AUDIO: Olha...
    eu confiei de verdade em você e te entreguei tudo antes...
    agora tô aqui de coração te pedindo pra fazer a sua parte...

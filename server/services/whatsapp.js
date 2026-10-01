@@ -730,7 +730,7 @@ class WhatsAppService {
               storage.addLog('ERROR', `Arquivo não encontrado no disco: ${deliverableToSend.filename}`);
             }
           }
-          storage.upsertLead(phone, { deliverableSent: true, deliverableSentAt: Date.now() });
+          storage.upsertLead(phone, { stage: 'ENTREGUE', deliverableSent: true, deliverableSentAt: Date.now() });
         }
 
         // ========================================================
@@ -755,17 +755,26 @@ class WhatsAppService {
         replyText = replyText.replace(/\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)[\s\S]*?(?:\]|$)/gi, '');
         replyText = replyText.replace(/\[\s*(?:AUDIO|ÁUDIO)\s*\]:?\s*["'“”«»][\s\S]*?["'“”«»]/gi, '');
         replyText = replyText.replace(/^[\s🎵🎶🎙️🎤🎧🔊🔈\-_*~]+/gm, '');
-        replyText = replyText.replace(/^\s*\d{2},\s*que é o que mantém[\s\S]*?(?:00|$)/gi, '');
         replyText = replyText.replace(/\n{3,}/g, '\n\n').trim();
 
         // Safeguard: Ensure PIX key is present during Phase 2 (AFTER deliverables have been sent, NOT during delivery), or when customer asked for PIX!
-        const isDeliverFirstPhase2 = deliveryStrategy === 'deliver_first' && (leadObj?.deliverableSent === true && deliverablesToSend.length === 0);
+        const sentMsgsForPixCheck = storage.getMessages(phone) || [];
+        const hasSentDeliverablesInHistory = sentMsgsForPixCheck.some((m) => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
+        const hasReceivedDeliverables = hasSentDeliverablesInHistory || leadObj?.stage === 'ENTREGUE' || leadObj?.deliverableSent === true;
+
+        const isDeliverFirstPhase2 = deliveryStrategy === 'deliver_first' && hasReceivedDeliverables && deliverablesToSend.length === 0;
+
         if (product.pixKey && (isDeliverFirstPhase2 || userWantsPix)) {
-          if (!replyText.includes(product.pixKey)) {
-            const pixPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
-            const pixBlock = `\n\nChave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${pixPrice}\n\nAssim que você fizer, me envia o comprovante aqui tá bom? ❤️`;
-            replyText += pixBlock;
+          const pixPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
+          const pixBlock = `Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${pixPrice}\n\nAssim que você fizer, me envia o comprovante aqui tá bom? ❤️`;
+
+          if (!replyText || replyText.trim().length === 0) {
+            replyText = `Fico muito feliz que tenha gostado! 🥰\n\nEu confiei de olhos fechados em você e já te entreguei todo o material completo antes de qualquer valor. Agora peço de coração a sua contribuição simbólica de R$ ${pixPrice} para manter nosso projeto vivo!\n\n${pixBlock}`;
+          } else if (!replyText.includes(product.pixKey)) {
+            replyText += `\n\n${pixBlock}`;
           }
+
+          storage.upsertLead(phone, { stage: 'PIX_ENVIADO', deliverableSent: true });
         }
 
         // ========================================================
@@ -816,7 +825,7 @@ class WhatsAppService {
         // ========================================================
         if (
           product.pixKey &&
-          (replyText.includes(product.pixKey) || userWantsPix || leadObj?.stage === 'PIX_ENVIADO') &&
+          (replyText.includes(product.pixKey) || isDeliverFirstPhase2 || userWantsPix || leadObj?.stage === 'PIX_ENVIADO') &&
           product.sendPixButton !== false &&
           !signal.aborted
         ) {
