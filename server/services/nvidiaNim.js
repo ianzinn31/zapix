@@ -343,6 +343,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
 
     if (deliveryStrategy === 'deliver_first') {
       const messagesHistory = conversationHistory || [];
+      const userIncomingMsgs = messagesHistory.filter(m => !m.fromMe);
       const hasSentBefore = messagesHistory.some(m => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
       const isUserAskingPix = /pix|pagar|pago|chave|valor|conta|manda.*pix|envia.*pix|passa.*pix|manda.*chave/i.test(userMessage || '');
       const hasSentDeliverable = leadObj?.deliverableSent === true || hasSentBefore || isUserAskingPix;
@@ -351,6 +352,12 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
         ? deliverables.map(d => `[ENVIAR_ARQUIVO: ${d.tag}]`).join(' ')
         : '[ENVIAR_ARQUIVO: PRODUTO]';
       const formattedPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
+
+      const lowerUserMsg = (userMessage || '').toLowerCase();
+      const isExplicitDeliveryRequest = /pode mandar|manda|envia|quero ver|me passa|mostra|como são|quero|sim|pode ser/i.test(lowerUserMsg);
+      const hasChildDetails = /\b\d+\s*(?:anos?|aninhos|meses)\b|prezinho|escola|começando|creche|maternal|fundamental|alfabetiz/i.test(lowerUserMsg);
+      // Lead is considered to have engaged in conversation if they responded at least once, gave child info, or asked for material
+      const hasEngagedConversation = userIncomingMsgs.length >= 2 || isExplicitDeliveryRequest || hasChildDetails;
 
       if (isUserAskingPix) {
         messages.push({
@@ -369,19 +376,42 @@ Valor: R$ ${formattedPrice}
 O PIX tá certinho aí no texto pra você...
 faz com calma no app do seu banco e me manda o comprovante aqui tá bom?]`
         });
-      } else if (!hasSentDeliverable) {
+      } else if (!hasSentDeliverable && !hasEngagedConversation) {
+        // FASE 0: CONEXÃO INICIAL & DIAGNÓSTICO (Primeiro Contato)
+        messages.push({
+          role: 'system',
+          content: `[DIRETRIZ DE FUNIL - OFERTA INVERTIDA - FASE 0: CONEXÃO INICIAL & DIAGNÓSTICO]:
+Este é o PRIMEIRO contato do lead ("${userMessage}")!
+ATENÇÃO MÁXIMA: O lead acabou de chegar, tenha calma!
+1. É TERMINANTEMENTE PROIBIDO enviar tags de arquivos [ENVIAR_ARQUIVO: ...] agora! NÃO envie os PDFs no primeiro contato!
+2. É TERMINANTEMENTE PROIBIDO falar de preço, valores ou mandar Chave PIX agora!
+3. O objetivo desta mensagem é criar conexão, acolhimento e gerar desejo natural para o lead querer continuar a conversa!
+
+COMO RESPONDER:
+- Dê as boas-vindas com calor humano, carinho e alegria de uma consultora educacional de verdade.
+- Apresente brevemente e de forma encantadora o material: são atividades lúdicas, desenhos, historinhas e jogos práticos que ensinam inglês brincando, sem telas prejudiciais e sem pressão.
+- Faça uma pergunta carinhosa para conhecer a criança (Ex: "Qual a idade do seu pequeno(a)?" ou "Ele já teve algum contato com inglês antes ou tá conhecendo agora?").
+- Finalize com uma tag de [AUDIO: ...] curto, carinhoso e simpático dando as boas-vindas com voz doce e fazendo essa perguntinha sobre a criança no áudio!`
+        });
+      } else if (!hasSentDeliverable && hasEngagedConversation) {
+        // FASE 1: LIBERAÇÃO DE TUDO DE UMA VEZ
         messages.push({
           role: 'system',
           content: `[DIRETRIZ DE FUNIL - OFERTA INVERTIDA - FASE 1: LIBERAÇÃO DE TUDO DE UMA VEZ]:
-Nesta operação a ordem é 100% invertida: NÓS ENTREGAMOS TUDO, TUDO MESMO DE UMA VEZ SÓ ANTES DE COBRAR!
-É TERMINANTEMENTE PROIBIDO falar "amostra" ou dizer "vou te entregar o resto depois de pagar" / "libero o restante depois"! Não existe amostra nem nada para depois.
-Você AINDA NÃO enviou os materiais para este lead!
-LIBERE TODOS OS MATERIAIS AGORA MESMO com as tags:
+O cliente conversou, respondeu sobre a criança ou pediu o material!
+Agora é o momento de surpreender entregando TUDO de uma vez só!
+É TERMINANTEMENTE PROIBIDO falar "amostra" ou dizer "vou te entregar o resto depois de pagar"! Não existe amostra nem resto, todo o material é entregue integralmente de uma vez só!
+
+REGRA CRÍTICA DESTA FASE:
+1. NÃO COBRE E NÃO ENVIE CHAVE PIX NESTA MENSAGEM! Deixe o cliente receber os arquivos e ver a qualidade com carinho primeiro!
+2. Valide com empatia o que ele falou da criança (ex: com a idade dele eles aprendem como esponjinhas).
+3. LIBERE TODOS OS MATERIAIS AGORA MESMO usando as tags:
 ${allDelivTags}
-Diga com carinho e entusiasmo que você já está entregando todo o material completo com todas as atividades e PDFs para ele aproveitar com o filho agora mesmo!
-NUNCA escreva os nomes das tags ou colchetes no texto visível para o cliente.`
+4. Diga com muito carinho que já está enviando todo o material completo agora para ele abrir e ver como é lindo. Peça para ele dar uma olhadinha e contar o que achou: "Dá uma olhadinha aí com calma e me fala o que achou! ❤️"
+5. Coloque um [AUDIO: ...] animado e carinhoso dizendo que já separou e está mandando todos os arquivos completos pra ele dar uma olhada e aproveitar!`
         });
       } else if (!isPaid) {
+        // FASE 2: FECHAMENTO EMOCIONAL E ENVIO DO PIX
         messages.push({
           role: 'system',
           content: `[DIRETRIZ DE FUNIL - OFERTA INVERTIDA - FASE 2: FECHAMENTO EMOCIONAL E ENVIO DO PIX]:
@@ -396,6 +426,7 @@ Você DEVE estruturar sua resposta exatamente assim:
    Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
    Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
    Valor: R$ ${formattedPrice}
+   Assim que você fizer, me envia o comprovante aqui tá bom? ❤️
 3. No final, coloque um áudio emocionante com tom humano e pausado com reticências (...) e quebras de linha:
    [AUDIO: Olha...
    eu confiei de verdade em você e te entreguei tudo antes...

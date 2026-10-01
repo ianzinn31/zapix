@@ -613,34 +613,20 @@ class WhatsAppService {
           const isTriggeredByTag = tagMatches.length > 0 || deliverablesToSend.length > 0;
           const lowerUser = (userText || '').toLowerCase();
           const lowerReply = (replyText || '').toLowerCase();
-          const isPositiveOrInterested =
-            lowerUser.includes('sim') ||
-            lowerUser.includes('quero') ||
-            lowerUser.includes('manda') ||
-            lowerUser.includes('envia') ||
-            lowerUser.includes('como funciona') ||
-            lowerUser.includes('pode ser') ||
-            lowerUser.includes('mostra') ||
-            lowerUser.includes('material') ||
-            lowerUser.includes('atividades') ||
-            lowerUser.includes('pdf') ||
-            lowerUser.includes('outro') ||
-            lowerUser.includes('resto') ||
-            lowerUser.includes('todos') ||
-            lowerReply.includes('material') ||
-            lowerReply.includes('atividades') ||
-            lowerReply.includes('enviando') ||
-            lowerReply.includes('entregando') ||
-            lowerReply.includes('preparei') ||
-            lowerReply.includes('liberando');
+          const isExplicitDeliveryAgreement =
+            (lowerUser.includes('manda') || lowerUser.includes('envia') || lowerUser.includes('quero ver') || lowerUser.includes('pode mandar')) &&
+            (lowerReply.includes('enviando') || lowerReply.includes('entregando') || lowerReply.includes('liberando') || lowerReply.includes('preparei'));
 
           // If the customer explicitly asked for the PIX and already received materials: don't resend materials!
           if (userWantsPix && hasReceivedAny) {
             deliverablesToSend.length = 0;
-          } else if (!hasReceivedAny || isTriggeredByTag || (isPositiveOrInterested && !userWantsPix)) {
+          } else if (!hasReceivedAny && (isTriggeredByTag || isExplicitDeliveryAgreement) && !userWantsPix) {
             // Deliver ALL registered deliverables together upfront as the complete package (all 3 files)!
             deliverablesToSend.length = 0;
             deliverablesToSend.push(...allDeliverables);
+          } else {
+            // Do NOT send deliverables on initial greeting or casual conversation
+            deliverablesToSend.length = 0;
           }
         } else {
           // Filter deliverables based on the chosen strategy (require_payment / per_deliverable)
@@ -748,48 +734,6 @@ class WhatsAppService {
         }
 
         // ========================================================
-        // STEP 2: SEND AUDIO NOTE (Voice Note)
-        // ========================================================
-        if (audioSpeechText && audioSpeechText.length > 0 && !signal.aborted) {
-          try {
-            const generatedAudio = await fishAudio.generateSpeech(audioSpeechText);
-            if (signal.aborted || this.status !== 'connected' || !this.sock) return;
-
-            const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
-            await antiBan.sleep(thinkingDelay, signal);
-            if (signal.aborted || this.status !== 'connected' || !this.sock) return;
-
-            await this.safePresence(jid, 'recording');
-            await antiBan.sleep(recordingDelay, signal);
-            await this.safePresence(jid, 'paused');
-            if (signal.aborted || this.status !== 'connected' || !this.sock) return;
-
-            const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
-            const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
-            await this.sock.sendMessage(jid, {
-              audio: audioBuffer,
-              mimetype: 'audio/ogg; codecs=opus',
-              ptt: true,
-              waveform
-            });
-
-            const audioMsg = storage.addMessage({
-              phone,
-              fromMe: true,
-              text: `🎵 [Áudio]: "${audioSpeechText}"`,
-              type: 'audio',
-              mediaUrl: generatedAudio.audioUrl,
-              audioDuration: generatedAudio.durationSec
-            });
-            this.emit('chat:message', audioMsg);
-            storage.addLog('SUCCESS', `Áudio humanizado Fish Audio enviado para ${phone}`);
-          } catch (audioErr) {
-            console.error('Failed to send voice note:', audioErr);
-            replyText = `${audioSpeechText}\n\n${replyText}`.trim();
-          }
-        }
-
-        // ========================================================
         // STEP 3: CLEAN SYSTEM TAGS & GUARANTEE PIX BLOCK
         // ========================================================
         // Thoroughly strip all deliverable tags by known tag names so they NEVER leak as text bubbles!
@@ -814,8 +758,8 @@ class WhatsAppService {
         replyText = replyText.replace(/^\s*\d{2},\s*que é o que mantém[\s\S]*?(?:00|$)/gi, '');
         replyText = replyText.replace(/\n{3,}/g, '\n\n').trim();
 
-        // Safeguard: Ensure PIX key is ALWAYS present whenever materials are delivered or customer asked for PIX!
-        const isDeliverFirstPhase2 = deliveryStrategy === 'deliver_first' && (leadObj?.deliverableSent || deliverablesToSend.length > 0 || userWantsPix);
+        // Safeguard: Ensure PIX key is present during Phase 2 (AFTER deliverables have been sent, NOT during delivery), or when customer asked for PIX!
+        const isDeliverFirstPhase2 = deliveryStrategy === 'deliver_first' && (leadObj?.deliverableSent === true && deliverablesToSend.length === 0);
         if (product.pixKey && (isDeliverFirstPhase2 || userWantsPix)) {
           if (!replyText.includes(product.pixKey)) {
             const pixPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
@@ -913,16 +857,21 @@ class WhatsAppService {
   // Send native WhatsApp Interactive Button for 1-click PIX key copying
   async sendPixCopyButton(jid, pixKey, amount, beneficiary) {
     if (!this.sock || !pixKey) return false;
+    const phone = jid.split('@')[0];
     try {
       const formattedAmount = Number(amount || 15).toFixed(2).replace('.', ',');
-      const phone = jid.split('@')[0];
 
+      // 1. Build interactiveMessage with nativeFlow cta_copy button
       const interactiveMessage = proto.Message.InteractiveMessage.create({
         body: proto.Message.InteractiveMessage.Body.create({
           text: `Você também pode tocar no botão abaixo para copiar a chave PIX direto para o seu celular 👇\n\n*Valor:* R$ ${formattedAmount}\n*Nome:* ${beneficiary || 'ian alves dos anjos'}`
         }),
         footer: proto.Message.InteractiveMessage.Footer.create({
           text: `Chave PIX: ${pixKey}`
+        }),
+        header: proto.Message.InteractiveMessage.Header.create({
+          title: 'Pagamento Oficial PIX',
+          hasMediaAttachment: false
         }),
         nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
           buttons: [
@@ -950,8 +899,45 @@ class WhatsAppService {
         }
       };
 
-      const msg = generateWAMessageFromContent(jid, content, {});
-      await this.sock.relayMessage(jid, msg.message, { messageId: msg.key.id });
+      const userJid = this.sock.authState?.creds?.me?.id || this.sock.user?.id;
+      const msg = generateWAMessageFromContent(jid, content, {
+        userJid,
+        timestamp: new Date()
+      });
+
+      // Inject binary nodes required by WhatsApp to render native flow buttons in private chats
+      const isPrivate = !jid.endsWith('@g.us');
+      const additionalNodes = [
+        {
+          tag: 'biz',
+          attrs: {},
+          content: [{
+            tag: 'interactive',
+            attrs: {
+              type: 'native_flow',
+              v: '1'
+            },
+            content: [{
+              tag: 'native_flow',
+              attrs: {
+                v: '9',
+                name: 'mixed'
+              }
+            }]
+          }]
+        }
+      ];
+      if (isPrivate) {
+        additionalNodes.push({
+          tag: 'bot',
+          attrs: { biz_bot: '1' }
+        });
+      }
+
+      await this.sock.relayMessage(jid, msg.message, {
+        messageId: msg.key.id,
+        additionalNodes
+      });
 
       const sentMsg = storage.addMessage({
         phone,
@@ -961,9 +947,34 @@ class WhatsAppService {
       });
       this.emit('chat:message', sentMsg);
       storage.addLog('SUCCESS', `Botão nativo de copiar Chave PIX enviado com sucesso para ${phone}`);
+
+      // 2. Standalone clean PIX key message for instant 1-tap copy on mobile (Android/iOS) and WhatsApp Web
+      await antiBan.sleep(800);
+      if (this.sock && this.status === 'connected') {
+        await this.sock.sendMessage(jid, { text: pixKey });
+        const keyMsg = storage.addMessage({
+          phone,
+          fromMe: true,
+          text: pixKey,
+          type: 'text'
+        });
+        this.emit('chat:message', keyMsg);
+      }
+
       return true;
     } catch (btnErr) {
-      console.warn('[WhatsApp] Erro ao enviar botão interativo de PIX (fallback de texto mantido):', btnErr.message);
+      console.warn('[WhatsApp] Erro ao enviar botão interativo de PIX:', btnErr.message);
+      storage.addLog('WARNING', `Tentativa de envio de botão interativo: ${btnErr.message}. Enviando chave limpa.`);
+      try {
+        await this.sock.sendMessage(jid, { text: pixKey });
+        const keyMsg = storage.addMessage({
+          phone,
+          fromMe: true,
+          text: pixKey,
+          type: 'text'
+        });
+        this.emit('chat:message', keyMsg);
+      } catch (_) {}
       return false;
     }
   }
