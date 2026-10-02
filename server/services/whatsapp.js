@@ -757,7 +757,23 @@ class WhatsAppService {
         replyText = replyText.replace(/^[-•◆*]\s*$/gm, '');
         replyText = replyText.replace(/\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)[\s\S]*?(?:\]|$)/gi, '');
         replyText = replyText.replace(/\[\s*(?:AUDIO|ÁUDIO)\s*\]:?\s*["'“”«»][\s\S]*?["'“”«»]/gi, '');
-        replyText = replyText.replace(/^[\s🎵🎶🎙️🎤🎧🔊🔈\-_*~]+/gm, '');
+        // Anti-Leak Safeguard: Purge any prompt rules, CoT reasoning or developer notes before sending
+        replyText = replyText.replace(/<think>[\s\S]*?<\/think>/gi, '');
+        replyText = replyText.replace(/```(?:thought|thinking)[\s\S]*?```/gi, '');
+        replyText = replyText.replace(/^(?:thought|thinking):\s*[\s\S]*?\n\n/gi, '');
+        replyText = replyText.replace(/\[\s*(?:DIRETRIZ|FASE|REGRA|INSTRUÇÃO|ATENÇÃO|ESTRUTURA|COMO RESPONDER|CONTEXTO|SITUAÇÃO)[^\]]*\]:?/gi, '');
+        replyText = replyText.replace(/^[-•◆*]?\s*(?:DIRETRIZ DE FUNIL|OFERTA INVERTIDA|FECHAMENTO EMOCIONAL|LIBERAÇÃO DE TUDO|CONEXÃO INICIAL|DIRETRIZ MÁXIMA|INSTRUÇÃO DO MOMENTO|SITUAÇÃO ATUAL)[\s\S]*?(?:\n|$)/gmi, '');
+        replyText = replyText.replace(/^O cliente JÁ RECEBEU TUDO[^\n]*\n?/gmi, '');
+        replyText = replyText.replace(/^NUNCA diga ["'“]amostra["'”]?[^\n]*\n?/gmi, '');
+        replyText = replyText.replace(/^NUNCA diga [*_]?libero o restante[^\n]*\n?/gmi, '');
+        replyText = replyText.replace(/^REGRA (?:CRÍTICA|SUPREMA|ABSOLUTA):[^\n]*\n?/gmi, '');
+        replyText = replyText.replace(/^ATENÇÃO (?:MÁXIMA|SUPREMA|ABSOLUTA):[^\n]*\n?/gmi, '');
+        replyText = replyText.replace(/^Sua mensagem DEVE seguir rigorosamente esta estrutura:?[^\n]*\n?/gmi, '');
+        replyText = replyText.replace(/^ESTRUTURA OBRIGATÓRIA DA SUA RESPOSTA:?[^\n]*\n?/gmi, '');
+        replyText = replyText.replace(/^Como agir conforme a análise:?[^\n]*\n?/gmi, '');
+        replyText = replyText.replace(/^(?:Entendi(?:\s+perfeitamente)?|Com certeza|Claro que sim|Claro|Perfeito|Certo)[!,.]?\s*(?:Aqui está|Segue|Abaixo está|Veja|vou te mandar|essa é a resposta)[\s\S]*?:(?:\n+|\s+)/i, '');
+        replyText = replyText.replace(/^(?:Aqui está a resposta|Aqui está a mensagem|Segue a mensagem|Segue o texto que você deve enviar)[\s\S]*?:(?:\n+|\s+)/i, '');
+        replyText = replyText.replace(/\n+(?:Essa resposta segue rigorosamente|Espero que ajude|Qualquer dúvida estou à disposição|Se precisar de mais alguma coisa|Como posso te ajudar agora\?|Já tem algum lead aguardando)[\s\S]*?$/i, '');
         replyText = replyText.replace(/\n{3,}/g, '\n\n').trim();
 
         // Safeguard: Ensure PIX key is present during Phase 2 (AFTER deliverables have been sent, NOT during delivery), or when customer asked for PIX!

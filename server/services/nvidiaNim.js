@@ -10,7 +10,7 @@ class NvidiaNimService {
   }
 
   // Construct sales-focused prompt with product context, deliverables, and behavioral rules
-  buildSystemPrompt() {
+  buildSystemPrompt(contextDirective = '') {
     const settings = storage.getSettings();
     const product = settings.product;
     const deliverables = storage.getDeliverables();
@@ -224,8 +224,54 @@ ${deliverableStrategySection}
       ? 'Dê as duas alternativas: envie a chave PIX para quem prefere PIX à vista, e o link de checkout para quem deseja parcelar no cartão.'
       : 'Envie o link oficial de checkout e instrua os passos para pagamento.'}
 
+${contextDirective ? `\n=== CONTEXTO E DIRETRIZES DO MOMENTO ATUAL ===\n${contextDirective}\n` : ''}
 ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁRIO ===\n${settings.ai.customPromptInstructions}` : ''}
 `;
+  }
+
+  // Anti-Leak & Meta-Commentary Sanitizer: Guarantees zero system instructions, CoT or developer notes leak to WhatsApp
+  sanitizeModelOutput(rawText) {
+    if (!rawText || typeof rawText !== 'string') return '';
+    let content = rawText.trim();
+
+    // 1. Strip think / reasoning blocks
+    content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    content = content.replace(/```(?:thought|thinking)[\s\S]*?```/gi, '').trim();
+    content = content.replace(/^(?:thought|thinking):\s*[\s\S]*?\n\n/gi, '').trim();
+    content = content.replace(/^Here's a thinking process:[\s\S]*?(?:\n\n|\n[A-Z0-9#*-])/i, '').trim();
+    content = content.replace(/^Here's a thinking process:[\s\S]*/i, '').trim();
+
+    // 2. Strip English Chain-of-Thought / Prompt Analysis (e.g. reasoning leaks from Nemotron)
+    if (/^(?:The user wants|The user is asking|\*\*Analysis of the Request:\*\*|Analysis of the Request:|Let's analyze the request|Looking at the prompt|My Task:|The user provided)/i.test(content)) {
+      const messageBlockMatch = content.match(/(?:Message text:|The text block:?|Output:?|Template:?)\s*\n+([\s\S]+)$/i);
+      if (messageBlockMatch) {
+        content = messageBlockMatch[1].trim();
+      } else {
+        const portugueseStartMatch = content.match(/(?:[A-ZÀ-Ú][a-zà-ú]+[\s\S]*?\[AUDIO:[\s\S]*?\]|\[AUDIO:[\s\S]*?\])/i);
+        if (portugueseStartMatch) {
+          content = portugueseStartMatch[0].trim();
+        }
+      }
+    }
+
+    // 3. Strip AI assistant meta-commentary (talking to programmer/operator instead of the customer)
+    content = content.replace(/^(?:Entendi(?:\s+perfeitamente)?|Com certeza|Claro que sim|Claro|Perfeito|Certo)[!,.]?\s*(?:Aqui está|Segue|Abaixo está|Veja|vou te mandar|essa é a resposta)[\s\S]*?:(?:\n+|\s+)/i, '').trim();
+    content = content.replace(/^(?:Aqui está a resposta|Aqui está a mensagem|Segue a mensagem|Segue o texto que você deve enviar)[\s\S]*?:(?:\n+|\s+)/i, '').trim();
+    content = content.replace(/\n+(?:Essa resposta segue rigorosamente|Espero que ajude|Qualquer dúvida estou à disposição|Se precisar de mais alguma coisa|Como posso te ajudar agora\?|Já tem algum lead aguardando)[\s\S]*?$/i, '').trim();
+
+    // 4. Strip any leaked internal prompt headers, tags or rules
+    content = content.replace(/\[\s*(?:DIRETRIZ|FASE|REGRA|INSTRUÇÃO|ATENÇÃO|ESTRUTURA|COMO RESPONDER|CONTEXTO|SITUAÇÃO)[^\]]*\]:?/gi, '').trim();
+    content = content.replace(/^[-•◆*]?\s*(?:DIRETRIZ DE FUNIL|OFERTA INVERTIDA|FECHAMENTO EMOCIONAL|LIBERAÇÃO DE TUDO|CONEXÃO INICIAL|DIRETRIZ MÁXIMA|INSTRUÇÃO DO MOMENTO|SITUAÇÃO ATUAL)[\s\S]*?(?:\n|$)/gmi, '').trim();
+    content = content.replace(/^O cliente JÁ RECEBEU TUDO[^\n]*\n?/gmi, '').trim();
+    content = content.replace(/^NUNCA diga ["'“]amostra["'”]?[^\n]*\n?/gmi, '').trim();
+    content = content.replace(/^NUNCA diga [*_]?libero o restante[^\n]*\n?/gmi, '').trim();
+    content = content.replace(/^REGRA (?:CRÍTICA|SUPREMA|ABSOLUTA):[^\n]*\n?/gmi, '').trim();
+    content = content.replace(/^ATENÇÃO (?:MÁXIMA|SUPREMA|ABSOLUTA):[^\n]*\n?/gmi, '').trim();
+    content = content.replace(/^Sua mensagem DEVE seguir rigorosamente esta estrutura:?[^\n]*\n?/gmi, '').trim();
+    content = content.replace(/^ESTRUTURA OBRIGATÓRIA DA SUA RESPOSTA:?[^\n]*\n?/gmi, '').trim();
+    content = content.replace(/^Como agir conforme a análise:?[^\n]*\n?/gmi, '').trim();
+
+    return content.trim();
   }
 
   // Call single NIM model with configurable timeout (default 60s)
@@ -251,14 +297,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
     });
 
     if (response.data && response.data.choices && response.data.choices[0]?.message?.content) {
-      let content = response.data.choices[0].message.content.trim();
-      // Anti-Leak: Strip any <think> tags, reasoning blocks or chain-of-thought headers
-      content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-      content = content.replace(/```(?:thought|thinking)[\s\S]*?```/gi, '').trim();
-      content = content.replace(/^(?:thought|thinking):\s*[\s\S]*?\n\n/gi, '').trim();
-      content = content.replace(/^Here's a thinking process:[\s\S]*?(?:\n\n|\n[A-Z0-9#*-])/i, '').trim();
-      content = content.replace(/^Here's a thinking process:[\s\S]*/i, '').trim();
-
+      const content = this.sanitizeModelOutput(response.data.choices[0].message.content);
       if (content.length > 0) {
         return content;
       }
@@ -279,7 +318,8 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
       messages,
       temperature,
       max_tokens: maxTokens,
-      top_p: 0.95
+      top_p: 0.95,
+      reasoning: { max_tokens: 0 } // Disable reasoning tokens so raw CoT is not dumped as plain text
     };
 
     const response = await axios.post(this.openRouterEndpoint, payload, {
@@ -294,15 +334,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
 
     if (response.data && response.data.choices && response.data.choices[0]?.message) {
       const choice = response.data.choices[0];
-      let content = (choice.message.content || '').trim();
-
-      // Anti-Leak: Strip any <think> tags, reasoning blocks or chain-of-thought headers
-      content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-      content = content.replace(/```(?:thought|thinking)[\s\S]*?```/gi, '').trim();
-      content = content.replace(/^(?:thought|thinking):\s*[\s\S]*?\n\n/gi, '').trim();
-      content = content.replace(/^Here's a thinking process:[\s\S]*?(?:\n\n|\n[A-Z0-9#*-])/i, '').trim();
-      content = content.replace(/^Here's a thinking process:[\s\S]*/i, '').trim();
-
+      const content = this.sanitizeModelOutput(choice.message.content || '');
       if (content.length > 0) {
         return content;
       }
@@ -314,7 +346,82 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
   // Generate sales response with automatic primary -> secondary fallback
   async generateResponse(phone, userMessage, conversationHistory = []) {
     const settings = storage.getSettings().ai;
-    const systemPrompt = this.buildSystemPrompt();
+
+    // Contextual Phase Calculation for Deliver-First and Receipt Analysis
+    const leadObj = storage.getLead(phone);
+    const product = storage.getSettings().product || {};
+    const deliverables = storage.getDeliverables();
+    const deliveryStrategy = product.deliveryStrategy || 'require_payment';
+
+    const isReceiptAnalysis = (userMessage || '').includes('[COMPROVANTE DE PAGAMENTO ANALISADO]');
+    const formattedPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
+    const allDelivTags = deliverables.length > 0
+      ? deliverables.map(d => `[ENVIAR_ARQUIVO: ${d.tag}]`).join(' ')
+      : '[ENVIAR_ARQUIVO: PRODUTO]';
+
+    let contextDirective = '';
+
+    if (isReceiptAnalysis) {
+      contextDirective = `SITUAÇÃO: O cliente enviou um comprovante de pagamento que foi inspecionado por visão computacional:
+${userMessage}
+
+Como agir conforme a análise:
+- SE O STATUS FOR "AGENDADO":
+  NÃO libere produtos nem confirme o pagamento! O dinheiro AINDA NÃO caiu na conta!
+  Explique com carinho e gentileza que é um agendamento futuro e peça para cancelar no app do banco e fazer a transferência normal na hora.
+  Envie a Chave PIX oficial (${product.pixKeyType || 'telefone'}: ${product.pixKey || '88994892385'} - ${product.pixBeneficiary || 'ian alves dos anjos'} - R$ ${formattedPrice}).
+  Coloque [AUDIO: ...] doce e compreensivo explicando o agendamento.
+- SE O STATUS FOR "APROVADO":
+  Comemore e agradeça de coração! Acione a liberação: ${allDelivTags}.
+  Coloque [AUDIO: ...] caloroso de parabéns!
+- SE FOR "VALOR_INCORRETO" OU "DESTINATARIO_INCORRETO":
+  Explique com respeito a divergência e informe o valor/chave correto.`;
+    } else if (deliveryStrategy === 'deliver_first') {
+      const messagesHistory = conversationHistory || [];
+      const userIncomingMsgs = messagesHistory.filter(m => !m.fromMe);
+      const hasSentBefore = messagesHistory.some(m => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
+      const isUserAskingPix = /pix|pagar|pago|chave|valor|conta|manda.*pix|envia.*pix|passa.*pix|manda.*chave/i.test(userMessage || '');
+      const hasSentDeliverable = leadObj?.deliverableSent === true || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || hasSentBefore || isUserAskingPix;
+      const isPaid = leadObj?.stage === 'APROVADO' || leadObj?.lastReceiptStatus === 'APROVADO';
+
+      const lowerUserMsg = (userMessage || '').toLowerCase();
+      const isExplicitDeliveryRequest = /pode mandar|manda|envia|quero ver|me passa|mostra|como são|quero|sim|pode ser/i.test(lowerUserMsg);
+      const hasChildDetails = /\b\d+\s*(?:anos?|aninhos|meses)\b|prezinho|escola|começando|creche|maternal|fundamental|alfabetiz/i.test(lowerUserMsg);
+      const hasEngagedConversation = userIncomingMsgs.length >= 2 || isExplicitDeliveryRequest || hasChildDetails;
+
+      if (isUserAskingPix) {
+        contextDirective = `SITUAÇÃO: O cliente pediu o PIX diretamente ("${userMessage}").
+- Agradeça a confiança e envie a Chave PIX oficial limpa no texto:
+  Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
+  Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
+  Valor: R$ ${formattedPrice}
+- Peça para enviar o comprovante após a transferência.
+- Finalize com [AUDIO: ...] curto agradecendo a ajuda e a confiança.`;
+      } else if (!hasSentDeliverable && !hasEngagedConversation) {
+        contextDirective = `SITUAÇÃO: Primeiro contato do lead ("${userMessage}").
+- Dê as boas-vindas com carinho de consultora educacional.
+- Apresente brevemente o projeto e faça uma pergunta amável para conhecer a criança (ex: idade).
+- NÃO envie arquivos nem mencione Chave PIX agora.
+- Coloque um [AUDIO: ...] curto e acolhedor fazendo essa perguntinha com voz doce.`;
+      } else if (!hasSentDeliverable && hasEngagedConversation) {
+        contextDirective = `SITUAÇÃO: O cliente interagiu ou pediu para ver o material.
+- Surpreenda entregando TUDO de uma vez só agora com as tags:
+  ${allDelivTags}
+- Peça para dar uma olhadinha com calma nos materiais. NÃO cobre e NÃO mande PIX agora.
+- Coloque um [AUDIO: ...] animado dizendo que já separou tudo para ele ver.`;
+      } else if (!isPaid) {
+        contextDirective = `SITUAÇÃO: O cliente já recebeu todos os materiais e PDFs anteriormente.
+- Faça o fechamento emocional de confiança e gratidão (você confiou e entregou tudo antes).
+- Peça a contribuição simbólica de R$ ${formattedPrice} e envie a Chave PIX oficial no texto:
+  Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
+  Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
+  Valor: R$ ${formattedPrice}
+- Peça para ele mandar o comprovante quando fizer.
+- Finalize com [AUDIO: ...] carinhoso e pausado reforçando a confiança e o pedido.`;
+      }
+    }
+
+    const systemPrompt = this.buildSystemPrompt(contextDirective);
 
     // Build context message array
     const messages = [
@@ -330,143 +437,9 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
       });
     }
 
-    // Add the current incoming message if not already included
+    // Add the current incoming message as the final message
     if (userMessage && (!recentHistory.length || recentHistory[recentHistory.length - 1].text !== userMessage)) {
       messages.push({ role: 'user', content: userMessage });
-    }
-
-    // Contextual Phase Injection for Deliver-First Funnel
-    const leadObj = storage.getLead(phone);
-    const product = storage.getSettings().product || {};
-    const deliverables = storage.getDeliverables();
-    const deliveryStrategy = product.deliveryStrategy || 'require_payment';
-
-    const isReceiptAnalysis = (userMessage || '').includes('[COMPROVANTE DE PAGAMENTO ANALISADO]');
-    const formattedPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
-    const allDelivTags = deliverables.length > 0
-      ? deliverables.map(d => `[ENVIAR_ARQUIVO: ${d.tag}]`).join(' ')
-      : '[ENVIAR_ARQUIVO: PRODUTO]';
-
-    if (isReceiptAnalysis) {
-      messages.push({
-        role: 'system',
-        content: `[DIRETRIZ MÁXIMA DE COMPROVANTE RECEBIDO]:
-O cliente enviou um comprovante de pagamento que foi inspecionado em tempo real pelo sistema de visão computacional:
-${userMessage}
-
-SUA RESPOSTA OBRIGATÓRIA CONFORME O STATUS ANALISADO:
-1. SE O STATUS FOR "AGENDADO":
-   - NUNCA libere produtos nem confirme o pagamento! O dinheiro AINDA NÃO caiu na conta!
-   - Explique com extrema simpatia, educação e carinho que você recebeu o comprovante, mas ele é um AGENDAMENTO (programado para data futura), e por isso o pagamento ainda não foi concluído.
-   - Peça com gentileza para o cliente entrar no aplicativo do banco dele, cancelar o agendamento e realizar a transferência PIX imediata (na hora).
-   - Reenvie a Chave PIX oficial limpa no texto:
-Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
-Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
-Valor: R$ ${formattedPrice}
-   - Coloque uma tag de áudio no final com voz compreensiva e doce:
-[AUDIO: Olha... eu vi o comprovante que você me mandou, mas ele tá como agendamento...
-Como o sistema só faz o envio automático quando o PIX compensa na hora, você consegue cancelar esse agendamento no app do seu banco e fazer a transferência normal agora?
-Assim que você fizer me manda o comprovante aqui que já libero tudo certinho pra você, tá bom?]
-
-2. SE O STATUS FOR "APROVADO":
-   - Comemore e agradeça de coração pelo pagamento aprovado!
-   - Confirme a liberação do acesso e acione a entrega caso ainda não tenha sido feita: ${allDelivTags}
-   - Coloque um áudio caloroso de boas-vindas e parabéns!
-
-3. SE O STATUS FOR "VALOR_INCORRETO" OU "DESTINATARIO_INCORRETO":
-   - Explique com respeito a divergência encontrada e informe o valor/chave correto.`
-      });
-    } else if (deliveryStrategy === 'deliver_first') {
-      const messagesHistory = conversationHistory || [];
-      const userIncomingMsgs = messagesHistory.filter(m => !m.fromMe);
-      const hasSentBefore = messagesHistory.some(m => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
-      const isUserAskingPix = /pix|pagar|pago|chave|valor|conta|manda.*pix|envia.*pix|passa.*pix|manda.*chave/i.test(userMessage || '');
-      const hasSentDeliverable = leadObj?.deliverableSent === true || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || hasSentBefore || isUserAskingPix;
-      const isPaid = leadObj?.stage === 'APROVADO' || leadObj?.lastReceiptStatus === 'APROVADO';
-
-      const lowerUserMsg = (userMessage || '').toLowerCase();
-      const isExplicitDeliveryRequest = /pode mandar|manda|envia|quero ver|me passa|mostra|como são|quero|sim|pode ser/i.test(lowerUserMsg);
-      const hasChildDetails = /\b\d+\s*(?:anos?|aninhos|meses)\b|prezinho|escola|começando|creche|maternal|fundamental|alfabetiz/i.test(lowerUserMsg);
-      // Lead is considered to have engaged in conversation if they responded at least once, gave child info, or asked for material
-      const hasEngagedConversation = userIncomingMsgs.length >= 2 || isExplicitDeliveryRequest || hasChildDetails;
-
-      if (isUserAskingPix) {
-        messages.push({
-          role: 'system',
-          content: `[DIRETRIZ DE FECHAMENTO URGENTE - O CLIENTE PEDIU O PIX]:
-O cliente está pedindo o PIX diretamente para pagar ("${userMessage}")!
-REGRA ABSOLUTA: NÃO enrole, NÃO pergunte se ele quer o PIX e NÃO tente reenviar arquivos! Envie o PIX agora mesmo!
-Estrutura OBRIGATÓRIA da sua resposta:
-1. Uma frase curta e muito carinhosa agradecendo a ajuda e a confiança no projeto.
-2. O bloco oficial da Chave PIX destacado e limpo para cópia:
-Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
-Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
-Valor: R$ ${formattedPrice}
-3. Instrução para enviar o comprovante: "Assim que você fizer, me envia o comprovante aqui tá bom? ❤️"
-4. [AUDIO: Muito obrigada mesmo pelo carinho e pela ajuda...
-O PIX tá certinho aí no texto pra você...
-faz com calma no app do seu banco e me manda o comprovante aqui tá bom?]`
-        });
-      } else if (!hasSentDeliverable && !hasEngagedConversation) {
-        // FASE 0: CONEXÃO INICIAL & DIAGNÓSTICO (Primeiro Contato)
-        messages.push({
-          role: 'system',
-          content: `[DIRETRIZ DE FUNIL - OFERTA INVERTIDA - FASE 0: CONEXÃO INICIAL & DIAGNÓSTICO]:
-Este é o PRIMEIRO contato do lead ("${userMessage}")!
-ATENÇÃO MÁXIMA: O lead acabou de chegar, tenha calma!
-1. É TERMINANTEMENTE PROIBIDO enviar tags de arquivos [ENVIAR_ARQUIVO: ...] agora! NÃO envie os PDFs no primeiro contato!
-2. É TERMINANTEMENTE PROIBIDO falar de preço, valores ou mandar Chave PIX agora!
-3. O objetivo desta mensagem é criar conexão, acolhimento e gerar desejo natural para o lead querer continuar a conversa!
-
-COMO RESPONDER:
-- Dê as boas-vindas com calor humano, carinho e alegria de uma consultora educacional de verdade.
-- Apresente brevemente e de forma encantadora o material: são atividades lúdicas, desenhos, historinhas e jogos práticos que ensinam inglês brincando, sem telas prejudiciais e sem pressão.
-- Faça uma pergunta carinhosa para conhecer a criança (Ex: "Qual a idade do seu pequeno(a)?" ou "Ele já teve algum contato com inglês antes ou tá conhecendo agora?").
-- Finalize com uma tag de [AUDIO: ...] curto, carinhoso e simpático dando as boas-vindas com voz doce e fazendo essa perguntinha sobre a criança no áudio!`
-        });
-      } else if (!hasSentDeliverable && hasEngagedConversation) {
-        // FASE 1: LIBERAÇÃO DE TUDO DE UMA VEZ
-        messages.push({
-          role: 'system',
-          content: `[DIRETRIZ DE FUNIL - OFERTA INVERTIDA - FASE 1: LIBERAÇÃO DE TUDO DE UMA VEZ]:
-O cliente conversou, respondeu sobre a criança ou pediu o material!
-Agora é o momento de surpreender entregando TUDO de uma vez só!
-É TERMINANTEMENTE PROIBIDO falar "amostra" ou dizer "vou te entregar o resto depois de pagar"! Não existe amostra nem resto, todo o material é entregue integralmente de uma vez só!
-
-REGRA CRÍTICA DESTA FASE:
-1. NÃO COBRE E NÃO ENVIE CHAVE PIX NESTA MENSAGEM! Deixe o cliente receber os arquivos e ver a qualidade com carinho primeiro!
-2. Valide com empatia o que ele falou da criança (ex: com a idade dele eles aprendem como esponjinhas).
-3. LIBERE TODOS OS MATERIAIS AGORA MESMO usando as tags:
-${allDelivTags}
-4. Diga com muito carinho que já está enviando todo o material completo agora para ele abrir e ver como é lindo. Peça para ele dar uma olhadinha e contar o que achou: "Dá uma olhadinha aí com calma e me fala o que achou! ❤️"
-5. Coloque um [AUDIO: ...] animado e carinhoso dizendo que já separou e está mandando todos os arquivos completos pra ele dar uma olhada e aproveitar!`
-        });
-      } else if (!isPaid) {
-        // FASE 2: FECHAMENTO EMOCIONAL E ENVIO DO PIX
-        messages.push({
-          role: 'system',
-          content: `[DIRETRIZ DE FUNIL - OFERTA INVERTIDA - FASE 2: FECHAMENTO EMOCIONAL E ENVIO DO PIX]:
-O cliente JÁ RECEBEU TUDO (todos os materiais e PDFs) antes de pagar!
-NUNCA diga "amostra" e NUNCA diga "libero o restante após o pagamento", pois você JÁ ENTREGOU TUDO!
-REGRA CRÍTICA: NÃO PERGUNTE SE ELE QUER A CHAVE PIX! NÃO PEÇA AUTORIZAÇÃO! ENVIE O PIX IMEDIATAMENTE NO TEXTO!
-ATENÇÃO SUPREMA: NUNCA responda apenas com a tag de áudio! Sua resposta DEVE OBRIGATORIAMENTE conter o texto escrito com o apelo de confiança e os dados do PIX, seguido da tag de áudio!
-
-Sua mensagem DEVE seguir rigorosamente esta estrutura:
-
-Eu confiei em você de olhos fechados e já te entreguei todo o material completo antes mesmo de você pagar! Fiz isso de coração aberto porque sei o quanto você se preocupa e quer o melhor para o seu filho... ❤️ Agora estou aqui de coração te pedindo pra fazer a sua parte e me ajudar com essa contribuição simbólica de apenas R$ ${formattedPrice}, que é o que mantém nosso projeto vivo de pé!
-
-Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
-Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
-Valor: R$ ${formattedPrice}
-
-Assim que você fizer, me envia o comprovante aqui tá bom? ❤️
-
-[AUDIO: Olha...
-eu confiei de verdade em você e te entreguei tudo antes...
-agora tô aqui de coração te pedindo pra fazer a sua parte...
-faz com calma no app do seu banco e me manda o comprovante aqui, tá bom?]`
-        });
-      }
     }
 
     let responseText = null;
