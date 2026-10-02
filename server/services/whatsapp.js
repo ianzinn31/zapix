@@ -81,6 +81,8 @@ class WhatsAppService {
     this.isInitializing = false;
     this.activeLeadControllers = new Map(); // phone -> AbortController
     this.incomingDebounceMap = new Map(); // phone -> { timer, messages: [], jid }
+    this.pendingDeliveryClosingTimers = new Map(); // phone -> { timer, jid, scheduledAt }
+    this.activeDeliveryClosingAbortControllers = new Map(); // phone -> AbortController
   }
 
   setSocketIo(io) {
@@ -400,7 +402,8 @@ class WhatsAppService {
             : messageContent;
 
           if (aiInput) {
-            // Cancel any pending bubble loop from previous response if lead spoke again
+            // Cancel any pending post-delivery timer or bubble loop if lead spoke again
+            this.cancelPostDeliveryClosing(phone);
             if (this.activeLeadControllers.has(phone)) {
               const activeCtrl = this.activeLeadControllers.get(phone);
               if (activeCtrl && !activeCtrl.signal.aborted) {
@@ -616,14 +619,18 @@ class WhatsAppService {
           const isTriggeredByTag = tagMatches.length > 0 || deliverablesToSend.length > 0;
           const lowerUser = (userText || '').toLowerCase();
           const lowerReply = (replyText || '').toLowerCase();
+          const userIncomingMsgs = sentMsgs.filter((m) => !m.fromMe);
+          const hasChildDetails = /\b\d+\s*(?:anos?|aninhos|meses)\b|prezinho|escola|começando|creche|maternal|fundamental|alfabetiz/i.test(lowerUser);
           const isExplicitDeliveryAgreement =
-            (lowerUser.includes('manda') || lowerUser.includes('envia') || lowerUser.includes('quero ver') || lowerUser.includes('pode mandar')) &&
-            (lowerReply.includes('enviando') || lowerReply.includes('entregando') || lowerReply.includes('liberando') || lowerReply.includes('preparei'));
+            (lowerUser.includes('manda') || lowerUser.includes('envia') || lowerUser.includes('quero ver') || lowerUser.includes('pode mandar') || lowerUser.includes('quero') || lowerUser.includes('sim')) &&
+            (lowerReply.includes('enviando') || lowerReply.includes('entregando') || lowerReply.includes('liberando') || lowerReply.includes('preparei') || lowerReply.includes('separei') || lowerReply.includes('abaixo'));
+
+          const isTurn2OrEngaged = userIncomingMsgs.length >= 2 || hasChildDetails || isTriggeredByTag || isExplicitDeliveryAgreement;
 
           // If the customer explicitly asked for the PIX and already received materials: don't resend materials!
           if (userWantsPix && hasReceivedAny) {
             deliverablesToSend.length = 0;
-          } else if (!hasReceivedAny && (isTriggeredByTag || isExplicitDeliveryAgreement) && !userWantsPix) {
+          } else if (!hasReceivedAny && isTurn2OrEngaged && !userWantsPix) {
             // Deliver ALL registered deliverables together upfront as the complete package (all 3 files)!
             deliverablesToSend.length = 0;
             deliverablesToSend.push(...allDeliverables);
@@ -734,6 +741,10 @@ class WhatsAppService {
             }
           }
           storage.upsertLead(phone, { stage: 'ENTREGUE', deliverableSent: true, deliverableSentAt: Date.now() });
+          // Temporizador pós-entrega de 90s (1m30s): se o lead não responder após receber os arquivos, fecha e envia o PIX automaticamente
+          if (deliveryStrategy === 'deliver_first') {
+            this.schedulePostDeliveryClosing(phone, jid, 90000);
+          }
         }
 
         // ========================================================
@@ -891,6 +902,7 @@ class WhatsAppService {
   // Cancel any active AI processing, debounce, or typing presence for a lead
   cancelActiveLeadProcess(phone) {
     if (!phone) return;
+    this.cancelPostDeliveryClosing(phone);
     const cleanPhone = phone.replace(/[^0-9]/g, '');
     for (const key of [phone, cleanPhone]) {
       if (this.activeLeadControllers.has(key)) {
@@ -909,6 +921,200 @@ class WhatsAppService {
     const jid = this.resolveJid(phone);
     if (jid) {
       this.safePresence(jid, 'paused').catch(() => {});
+    }
+  }
+
+  // Schedule automated Phase 2 emotional closing and PIX request if customer stays silent after receiving files (default: 90s)
+  schedulePostDeliveryClosing(phone, jid, delayMs = 90000) {
+    if (!phone) return;
+    this.cancelPostDeliveryClosing(phone);
+
+    console.log(`[Zapix Timer] Agendando fechamento pós-entrega para ${phone} em ${delayMs / 1000}s...`);
+    storage.addLog('INFO', `Temporizador pós-entrega ativado para ${phone}: fechamento emocional e PIX serão enviados em ${Math.round(delayMs / 1000)}s caso o cliente não interaja.`);
+
+    const timer = setTimeout(async () => {
+      this.pendingDeliveryClosingTimers.delete(phone);
+      try {
+        await this.executePostDeliveryClosing(phone, jid);
+      } catch (err) {
+        console.error(`[Zapix Timer] Erro ao executar fechamento pós-entrega para ${phone}:`, err);
+        storage.addLog('ERROR', `Erro no temporizador pós-entrega para ${phone}: ${err.message}`);
+      }
+    }, delayMs);
+
+    this.pendingDeliveryClosingTimers.set(phone, { timer, jid, scheduledAt: Date.now() });
+  }
+
+  // Cancel pending closing timer (lead interacted or funnel was reset)
+  cancelPostDeliveryClosing(phone) {
+    if (!phone) return;
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    for (const key of [phone, cleanPhone]) {
+      if (this.pendingDeliveryClosingTimers?.has(key)) {
+        const item = this.pendingDeliveryClosingTimers.get(key);
+        if (item?.timer) {
+          clearTimeout(item.timer);
+          console.log(`[Zapix Timer] Temporizador pós-entrega cancelado para ${key} (cliente interagiu ou ação concluída).`);
+        }
+        this.pendingDeliveryClosingTimers.delete(key);
+      }
+      if (this.activeDeliveryClosingAbortControllers?.has(key)) {
+        const ctrl = this.activeDeliveryClosingAbortControllers.get(key);
+        if (ctrl && !ctrl.signal.aborted) {
+          ctrl.abort();
+        }
+        this.activeDeliveryClosingAbortControllers.delete(key);
+      }
+    }
+  }
+
+  // Execute the automated Phase 2 emotional closing + voice note + PIX block + 1-click PIX button
+  async executePostDeliveryClosing(phone, jid) {
+    const lead = storage.getLead(phone);
+    if (!lead || lead.aiActive === false) {
+      console.log(`[Zapix Timer] Fechamento pós-entrega ignorado para ${phone}: IA inativa ou lead não encontrado.`);
+      return;
+    }
+    if (this.status !== 'connected' || !this.sock) {
+      console.log(`[Zapix Timer] Fechamento pós-entrega cancelado: WhatsApp desconectado.`);
+      return;
+    }
+    if (lead.stage === 'APROVADO' || lead.lastReceiptStatus === 'APROVADO') {
+      console.log(`[Zapix Timer] Lead ${phone} já está aprovado. Ignorando fechamento.`);
+      return;
+    }
+
+    const sentMsgs = storage.getMessages(phone) || [];
+    const settings = storage.getSettings();
+    const product = settings.product || {};
+    const hasAlreadySentPix = sentMsgs.some(m => m.fromMe && m.text && (
+      (product.pixKey && m.text.includes(product.pixKey)) ||
+      m.text.includes('Chave PIX') ||
+      m.text.includes('Copiar Chave PIX')
+    )) || lead.stage === 'PIX_ENVIADO';
+
+    if (hasAlreadySentPix) {
+      console.log(`[Zapix Timer] PIX já foi enviado anteriormente para ${phone}. Ignorando.`);
+      return;
+    }
+
+    if (lead.deliverableSentAt) {
+      const customerMsgAfterDelivery = sentMsgs.some(m => !m.fromMe && m.timestamp > (lead.deliverableSentAt + 2000));
+      if (customerMsgAfterDelivery) {
+        console.log(`[Zapix Timer] Lead ${phone} já interagiu após a entrega dos arquivos. O fluxo de conversa assume naturalmente.`);
+        return;
+      }
+    }
+
+    const abortController = new AbortController();
+    this.activeDeliveryClosingAbortControllers.set(phone, abortController);
+    const { signal } = abortController;
+
+    try {
+      console.log(`[Zapix Timer] Disparando fechamento emocional e envio de PIX automático para ${phone} após 90s de silêncio...`);
+      storage.addLog('INFO', `Disparando fechamento emocional e envio do PIX automático (após 90s) para ${phone}`);
+
+      const targetJid = jid || this.resolveJid(phone);
+      const pixPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
+      const pixKey = product.pixKey || '88994892385';
+      const pixKeyType = product.pixKeyType || 'telefone';
+      const beneficiary = product.pixBeneficiary || 'ian alves dos anjos';
+
+      // 1. Áudio humanizado via Fish Audio (se ativo)
+      const fishSettings = settings.fishAudio || {};
+      if (fishSettings.autoAudio !== false && !signal.aborted) {
+        const audioScript = `Oi! Conseguiu abrir as atividades? Como você viu, eu te entreguei todo o material completo de coração aberto antes mesmo de qualquer coisa, porque eu confio em você e sei o quanto vai fazer a diferença! Para nos ajudar a manter esse projeto lindo e atualizado, a gente pede uma contribuição simbólica de apenas ${Math.round(Number(product.price || 15))} reais. Se puder fazer agora, me ajuda demais! Um beijo carinhoso!`;
+        try {
+          const generatedAudio = await fishAudio.generateSpeech(audioScript);
+          if (!signal.aborted && this.status === 'connected' && this.sock) {
+            const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
+            await antiBan.sleep(thinkingDelay, signal);
+            if (!signal.aborted && this.status === 'connected' && this.sock) {
+              await this.safePresence(targetJid, 'recording');
+              await antiBan.sleep(recordingDelay, signal);
+              await this.safePresence(targetJid, 'paused');
+              if (!signal.aborted && this.status === 'connected' && this.sock) {
+                const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
+                const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
+                await this.sock.sendMessage(targetJid, {
+                  audio: audioBuffer,
+                  mimetype: 'audio/ogg; codecs=opus',
+                  ptt: true,
+                  waveform
+                });
+
+                const audioMsg = storage.addMessage({
+                  phone,
+                  fromMe: true,
+                  text: `🎵 [Áudio]: "${audioScript}"`,
+                  type: 'audio',
+                  mediaUrl: generatedAudio.audioUrl,
+                  audioDuration: generatedAudio.durationSec
+                });
+                this.emit('chat:message', audioMsg);
+                storage.addLog('SUCCESS', `Áudio de fechamento pós-entrega (90s) enviado para ${phone}`);
+              }
+            }
+          }
+        } catch (audioErr) {
+          console.error('[Zapix Timer] Falha ao sintetizar/enviar áudio automático:', audioErr);
+        }
+      }
+
+      if (signal.aborted || this.status !== 'connected' || !this.sock) return;
+
+      // 2. Bolhas de texto com fechamento emocional e bloco de Chave PIX
+      const textBubble1 = `E aí, conseguiu dar uma olhadinha com calma nos materiais que te mandei? 🥰`;
+      const textBubble2 = `Eu confiei em você de olhos fechados e já te entreguei todo o material completo antes mesmo de você pagar! Fiz isso de coração porque sei o quanto você se preocupa com o futuro do seu pequeno... ❤️\n\nAgora estou aqui te pedindo com muito carinho para fazer a sua parte com essa contribuição simbólica de apenas R$ ${pixPrice}, que é o que mantém nosso projeto vivo!`;
+      const textBubble3 = `Chave PIX (${pixKeyType}): ${pixKey}\nNome: ${beneficiary}\nValor: R$ ${pixPrice}\n\nAssim que você fizer, me envia o comprovante aqui tá bom? ❤️`;
+
+      const bubblesToSend = [textBubble1, textBubble2, textBubble3];
+
+      for (let i = 0; i < bubblesToSend.length; i++) {
+        if (signal.aborted || this.status !== 'connected' || !this.sock) break;
+        const bubble = bubblesToSend[i];
+        const { baseThinking, typingTime } = antiBan.calculateTypingDelay(bubble);
+
+        await antiBan.sleep(baseThinking, signal);
+        if (signal.aborted || this.status !== 'connected' || !this.sock) break;
+
+        await this.safePresence(targetJid, 'composing');
+        await antiBan.sleep(typingTime, signal);
+        await this.safePresence(targetJid, 'paused');
+        if (signal.aborted || this.status !== 'connected' || !this.sock) break;
+
+        await this.sock.sendMessage(targetJid, { text: bubble });
+        const sentMsg = storage.addMessage({
+          phone,
+          fromMe: true,
+          text: bubble,
+          type: 'text'
+        });
+        this.emit('chat:message', sentMsg);
+
+        if (i < bubblesToSend.length - 1) {
+          await antiBan.sleep(1500, signal);
+        }
+      }
+
+      if (signal.aborted || this.status !== 'connected' || !this.sock) return;
+
+      // 3. Botão Interativo Copiar Chave PIX
+      if (product.pixKey && product.sendPixButton !== false) {
+        await antiBan.sleep(1200, signal);
+        if (!signal.aborted && this.status === 'connected' && this.sock) {
+          await this.sendPixCopyButton(targetJid, product.pixKey, product.price, product.pixBeneficiary);
+        }
+      }
+
+      // 4. Atualizar estágio do lead para PIX_ENVIADO
+      storage.upsertLead(phone, { stage: 'PIX_ENVIADO', deliverableSent: true });
+      this.emit('lead:updated', storage.getLead(phone));
+      storage.addLog('SUCCESS', `Fechamento pós-entrega (90s) concluído com sucesso para ${phone}`);
+    } finally {
+      if (this.activeDeliveryClosingAbortControllers.get(phone) === abortController) {
+        this.activeDeliveryClosingAbortControllers.delete(phone);
+      }
     }
   }
 

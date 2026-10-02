@@ -92,7 +92,7 @@ class AntiBanService {
         return clean.length > 0;
       });
 
-    return validBubbles.length > 0 ? validBubbles : (fullText.trim() ? [fullText.trim()] : []);
+    return validBubbles;
   }
 
   // Queue message action sequentially per contact to prevent collisions and rate violations

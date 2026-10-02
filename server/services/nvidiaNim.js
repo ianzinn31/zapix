@@ -192,15 +192,16 @@ ${deliverableList || 'Nenhum entregável cadastrado no momento.'}
    - Espere o cliente interagir para então fazer o pitch e enviar o PIX!
 === EXEMPLOS DO FORMATO EXATO ESPERADO (ÁUDIO COMPLETO + TEXTO CURTO) ===
 
-Exemplo 1 (Quando o lead pede para explicar ou saber mais):
-Claro! Te gravei um áudio explicando tudo com muito carinho 👇
+Exemplo 1 (Primeiro contato do lead querendo saber mais):
+Olá! Que alegria falar com você! Te gravei um áudio explicando rapidinho com muito carinho 👇
 
 [AUDIO: Oi! Tudo bem?
 Que bom falar com você!
 Então... nosso material foi feito com todo carinho para as crianças aprenderem inglês brincando...
-São atividades bem ilustradas e práticas, que o seu filho nem percebe que está estudando!]
+São atividades bem ilustradas e práticas, que o pequeno nem percebe que está estudando!
+Qual a idade do seu pequeno(a)?]
 
-Você mesmo que vai acompanhar as atividades ou é pra alguém da sua família? 😊
+Qual a idade do seu pequeno(a)? 😊
 
 Exemplo 2 (Fechamento Emocional com PIX após envio de TODOS os materiais):
 Eu confiei em você de olhos fechados e já te entreguei todo o material completo antes mesmo de você pagar! Fiz isso de coração porque sei o quanto isso é importante pro futuro do seu filho... ❤️ Agora estou aqui de coração aberto te pedindo pra fazer a sua parte com essa contribuição simbólica de apenas R$ ${Number(product.price || 15).toFixed(2).replace('.', ',')}, que é o que mantém nosso trabalho de pé!
@@ -406,16 +407,22 @@ Como agir conforme a análise:
 - Finalize com [AUDIO: ...] curto agradecendo a ajuda e a confiança.`;
       } else if (!hasSentDeliverable && !hasEngagedConversation) {
         contextDirective = `SITUAÇÃO: Primeiro contato do lead ("${userMessage}").
-- Dê as boas-vindas com carinho de consultora educacional.
-- Apresente brevemente o projeto e faça uma pergunta amável para conhecer a criança (ex: idade).
+- Dê as boas-vindas com carinho de consultora educacional apaixonada pelo desenvolvimento infantil.
+- Faça um gancho rápido de 1 frase destacando como o aprendizado lúdico e longe das telas transforma a rotina dos pequenos.
+- Pergunte de forma direta e acolhedora: "Qual a idade do seu pequeno(a) ou para quem seriam as atividades? 💕"
+- É TERMINANTEMENTE PROIBIDO fazer perguntas de permissão como "quer saber mais sobre o que?", "posso te mandar um áudio?" ou "quer dar uma olhada?".
 - NÃO envie arquivos nem mencione Chave PIX agora.
-- Coloque um [AUDIO: ...] curto e acolhedor fazendo essa perguntinha com voz doce.`;
+- Coloque um [AUDIO: ...] curto e acolhedor (15 a 20 segundos) fazendo essa perguntinha com voz doce.`;
       } else if (!hasSentDeliverable && hasEngagedConversation) {
-        contextDirective = `SITUAÇÃO: O cliente interagiu ou pediu para ver o material.
-- Surpreenda entregando TUDO de uma vez só agora com as tags:
+        contextDirective = `SITUAÇÃO: O cliente interagiu, respondeu ou passou a idade da criança ("${userMessage}").
+- Valide com carinho e entusiasmo a resposta/idade da criança (ex: dizendo o quanto essa fase é incrível para o aprendizado lúdico).
+- Anuncie que já separou e está liberando todo o material completo agora mesmo para ele conhecer e aplicar em casa.
+- ATENÇÃO OBRIGATÓRIA: Você DEVE incluir todas as tags de entregáveis abaixo na sua resposta:
   ${allDelivTags}
-- Peça para dar uma olhadinha com calma nos materiais. NÃO cobre e NÃO mande PIX agora.
-- Coloque um [AUDIO: ...] animado dizendo que já separou tudo para ele ver.`;
+- Diga para ele dar uma olhadinha com calma nos materiais que você acabou de mandar.
+- É TERMINANTEMENTE PROIBIDO pedir permissão (NUNCA pergunte "quer dar uma olhada?", "posso te mandar?"). Os materiais já estão sendo enviados AGORA!
+- NÃO cobre e NÃO mencione Chave PIX neste momento (os materiais estão sendo entregues agora para ele olhar).
+- Coloque um [AUDIO: ...] animado e carinhoso dizendo que já separou tudo para ele e desejando um momento especial com a criança.`;
       } else if (!isPaid) {
         if (!hasPixBeenSent) {
           // FASE 2: FECHAMENTO EMOCIONAL E ENVIO DO PIX (APENAS NA 1ª VEZ APÓS A ENTREGA DOS MATERIAIS)
