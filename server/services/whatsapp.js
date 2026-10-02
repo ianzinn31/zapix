@@ -309,6 +309,11 @@ class WhatsAppService {
                   const analysis = await visionService.analyzeMedia(buffer, mimetype, { phone, pushName });
 
                   if (analysis) {
+                    const isApproved = analysis.status === 'APROVADO';
+                    const currentSettings = storage.getSettings();
+                    const deliveryStrategy = currentSettings.product?.deliveryStrategy || 'require_payment';
+                    const isDeliverFirst = deliveryStrategy === 'deliver_first';
+
                     // Update lead with receipt analysis
                     storage.upsertLead(phone, {
                       lastReceiptStatus: analysis.status,
@@ -316,21 +321,36 @@ class WhatsAppService {
                       lastReceiptBank: analysis.bank,
                       lastReceiptDate: Date.now(),
                       lastReceiptSummary: analysis.reason,
-                      lastReceiptExplanation: analysis.customerExplanation
+                      lastReceiptExplanation: analysis.customerExplanation,
+                      ...(isApproved ? { stage: 'APROVADO' } : {})
                     });
+
+                    if (isApproved) {
+                      storage.addSale({
+                        phone,
+                        customerName: pushName || phone,
+                        amount: analysis.amount || currentSettings.product?.price || 15,
+                        platform: 'PIX Direto'
+                      });
+                      this.emit('lead:updated', storage.getLead(phone));
+                    }
 
                     if (analysis.isBankReceipt) {
                       messageContent = `[COMPROVANTE DE PAGAMENTO ANALISADO]:
 - Status: ${analysis.status}
 - Banco: ${analysis.bank || 'Não identificado'}
 - Valor identificado: ${analysis.amount ? `R$ ${analysis.amount}` : 'Não identificado'}
-- Efetivado?: ${analysis.shouldReleaseProduct ? 'SIM (Liberar produto)' : 'NÃO (NÃO LIBERAR)'}
+- Efetivado?: ${analysis.shouldReleaseProduct ? 'SIM' : 'NÃO'}
 - Detalhes: ${analysis.reason}
 - Instrução para sua resposta: ${
                         analysis.status === 'AGENDADO'
-                          ? 'Explique com simpatia que você viu o comprovante, mas ele é um AGENDAMENTO (o dinheiro ainda não caiu). Oriente o cliente a cancelar o agendamento no aplicativo do banco e fazer a transferência imediata na hora para que o sistema possa liberar o produto imediatamente.'
+                          ? (isDeliverFirst
+                              ? 'Explique com muito carinho e gentileza que você viu o comprovante, mas que no aplicativo do banco ele ficou como um AGENDAMENTO futuro (o dinheiro ainda não foi debitado nem recebido). Oriente com simpatia a cancelar o agendamento no app do banco e fazer a transferência imediata na hora para concluir a contribuição simbólica de R$ 15.'
+                              : 'Explique com simpatia que você viu o comprovante, mas ele é um AGENDAMENTO (o dinheiro ainda não caiu). Oriente o cliente a cancelar o agendamento no aplicativo do banco e fazer a transferência imediata na hora para que o sistema possa liberar o produto imediatamente.')
                           : analysis.status === 'APROVADO'
-                          ? 'Agradeça pelo pagamento confirmado e envie o produto com a tag do entregável.'
+                          ? (isDeliverFirst
+                              ? 'O pagamento/contribuição foi confirmado com sucesso! ATENÇÃO MÁXIMA DE OFERTA INVERTIDA: O cliente JÁ RECEBEU todas as apostilas e atividades em PDF no início da conversa! NUNCA diga que vai liberar material, que vai mandar arquivos ou que ele deve aguardar o acesso! Agradeça de coração pelo carinho e pela contribuição que mantém o projeto vivo, e diga para ele aproveitar ao máximo as atividades que já estão com ele!'
+                              : 'Agradeça pelo pagamento confirmado e envie o produto com a tag do entregável.')
                           : 'Explique a divergência com respeito e passe a chave PIX oficial novamente.'
                       }`;
                     } else if (analysis.reason) {

@@ -362,22 +362,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
 
     let contextDirective = '';
 
-    if (isReceiptAnalysis) {
-      contextDirective = `SITUAÇÃO: O cliente enviou um comprovante de pagamento que foi inspecionado por visão computacional:
-${userMessage}
-
-Como agir conforme a análise:
-- SE O STATUS FOR "AGENDADO":
-  NÃO libere produtos nem confirme o pagamento! O dinheiro AINDA NÃO caiu na conta!
-  Explique com carinho e gentileza que é um agendamento futuro e peça para cancelar no app do banco e fazer a transferência normal na hora.
-  Envie a Chave PIX oficial (${product.pixKeyType || 'telefone'}: ${product.pixKey || '88994892385'} - ${product.pixBeneficiary || 'ian alves dos anjos'} - R$ ${formattedPrice}).
-  Coloque [AUDIO: ...] doce e compreensivo explicando o agendamento.
-- SE O STATUS FOR "APROVADO":
-  Comemore e agradeça de coração! Acione a liberação: ${allDelivTags}.
-  Coloque [AUDIO: ...] caloroso de parabéns!
-- SE FOR "VALOR_INCORRETO" OU "DESTINATARIO_INCORRETO":
-  Explique com respeito a divergência e informe o valor/chave correto.`;
-    } else if (deliveryStrategy === 'deliver_first') {
+    if (deliveryStrategy === 'deliver_first') {
       const messagesHistory = conversationHistory || [];
       const userIncomingMsgs = messagesHistory.filter(m => !m.fromMe);
       const hasSentBefore = messagesHistory.some(m => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
@@ -397,7 +382,52 @@ Como agir conforme a análise:
       const hasChildDetails = /\b\d+\s*(?:anos?|aninhos|meses)\b|prezinho|escola|começando|creche|maternal|fundamental|alfabetiz/i.test(lowerUserMsg);
       const hasEngagedConversation = userIncomingMsgs.length >= 2 || isExplicitDeliveryRequest || hasChildDetails;
 
-      if (isUserAskingPix) {
+      const isUserClaimingPaid = /já fiz|ja fiz|já paguei|ja paguei|fiz aqui|acabei de fazer|já transferi|ja transferi|mandei o pix|mandei o comprovante|pago|paguei|ta pago|tá pago|transferi/i.test(lowerUserMsg);
+      const isUserAskingIfTheseAreTheFiles = /achei q eram esses|achei que eram esses|são esses|sao esses|é esse|é essa|são essas|pode mandar|manda pfv|manda por favor|vai mandar/i.test(lowerUserMsg);
+
+      if (isReceiptAnalysis) {
+        const isApprovedReceipt = userMessage.includes('Status: APROVADO');
+        const isAgendadoReceipt = userMessage.includes('Status: AGENDADO');
+
+        if (isApprovedReceipt) {
+          contextDirective = `SITUAÇÃO: O cliente enviou o comprovante de pagamento e o PIX foi 100% APROVADO e confirmado!
+ATENÇÃO MÁXIMA DE OFERTA INVERTIDA:
+- O cliente JÁ RECEBEU todos os materiais, apostilas e PDFs anteriormente no início da conversa!
+- É TERMINANTEMENTE PROIBIDO dizer que vai liberar o material, que vai mandar arquivos ou que ele deve aguardar o acesso! Ele já está com tudo em mãos!
+- Agradeça com imensa gratidão, carinho e entusiasmo pela contribuição simbólica de R$ ${formattedPrice}, que é o que mantém o projeto vivo!
+- Diga que você está muito feliz e deseje momentos maravilhosos aplicando as atividades com o pequeno!
+- Coloque um [AUDIO: ...] doce e carinhoso agradecendo de coração pela ajuda e desejando tudo de bom pra família!`;
+        } else if (isAgendadoReceipt) {
+          contextDirective = `SITUAÇÃO: O cliente enviou um comprovante, mas ele foi identificado como AGENDAMENTO (o dinheiro ainda não foi transferido).
+- Explique com muita delicadeza, carinho e gentileza que no app do banco a operação ficou programada como um agendamento futuro (o valor ainda não foi debitado).
+- Peça com simpatia para ele entrar no aplicativo do banco, cancelar o agendamento e fazer a transferência imediata na hora para que a contribuição de R$ ${formattedPrice} possa ser concluída.
+- Envie a Chave PIX oficial limpa (${product.pixKeyType || 'telefone'}: ${product.pixKey || '88994892385'} - ${product.pixBeneficiary || 'ian alves dos anjos'} - R$ ${formattedPrice}).
+- Coloque um [AUDIO: ...] acolhedor e calmo explicando o agendamento sem constranger o cliente.`;
+        } else {
+          contextDirective = `SITUAÇÃO: O comprovante enviado pelo cliente apresentou divergência:
+${userMessage}
+- Explique com carinho e respeito a divergência e informe a chave oficial de contribuição.`;
+        }
+      } else if (isPaid) {
+        contextDirective = `SITUAÇÃO: O cliente já realizou a contribuição e o pagamento está 100% CONFIRMADO e APROVADO!
+Mensagem do cliente: "${userMessage}".
+DIRETRIZES DE ATENDIMENTO PÓS-PAGAMENTO:
+- O cliente JÁ RECEBEU todas as apostilas e atividades em PDF no início da conversa! NUNCA diga que vai liberar ou enviar materiais, pois ele já tem tudo!
+- Se o cliente perguntou se os arquivos enviados eram aqueles ("Achei q eram esses", "São esses?"): Confirme na hora com muita alegria e segurança: "Sim, são exatamente aqueles materiais completos que te mandei aqui em cima! Você já está com tudo em mãos, é só abrir e aproveitar com o seu pequeno hoje mesmo! 🥰"
+- Se ele estiver agradecendo ("Muito obrigada", "obrigado", "valeu"): Retribua com muito amor e carinho, desejando muito sucesso e reforçando que está sempre à disposição!
+- Coloque um [AUDIO: ...] curto e caloroso se for pertinente.`;
+      } else if (isUserAskingIfTheseAreTheFiles) {
+        contextDirective = `SITUAÇÃO: O cliente está em dúvida se os materiais enviados anteriormente lá em cima são os definitivos ("${userMessage}").
+- Esclareça com total carinho, clareza e segurança: Sim! São exatamente aqueles arquivos e apostilas em PDF que você já enviou lá em cima!
+- Explique que todo o material completo já foi entregue para ele, não precisa esperar nada e já pode abrir, baixar e aplicar com a criança hoje mesmo!
+- NUNCA diga que vai "liberar o restante" ou "mandar o acesso". Ele já tem tudo!
+- Finalize desejando um momento muito especial com o pequeno.`;
+      } else if (isUserClaimingPaid) {
+        contextDirective = `SITUAÇÃO: O cliente avisou que já realizou o pagamento ou PIX ("${userMessage}").
+- Agradeça imensamente o carinho e a contribuição!
+- Peça com simpatia para ele enviar o comprovante aqui na conversa só para você confirmar no sistema.
+- ATENÇÃO SUPREMA: NUNCA diga que "vai liberar o material", pois ele JÁ RECEBEU o material completo lá em cima! Diga que enquanto confirma o comprovante, ele já pode ir aproveitando as atividades que você já enviou!`;
+      } else if (isUserAskingPix) {
         contextDirective = `SITUAÇÃO: O cliente pediu o PIX diretamente ("${userMessage}").
 - Agradeça a confiança e envie a Chave PIX oficial limpa no texto:
   Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
@@ -442,14 +472,35 @@ Mensagem atual do cliente: "${userMessage}".
 DIRETRIZES FUNDAMENTAIS PARA NÃO SUFOCAR O CLIENTE (MÁXIMA PRIORIDADE):
 1. É TERMINANTEMENTE PROIBIDO repetir o texto de apelo emocional ("Eu confiei em você de olhos fechados..."). Você JÁ enviou essa mensagem antes! Repeti-la soa robótico, sufoca o cliente e causa bloqueios!
 2. É TERMINANTEMENTE PROIBIDO reenviar a Chave PIX, valores ou dados bancários, A MENOS que o cliente pergunte explicitamente pela chave!
-3. SE O CLIENTE DISSER QUE VAI FAZER MAIS TARDE, DEPOIS, AMANHÃ OU QUANDO CHEGAR EM CASA:
+3. SE O CLIENTE APENAS AGRADECER ("Muito obrigada", "obrigado", "valeu"):
+   - Responda com carinho e gentileza (Ex: "Por nada, meu bem! Eu que agradeço! Qualquer dúvida estou sempre por aqui! ❤️").
+   - NÃO mande mensagens automáticas dizendo para "fazer quando chegar em casa" se o cliente não falou nada sobre casa!
+4. SE O CLIENTE DISSER QUE VAI FAZER MAIS TARDE, DEPOIS, AMANHÃ OU QUANDO CHEGAR EM CASA:
    - Seja extremamente acolhedora, doce, compreensiva e tranquila.
-   - Responda com ZERO pressão e muita leveza em 1 ou 2 frases curtas (Ex: "Sem problemas, fica em paz! Faz com calma quando chegar em casa, tá bom? Qualquer dúvida estou por aqui! ❤️").
+   - Responda com ZERO pressão e muita leveza em 1 ou 2 frases curtas (Ex: "Sem problemas, fica em paz! Faz com calma quando der, tá bom? Qualquer dúvida estou por aqui! ❤️").
    - NÃO mande áudios cobrando.
-4. SE O CLIENTE TIVER DÚVIDAS SOBRE O MATERIAL OU PRECISAR DE AJUDA:
+5. SE O CLIENTE TIVER DÚVIDAS SOBRE O MATERIAL OU PRECISAR DE AJUDA:
    - Responda como uma educadora amorosa e atenciosa, sanando a dúvida dele.
-5. APENAS se o cliente pedir expressamente a chave ("manda a chave de novo", "qual a chave?"), forneça a chave PIX de forma prestativa.`;
+6. APENAS se o cliente pedir expressamente a chave ("manda a chave de novo", "qual a chave?"), forneça a chave PIX de forma prestativa.`;
         }
+      }
+    } else {
+      // ESTRATÉGIA PADRÃO: require_payment / per_deliverable
+      if (isReceiptAnalysis) {
+        contextDirective = `SITUAÇÃO: O cliente enviou um comprovante de pagamento que foi inspecionado por visão computacional:
+${userMessage}
+
+Como agir conforme a análise:
+- SE O STATUS FOR "AGENDADO":
+  NÃO libere produtos nem confirme o pagamento! O dinheiro AINDA NÃO caiu na conta!
+  Explique com carinho e gentileza que é um agendamento futuro e peça para cancelar no app do banco e fazer a transferência normal na hora para liberação imediata.
+  Envie a Chave PIX oficial (${product.pixKeyType || 'telefone'}: ${product.pixKey || '88994892385'} - ${product.pixBeneficiary || 'ian alves dos anjos'} - R$ ${formattedPrice}).
+  Coloque [AUDIO: ...] doce e compreensivo explicando o agendamento.
+- SE O STATUS FOR "APROVADO":
+  Comemore e agradeça de coração! Acione a liberação: ${allDelivTags}.
+  Coloque [AUDIO: ...] caloroso de parabéns!
+- SE FOR "VALOR_INCORRETO" OU "DESTINATARIO_INCORRETO":
+  Explique com respeito a divergência e informe o valor/chave correto.`;
       }
     }
 

@@ -31,13 +31,44 @@ class VisionService {
     return null;
   }
 
+  // Normalize and guard against false AGENDADO classifications caused by model training cutoffs
+  normalizeResult(parsedJson, brDate, brYear) {
+    if (!parsedJson) return null;
+
+    if (parsedJson.status === 'AGENDADO' && parsedJson.reason) {
+      const reasonLower = parsedJson.reason.toLowerCase();
+      const mentionsFutureDate = reasonLower.includes('data futura') || reasonLower.includes('futuro') || reasonLower.includes('ano futuro');
+      const mentionsToday = reasonLower.includes(brDate) || reasonLower.includes(String(brYear));
+
+      // If the model claimed it's a future date, but the date mentioned is today's date or current year:
+      if (mentionsFutureDate && mentionsToday) {
+        console.log(`[VisionService] Auto-corrigindo falso positivo de AGENDADO: modelo considerou ${brDate} como data futura.`);
+        parsedJson.status = 'APROVADO';
+        parsedJson.shouldReleaseProduct = true;
+        parsedJson.reason = `Pagamento PIX confirmado e efetivado com sucesso na data de hoje (${brDate}).`;
+        parsedJson.customerExplanation = 'Pagamento confirmado com sucesso!';
+      }
+    }
+
+    return parsedJson;
+  }
+
   // Analyze media buffer (Image or PDF)
   async analyzeMedia(buffer, mimetype = 'image/jpeg', meta = {}) {
     const settings = storage.getSettings();
     const product = settings.product || {};
     const expectedPrice = Number(product.price || 0);
-    const expectedPixKey = product.pixKey || '';
-    const expectedBeneficiary = product.pixBeneficiary || '';
+    const expectedPixKey = product.pixKey || '88994892385';
+    const expectedBeneficiary = product.pixBeneficiary || 'Ian Alves dos Anjos';
+
+    const now = new Date();
+    const brDate = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    }).format(now);
+    const brYear = now.getFullYear();
 
     const isPdf = mimetype === 'application/pdf' || mimetype.includes('pdf');
 
@@ -58,21 +89,26 @@ Seu trabalho é analisar comprovantes enviados por clientes no WhatsApp para ide
 === DADOS OFICIAIS DO PRODUTO E CONTA ===
 - Nome do Produto: ${product.name || 'Produto Digital'}
 - Valor Oficial Esperado: R$ ${expectedPrice.toFixed(2)}
-- Chave PIX Oficial: ${expectedPixKey || 'A verificar'}
-- Titular / Beneficiário Oficial: ${expectedBeneficiary || 'Ian Alves dos Anjos'}
+- Chave PIX Oficial: ${expectedPixKey} (Pode aparecer no comprovante com ou sem código do país +55, ex: +55${expectedPixKey} ou ${expectedPixKey}, ou formatada. Ambas são corretas!)
+- Titular / Beneficiário Oficial: ${expectedBeneficiary}
+
+=== DATA ATUAL DO SISTEMA (HOJE) ===
+- DATA DE HOJE: ${brDate} (Ano corrente: ${brYear})
+- ATENÇÃO SUPREMA SOBRE DATAS: A data de hoje é EXATAMENTE ${brDate}.
+- Comprovantes de hoje (${brDate} ou ano ${brYear}) NÃO SÃO AGENDAMENTOS FUTUROS! São pagamentos realizados hoje em tempo real!
+- NUNCA classifique um comprovante como "AGENDADO" alegando que ${brDate} ou o ano ${brYear} é uma "data futura"!
 
 === REGRAS DE ANÁLISE RIGOROSA ===
 1. STATUS POSSÍVEIS:
-   - "AGENDADO": O documento possui termos como "Comprovante de agendamento", "Agendado para", "Agendamento", "Atenção: este documento é apenas um comprovante de agendamento e não garante a efetivação". NUNCA APROVAR AGENDAMENTOS! O dinheiro ainda não saiu da conta do cliente!
-   - "APROVADO": Comprovante de transferência/pagamento PIX REAL, efetivado, com ID da transação / autenticação bancária, valor compatível e destinatário correto.
+   - "APROVADO": Comprovante de transferência/pagamento PIX REAL de banco brasileiro (Banco do Brasil, Nubank, Itaú, Bradesco, Inter, Caixa, Mercado Pago, Santander, Sicredi, etc.) contendo títulos como "Comprovante de Pagamento PIX", "Comprovante de Transferência PIX", "Comprovante PIX", "Transferência Concluída", ou com autenticação bancária, ID da transação (código E...), SISBB ou código de controle, emitido na data de hoje (${brDate}) ou recente, com valor e destinatário compatíveis.
+   - "AGENDADO": DEVE SER USADO EXCLUSIVAMENTE SE o documento contiver explicitamente termos de agendamento NÃO liquidado, como "Comprovante de agendamento", "Transferência agendada", "Agendado para [data posterior a hoje]", "Atenção: este documento é apenas um comprovante de agendamento e não garante a efetivação". Se o documento NÃO contiver esses avisos de agendamento e tiver sido emitido hoje (${brDate}), ele é APROVADO!
    - "VALOR_INCORRETO": É um comprovante efetivado, mas com valor menor do que o valor do produto (ex: enviou R$ 10 em vez de R$ ${expectedPrice.toFixed(2)}).
    - "DESTINATARIO_INCORRETO": Comprovante enviado para outra pessoa/chave diferente da oficial.
    - "FALSO_OU_ADULTERADO": Imagem com fontes desalinhadas, rascunho de tela sem confirmação, ou montagem.
    - "NAO_E_COMPROVANTE": Imagem aleatória (foto de produto, selfie, áudio, meme, etc.).
 
-2. DIRETRIZ DE SEGURANÇA MÁXIMA:
-   - Na dúvida entre APROVADO e AGENDADO, se contiver a palavra "agendamento" ou data futura, marque SEMPRE como "AGENDADO".
-   - shouldReleaseProduct deve ser TRUE APENAS se status for "APROVADO". Se for "AGENDADO", deve ser FALSE.
+2. DIRETRIZ DE SEGURANÇA:
+   - shouldReleaseProduct deve ser TRUE se status for "APROVADO". Se for "AGENDADO", deve ser FALSE.
 
 Você DEVE responder EXCLUSIVAMENTE em formato JSON puro, sem markdown adicional:
 {
@@ -145,7 +181,7 @@ Você DEVE responder EXCLUSIVAMENTE em formato JSON puro, sem markdown adicional
         );
 
         const content = res.data?.choices?.[0]?.message?.content;
-        const parsedJson = this.extractJson(content);
+        const parsedJson = this.normalizeResult(this.extractJson(content), brDate, brYear);
         if (parsedJson) {
           storage.addLog(
             parsedJson.shouldReleaseProduct ? 'SUCCESS' : 'WARNING',
@@ -196,7 +232,7 @@ Você DEVE responder EXCLUSIVAMENTE em formato JSON puro, sem markdown adicional
         );
 
         const content = res.data?.choices?.[0]?.message?.content;
-        const parsedJson = this.extractJson(content);
+        const parsedJson = this.normalizeResult(this.extractJson(content), brDate, brYear);
         if (parsedJson) {
           storage.addLog(
             parsedJson.shouldReleaseProduct ? 'SUCCESS' : 'WARNING',
