@@ -776,14 +776,24 @@ class WhatsAppService {
         replyText = replyText.replace(/\n+(?:Essa resposta segue rigorosamente|Espero que ajude|Qualquer dúvida estou à disposição|Se precisar de mais alguma coisa|Como posso te ajudar agora\?|Já tem algum lead aguardando)[\s\S]*?$/i, '');
         replyText = replyText.replace(/\n{3,}/g, '\n\n').trim();
 
-        // Safeguard: Ensure PIX key is present during Phase 2 (AFTER deliverables have been sent, NOT during delivery), or when customer asked for PIX!
+        // Safeguard: Ensure PIX key is present ONLY during the initial Phase 2 closing (AFTER deliverables have been sent), or when customer explicitly asked for PIX!
         const sentMsgsForPixCheck = storage.getMessages(phone) || [];
+        const hasAlreadySentPixInHistory = sentMsgsForPixCheck.some((m) => m.fromMe && m.text && (
+          (product.pixKey && m.text.includes(product.pixKey)) ||
+          m.text.includes('Chave PIX') ||
+          m.text.includes('Copiar Chave PIX')
+        ));
         const hasSentDeliverablesInHistory = sentMsgsForPixCheck.some((m) => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
         const hasReceivedDeliverables = hasSentDeliverablesInHistory || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || leadObj?.deliverableSent === true;
 
-        const isDeliverFirstPhase2 = deliveryStrategy === 'deliver_first' && hasReceivedDeliverables && deliverablesToSend.length === 0;
+        // ONLY true on the very FIRST transition to Phase 2 (materials received, not currently sending files, and PIX never sent before in history)!
+        const isFirstTimePhase2Pix = deliveryStrategy === 'deliver_first' &&
+          hasReceivedDeliverables &&
+          deliverablesToSend.length === 0 &&
+          !hasAlreadySentPixInHistory &&
+          leadObj?.stage !== 'PIX_ENVIADO';
 
-        if (product.pixKey && (isDeliverFirstPhase2 || userWantsPix)) {
+        if (product.pixKey && (isFirstTimePhase2Pix || userWantsPix)) {
           const pixPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
           const pixBlock = `Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${pixPrice}\n\nAssim que você fizer, me envia o comprovante aqui tá bom? ❤️`;
 
@@ -792,8 +802,8 @@ class WhatsAppService {
           if (!replyText || replyText.trim().length === 0) {
             replyText = `${emotionalAppeal}\n\n${pixBlock}`;
           } else {
-            // Em Oferta Invertida Fase 2, se o lead não pediu o PIX diretamente e a IA não fez a chantagem emocional, garante o texto de apelo
-            if (isDeliverFirstPhase2 && !userWantsPix && !replyText.toLowerCase().includes('confi')) {
+            // Em Oferta Invertida Fase 2, apenas na PRIMEIRA vez que cobra e se o lead não pediu o PIX diretamente, garante o texto de apelo
+            if (isFirstTimePhase2Pix && !userWantsPix && !replyText.toLowerCase().includes('confi')) {
               replyText = `${emotionalAppeal}\n\n${replyText}`;
             }
             if (!replyText.includes(product.pixKey)) {
@@ -850,12 +860,14 @@ class WhatsAppService {
         // ========================================================
         // STEP 5: NATIVE 1-CLICK PIX COPY BUTTON
         // ========================================================
-        if (
+        // Send PIX interactive button ONLY on the first time Phase 2 closing is sent or when user explicitly asks for PIX
+        const shouldSendPixButton =
           product.pixKey &&
-          (replyText.includes(product.pixKey) || isDeliverFirstPhase2 || userWantsPix || leadObj?.stage === 'PIX_ENVIADO') &&
           product.sendPixButton !== false &&
-          !signal.aborted
-        ) {
+          !signal.aborted &&
+          (isFirstTimePhase2Pix || userWantsPix);
+
+        if (shouldSendPixButton) {
           await antiBan.sleep(1200, signal);
           if (!signal.aborted && this.status === 'connected' && this.sock) {
             await this.sendPixCopyButton(jid, product.pixKey, product.price, product.pixBeneficiary);

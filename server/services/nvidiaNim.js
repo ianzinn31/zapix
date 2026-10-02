@@ -384,6 +384,13 @@ Como agir conforme a análise:
       const hasSentDeliverable = leadObj?.deliverableSent === true || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || hasSentBefore || isUserAskingPix;
       const isPaid = leadObj?.stage === 'APROVADO' || leadObj?.lastReceiptStatus === 'APROVADO';
 
+      const hasAlreadySentPixInHistory = messagesHistory.some((m) => m.fromMe && m.text && (
+        (product.pixKey && m.text.includes(product.pixKey)) ||
+        m.text.includes('Chave PIX') ||
+        m.text.includes('Copiar Chave PIX')
+      ));
+      const hasPixBeenSent = hasAlreadySentPixInHistory || leadObj?.stage === 'PIX_ENVIADO';
+
       const lowerUserMsg = (userMessage || '').toLowerCase();
       const isExplicitDeliveryRequest = /pode mandar|manda|envia|quero ver|me passa|mostra|como são|quero|sim|pode ser/i.test(lowerUserMsg);
       const hasChildDetails = /\b\d+\s*(?:anos?|aninhos|meses)\b|prezinho|escola|começando|creche|maternal|fundamental|alfabetiz/i.test(lowerUserMsg);
@@ -410,14 +417,32 @@ Como agir conforme a análise:
 - Peça para dar uma olhadinha com calma nos materiais. NÃO cobre e NÃO mande PIX agora.
 - Coloque um [AUDIO: ...] animado dizendo que já separou tudo para ele ver.`;
       } else if (!isPaid) {
-        contextDirective = `SITUAÇÃO: O cliente já recebeu todos os materiais e PDFs anteriormente.
-- Faça o fechamento emocional de confiança e gratidão (você confiou e entregou tudo antes).
-- Peça a contribuição simbólica de R$ ${formattedPrice} e envie a Chave PIX oficial no texto:
+        if (!hasPixBeenSent) {
+          // FASE 2: FECHAMENTO EMOCIONAL E ENVIO DO PIX (APENAS NA 1ª VEZ APÓS A ENTREGA DOS MATERIAIS)
+          contextDirective = `SITUAÇÃO: O cliente já recebeu todos os materiais e PDFs anteriormente e esta é a PRIMEIRA vez que vamos pedir a contribuição e enviar o PIX.
+- Faça o fechamento emocional com gratidão sincera (lembrando que você confiou nele e entregou todo o material antes mesmo de ele pagar).
+- Peça a contribuição simbólica de R$ ${formattedPrice} e envie a Chave PIX oficial destacada no texto:
   Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
   Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
   Valor: R$ ${formattedPrice}
 - Peça para ele mandar o comprovante quando fizer.
 - Finalize com [AUDIO: ...] carinhoso e pausado reforçando a confiança e o pedido.`;
+        } else {
+          // FASE 3: ACOMPANHAMENTO NATURAL E FLUÍDO PÓS-PIX (O PIX JÁ FOI ENVIADO ANTERIORMENTE)
+          contextDirective = `SITUAÇÃO: O material completo E a Chave PIX JÁ FORAM ENVIADOS anteriormente nesta conversa! O cliente está respondendo após já ter os dados do PIX.
+Mensagem atual do cliente: "${userMessage}".
+
+DIRETRIZES FUNDAMENTAIS PARA NÃO SUFOCAR O CLIENTE (MÁXIMA PRIORIDADE):
+1. É TERMINANTEMENTE PROIBIDO repetir o texto de apelo emocional ("Eu confiei em você de olhos fechados..."). Você JÁ enviou essa mensagem antes! Repeti-la soa robótico, sufoca o cliente e causa bloqueios!
+2. É TERMINANTEMENTE PROIBIDO reenviar a Chave PIX, valores ou dados bancários, A MENOS que o cliente pergunte explicitamente pela chave!
+3. SE O CLIENTE DISSER QUE VAI FAZER MAIS TARDE, DEPOIS, AMANHÃ OU QUANDO CHEGAR EM CASA:
+   - Seja extremamente acolhedora, doce, compreensiva e tranquila.
+   - Responda com ZERO pressão e muita leveza em 1 ou 2 frases curtas (Ex: "Sem problemas, fica em paz! Faz com calma quando chegar em casa, tá bom? Qualquer dúvida estou por aqui! ❤️").
+   - NÃO mande áudios cobrando.
+4. SE O CLIENTE TIVER DÚVIDAS SOBRE O MATERIAL OU PRECISAR DE AJUDA:
+   - Responda como uma educadora amorosa e atenciosa, sanando a dúvida dele.
+5. APENAS se o cliente pedir expressamente a chave ("manda a chave de novo", "qual a chave?"), forneça a chave PIX de forma prestativa.`;
+        }
       }
     }
 
