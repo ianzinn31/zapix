@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { 
   BarChart3, 
@@ -26,6 +26,29 @@ import AntiBanConfig from './components/AntiBanConfig';
 import MetaAdsConfig from './components/MetaAdsConfig';
 import QrConnectModal from './components/QrConnectModal';
 
+function isSamePhone(p1, p2) {
+  if (!p1 || !p2) return false;
+  const c1 = String(p1).replace(/[^0-9]/g, '');
+  const c2 = String(p2).replace(/[^0-9]/g, '');
+  if (!c1 || !c2) return false;
+  if (c1 === c2) return true;
+  const n1 = (c1.length === 10 || c1.length === 11) && !c1.startsWith('55') ? `55${c1}` : c1;
+  const n2 = (c2.length === 10 || c2.length === 11) && !c2.startsWith('55') ? `55${c2}` : c2;
+  if (n1 === n2) return true;
+  if (n1.startsWith('55') && n2.startsWith('55')) {
+    const ddd1 = n1.slice(2, 4);
+    const ddd2 = n2.slice(2, 4);
+    if (ddd1 === ddd2) {
+      const num1 = n1.slice(4);
+      const num2 = n2.slice(4);
+      if ((num1.length === 8 || num1.length === 9) && (num2.length === 8 || num2.length === 9)) {
+        return num1.slice(-8) === num2.slice(-8);
+      }
+    }
+  }
+  return false;
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [whatsappStatus, setWhatsappStatus] = useState({
@@ -45,6 +68,11 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncingMeta, setIsSyncingMeta] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+
+  const selectedLeadPhoneRef = useRef(selectedLeadPhone);
+  useEffect(() => {
+    selectedLeadPhoneRef.current = selectedLeadPhone;
+  }, [selectedLeadPhone]);
 
   const showToast = (text, type = 'success') => {
     setToastMessage({ text, type });
@@ -101,11 +129,14 @@ export default function App() {
     });
 
     socket.on('chat:message', (newMsg) => {
-      setMessages((prev) => {
-        // Prevent duplicate IDs
-        if (prev.some((m) => m.id === newMsg.id)) return prev;
-        return [...prev, newMsg];
-      });
+      const currentPhone = selectedLeadPhoneRef.current;
+      if (currentPhone && isSamePhone(newMsg.phone, currentPhone)) {
+        setMessages((prev) => {
+          // Prevent duplicate IDs
+          if (prev.some((m) => m.id === newMsg.id)) return prev;
+          return [...prev, newMsg];
+        });
+      }
       fetchLogs();
       fetchMetrics();
     });
@@ -225,11 +256,26 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, text, type, mediaUrl })
       });
-      const msg = await res.json();
-      setMessages((prev) => [...prev, msg]);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.warning || data.error || 'Falha ao enviar mensagem no WhatsApp.');
+      }
+      if (data.warning) {
+        showToast(data.warning, 'warning');
+      } else {
+        showToast('Mensagem enviada com sucesso no WhatsApp!', 'success');
+      }
+      const currentPhone = selectedLeadPhoneRef.current;
+      if (currentPhone && isSamePhone(phone, currentPhone)) {
+        setMessages((prev) => (prev.some((m) => m.id === data.id) ? prev : [...prev, data]));
+      }
       fetchMetrics();
+      fetchLogs();
+      return data;
     } catch (err) {
       showToast(err.message, 'error');
+      fetchLogs();
+      throw err;
     }
   };
 
@@ -593,6 +639,7 @@ export default function App() {
             onSyncLead={handleSyncLead}
             product={settings?.product}
             deliverables={deliverables}
+            whatsappStatus={whatsappStatus}
           />
         )}
 

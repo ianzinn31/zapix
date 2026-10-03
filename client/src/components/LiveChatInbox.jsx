@@ -56,7 +56,8 @@ export default function LiveChatInbox({
   onUpdateLead,
   onSyncLead,
   product,
-  deliverables
+  deliverables,
+  whatsappStatus
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [inputMessage, setInputMessage] = useState('');
@@ -66,6 +67,7 @@ export default function LiveChatInbox({
   const [leadToDelete, setLeadToDelete] = useState(null);
   const [leadToReset, setLeadToReset] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
   const audioRefs = useRef({});
   const messagesEndRef = useRef(null);
@@ -87,11 +89,20 @@ export default function LiveChatInbox({
     setEditingName(false);
   }, [messages, selectedLeadPhone]);
 
-  const handleSend = (e) => {
-    e.preventDefault();
-    if (!inputMessage.trim() || !activeLead) return;
-    onSendMessage(activeLead.phone, inputMessage.trim(), 'text');
-    setInputMessage('');
+  const handleSend = async (e) => {
+    if (e) e.preventDefault();
+    const textToSend = inputMessage.trim();
+    if (!textToSend || !activeLead || isSending) return;
+
+    setIsSending(true);
+    try {
+      await onSendMessage(activeLead.phone, textToSend, 'text');
+      setInputMessage('');
+    } catch (err) {
+      console.error('[LiveChatInbox] Erro ao enviar mensagem:', err);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleSaveName = async () => {
@@ -690,9 +701,16 @@ export default function LiveChatInbox({
                           <span style={{ fontSize: '0.68rem', fontWeight: 700, color: isMe ? '#34d399' : '#94a3b8' }}>
                             {isMe ? '🤖 IA Zapix / Você' : (activeLead.name || formatPhoneNumber(activeLead.phone))}
                           </span>
-                          <span style={{ fontSize: '0.65rem', color: '#64748b' }}>
-                            {new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {msg.status === 'failed' && (
+                              <span style={{ fontSize: '0.62rem', color: '#f43f5e', background: 'rgba(244, 63, 94, 0.15)', padding: '1px 5px', borderRadius: '4px' }}>
+                                Não entregue
+                              </span>
+                            )}
+                            <span style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                              {new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
                         </div>
 
                         {/* Audio Message Player (Fish Audio PTT / Groq STT) */}
@@ -895,6 +913,23 @@ export default function LiveChatInbox({
               ))}
             </div>
 
+            {/* Offline Alert if WhatsApp not connected */}
+            {whatsappStatus && whatsappStatus.status !== 'connected' && (
+              <div style={{
+                padding: '6px 20px',
+                background: 'rgba(239, 68, 68, 0.12)',
+                borderTop: '1px solid rgba(239, 68, 68, 0.25)',
+                color: '#fca5a5',
+                fontSize: '0.74rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <ShieldAlert size={14} color="#f87171" />
+                <span>WhatsApp desconectado. As mensagens manuais serão apenas salvas no painel e não serão entregues no WhatsApp enquanto o status não estiver conectado.</span>
+              </div>
+            )}
+
             {/* Input Bar */}
             <form onSubmit={handleSend} style={{
               padding: '14px 20px',
@@ -902,24 +937,56 @@ export default function LiveChatInbox({
               background: 'rgba(11, 17, 32, 0.5)',
               display: 'flex',
               gap: '10px',
-              alignItems: 'center'
+              alignItems: 'flex-end'
             }}>
-              <input
-                type="text"
+              <textarea
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="Digite uma mensagem para responder pelo sistema (sem abrir o WhatsApp)..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend(e);
+                  }
+                }}
+                placeholder="Digite sua resposta manual... (Enter para enviar, Shift+Enter para quebra de linha)"
                 className="input-field"
-                style={{ flex: 1, padding: '12px 16px' }}
+                rows={Math.min(5, Math.max(1, (inputMessage.match(/\n/g) || []).length + 1))}
+                style={{
+                  flex: 1,
+                  padding: '11px 14px',
+                  resize: 'none',
+                  minHeight: '44px',
+                  maxHeight: '120px',
+                  fontFamily: 'inherit',
+                  fontSize: '0.88rem',
+                  lineHeight: '1.4'
+                }}
+                disabled={isSending}
               />
               <button
                 type="submit"
-                disabled={!inputMessage.trim()}
+                disabled={!inputMessage.trim() || isSending}
                 className="btn-primary"
-                style={{ padding: '12px 20px' }}
+                style={{
+                  padding: '11px 20px',
+                  height: '44px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  whiteSpace: 'nowrap'
+                }}
               >
-                <Send size={16} />
-                <span>Enviar</span>
+                {isSending ? (
+                  <>
+                    <RefreshCw size={16} className="animate-spin" />
+                    <span>Enviando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send size={16} />
+                    <span>Enviar</span>
+                  </>
+                )}
               </button>
             </form>
           </>

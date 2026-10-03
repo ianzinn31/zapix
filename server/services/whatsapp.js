@@ -1267,10 +1267,33 @@ class WhatsAppService {
   // Send manual message from Dashboard
   async sendManualMessage(phone, text, type = 'text', mediaUrl = null) {
     if (!this.sock || this.status !== 'connected') {
-      throw new Error('WhatsApp não está conectado.');
+      throw new Error('WhatsApp não está conectado no momento.');
     }
 
-    const jid = `${phone.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+    const jid = await this.resolveJidAsync(phone);
+    if (!jid) {
+      throw new Error(`JID inválido para o contato: ${phone}`);
+    }
+
+    // Cancel any pending AI responses or timers for this lead so AI doesn't talk over the human
+    this.cancelPostDeliveryClosing(phone);
+    if (this.incomingDebounceMap.has(phone)) {
+      const entry = this.incomingDebounceMap.get(phone);
+      if (entry?.timer) clearTimeout(entry.timer);
+      this.incomingDebounceMap.delete(phone);
+    }
+    if (this.activeLeadControllers.has(phone)) {
+      const activeCtrl = this.activeLeadControllers.get(phone);
+      if (activeCtrl && !activeCtrl.signal.aborted) {
+        activeCtrl.abort();
+        console.log(`[Zapix Manual] Resposta da IA cancelada para ${phone} devido à intervenção manual do atendente.`);
+      }
+    }
+
+    // Safe presence simulation
+    try {
+      await this.safePresence(jid, 'composing');
+    } catch (_) {}
 
     // 1. Check if this is a Deliverable tag trigger: [ENVIAR_ARQUIVO: ...] or type === 'deliverable'
     const fileTagRegex = /\[(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE):\s*([^\]]+)\]/iu;
@@ -1294,27 +1317,33 @@ class WhatsAppService {
             cleanFileName += '.pdf';
           }
 
+          let sentResult = null;
           if (isPdf) {
-            await this.sock.sendMessage(jid, {
+            sentResult = await this.sock.sendMessage(jid, {
               document: fileBuffer,
               mimetype: 'application/pdf',
               fileName: cleanFileName
             });
           } else {
-            await this.sock.sendMessage(jid, {
+            sentResult = await this.sock.sendMessage(jid, {
               image: fileBuffer,
               caption: deliv.description || deliv.name
             });
           }
 
+          try { await this.safePresence(jid, 'paused'); } catch (_) {}
+
           const delivMsg = storage.addMessage({
+            id: sentResult?.key?.id,
             phone,
             fromMe: true,
             text: `📎 [Enviado]: ${cleanFileName}`,
             type: deliv.type || (isPdf ? 'pdf' : 'image'),
-            mediaUrl: deliv.url
+            mediaUrl: deliv.url,
+            status: 'delivered'
           });
           this.emit('chat:message', delivMsg);
+          this.emit('lead:updated', storage.getLead(phone));
           storage.addLog('SUCCESS', `Entregável (${cleanFileName}) enviado manualmente para ${phone}`);
           return delivMsg;
         }
@@ -1337,36 +1366,42 @@ class WhatsAppService {
 
     if (manualSpeechText && manualSpeechText.length > 0) {
       const speechText = manualSpeechText;
-        const generatedAudio = await fishAudio.generateSpeech(speechText);
-        const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
-        const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
+      const generatedAudio = await fishAudio.generateSpeech(speechText);
+      const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
+      const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
 
-        await this.sock.sendMessage(jid, {
-          audio: audioBuffer,
-          mimetype: 'audio/ogg; codecs=opus',
-          ptt: true,
-          waveform
-        });
+      const sentResult = await this.sock.sendMessage(jid, {
+        audio: audioBuffer,
+        mimetype: 'audio/ogg; codecs=opus',
+        ptt: true,
+        waveform
+      });
 
-        const audioMsg = storage.addMessage({
-          phone,
-          fromMe: true,
-          text: `🎵 [Áudio]: "${speechText}"`,
-          type: 'audio',
-          mediaUrl: generatedAudio.audioUrl,
-          audioDuration: generatedAudio.durationSec
-        });
-        this.emit('chat:message', audioMsg);
-        storage.addLog('SUCCESS', `Áudio enviado manualmente para ${phone}`);
-        return audioMsg;
-      }
+      try { await this.safePresence(jid, 'paused'); } catch (_) {}
+
+      const audioMsg = storage.addMessage({
+        id: sentResult?.key?.id,
+        phone,
+        fromMe: true,
+        text: `🎵 [Áudio]: "${speechText}"`,
+        type: 'audio',
+        mediaUrl: generatedAudio.audioUrl,
+        audioDuration: generatedAudio.durationSec,
+        status: 'delivered'
+      });
+      this.emit('chat:message', audioMsg);
+      this.emit('lead:updated', storage.getLead(phone));
+      storage.addLog('SUCCESS', `Áudio enviado manualmente para ${phone}`);
+      return audioMsg;
+    }
 
     // 3. Audio file with mediaUrl
+    let sentResult = null;
     if (type === 'audio' && mediaUrl) {
       const audioPath = path.resolve(DATA_DIR, mediaUrl.replace(/^\/audio\//, 'audio_cache/'));
       if (fs.existsSync(audioPath)) {
         const waveform = await fishAudio.extractWaveform(audioPath);
-        await this.sock.sendMessage(jid, {
+        sentResult = await this.sock.sendMessage(jid, {
           audio: fs.readFileSync(audioPath),
           mimetype: 'audio/ogg; codecs=opus',
           ptt: true,
@@ -1375,18 +1410,24 @@ class WhatsAppService {
       }
     } else {
       // 4. Regular Text Message
-      await this.sock.sendMessage(jid, { text });
+      sentResult = await this.sock.sendMessage(jid, { text });
     }
 
+    try { await this.safePresence(jid, 'paused'); } catch (_) {}
+
     const msg = storage.addMessage({
+      id: sentResult?.key?.id,
       phone,
       fromMe: true,
       text,
       type,
-      mediaUrl
+      mediaUrl,
+      status: 'delivered'
     });
 
     this.emit('chat:message', msg);
+    this.emit('lead:updated', storage.getLead(phone));
+    storage.addLog('SUCCESS', `Mensagem manual enviada com sucesso para ${phone}`);
     return msg;
   }
 
@@ -1417,16 +1458,48 @@ class WhatsAppService {
     if (str.includes('@')) {
       return str;
     }
-    const clean = str.replace(/[^0-9]/g, '');
+    let clean = str.replace(/[^0-9]/g, '');
+    if (!clean) return null;
+
     const lead = storage.getLead(clean) || storage.getLead(str);
     if (lead?.jid && String(lead.jid).includes('@')) {
       return lead.jid;
     }
-    // WhatsApp Privacy LID heuristic (14+ digits not starting with 55)
-    if (clean.length >= 14 && !clean.startsWith('55')) {
+    // WhatsApp Privacy LID heuristic (14+ digits)
+    if (clean.length >= 14) {
       return `${clean}@lid`;
     }
+    // Brazilian standard mobile numbers without country code 55 (10 or 11 digits)
+    if ((clean.length === 10 || clean.length === 11) && !clean.startsWith('55')) {
+      clean = `55${clean}`;
+    }
     return `${clean}@s.whatsapp.net`;
+  }
+
+  // Asynchronous resolver that checks WhatsApp network if necessary
+  async resolveJidAsync(phoneOrJid) {
+    const syncJid = this.resolveJid(phoneOrJid);
+    if (!syncJid) return null;
+    if (syncJid.endsWith('@lid')) return syncJid;
+
+    const clean = String(phoneOrJid).replace(/[^0-9]/g, '');
+    const lead = storage.getLead(clean) || storage.getLead(phoneOrJid);
+    if (lead?.jid && String(lead.jid).includes('@')) return lead.jid;
+
+    if (this.sock && this.status === 'connected') {
+      try {
+        const checkNumber = syncJid.split('@')[0];
+        const [result] = await this.sock.onWhatsApp(checkNumber);
+        if (result?.exists && result.jid) {
+          if (lead) {
+            storage.upsertLead(clean || phoneOrJid, { jid: result.jid });
+          }
+          return result.jid;
+        }
+      } catch (_) {}
+    }
+
+    return syncJid;
   }
 
   // Send a voice note directly to a contact (e.g. for Remarketing or manual triggers)
@@ -1434,7 +1507,7 @@ class WhatsAppService {
     if (!this.sock || this.status !== 'connected') {
       throw new Error('WhatsApp não está conectado no momento.');
     }
-    const jid = this.resolveJid(phone);
+    const jid = await this.resolveJidAsync(phone);
     if (!jid) {
       throw new Error(`JID inválido para o contato: ${phone}`);
     }
@@ -1477,7 +1550,7 @@ class WhatsAppService {
     if (!this.sock || this.status !== 'connected') {
       throw new Error('WhatsApp não está conectado no momento.');
     }
-    const jid = this.resolveJid(phone);
+    const jid = await this.resolveJidAsync(phone);
     if (!jid) {
       throw new Error(`JID inválido para o contato: ${phone}`);
     }
@@ -1510,7 +1583,7 @@ class WhatsAppService {
       return { phone, error: 'WhatsApp não está conectado no momento' };
     }
     try {
-      const jid = this.resolveJid(phone);
+      const jid = await this.resolveJidAsync(phone);
       if (!jid) return { phone, error: 'JID inválido' };
       
       let avatarUrl = null;
@@ -1526,6 +1599,7 @@ class WhatsAppService {
         }
       } catch (e) {}
 
+      const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
       const lead = storage.getLead(cleanPhone) || storage.getLead(phone);
       const updated = storage.upsertLead(phone, {
         ...(avatarUrl ? { avatarUrl } : {}),

@@ -26,13 +26,17 @@ export function isSamePhoneNumber(p1, p2) {
   if (!c1 || !c2) return false;
   if (c1 === c2) return true;
 
+  const n1 = (c1.length === 10 || c1.length === 11) && !c1.startsWith('55') ? `55${c1}` : c1;
+  const n2 = (c2.length === 10 || c2.length === 11) && !c2.startsWith('55') ? `55${c2}` : c2;
+  if (n1 === n2) return true;
+
   // Brazilian mobile numbers: 55 + DDD (2 digits) + 8 or 9 digits
-  if (c1.startsWith('55') && c2.startsWith('55')) {
-    const ddd1 = c1.slice(2, 4);
-    const ddd2 = c2.slice(2, 4);
+  if (n1.startsWith('55') && n2.startsWith('55')) {
+    const ddd1 = n1.slice(2, 4);
+    const ddd2 = n2.slice(2, 4);
     if (ddd1 === ddd2) {
-      const num1 = c1.slice(4);
-      const num2 = c2.slice(4);
+      const num1 = n1.slice(4);
+      const num2 = n2.slice(4);
       if ((num1.length === 8 || num1.length === 9) && (num2.length === 8 || num2.length === 9)) {
         return num1.slice(-8) === num2.slice(-8);
       }

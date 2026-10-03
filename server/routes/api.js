@@ -167,23 +167,36 @@ router.get('/messages/:phone', (req, res) => {
 router.post('/messages/send', async (req, res) => {
   const { phone, text, type, mediaUrl } = req.body;
   if (!phone || (!text && !mediaUrl)) {
-    return res.status(400).json({ error: 'Telefone e conteúdo são obrigatórios' });
+    return res.status(400).json({ error: 'Telefone e conteúdo são obrigatórios.' });
   }
 
   try {
     const msg = await whatsapp.sendManualMessage(phone, text, type, mediaUrl);
     res.json(msg);
   } catch (err) {
-    // If WhatsApp is offline, still save the message in DB for testing
+    console.error(`[API /messages/send ERROR] Falha ao enviar para ${phone}:`, err.message);
+    storage.addLog('ERROR', `Falha ao enviar mensagem manual para ${phone}: ${err.message}`);
+
+    const isOffline = whatsapp.status !== 'connected';
+    const warningMsg = isOffline
+      ? 'WhatsApp não está conectado no momento. Mensagem salva apenas localmente.'
+      : `Erro ao enviar no WhatsApp: ${err.message}. Mensagem salva localmente.`;
+
     const fallbackMsg = storage.addMessage({
       phone,
       fromMe: true,
       text: text || '',
       type: type || 'text',
-      mediaUrl: mediaUrl || null
+      mediaUrl: mediaUrl || null,
+      status: 'failed'
     });
     whatsapp.emit('chat:message', fallbackMsg);
-    res.json({ ...fallbackMsg, warning: 'WhatsApp offline. Mensagem registrada localmente.' });
+
+    res.status(isOffline ? 503 : 500).json({
+      ...fallbackMsg,
+      error: warningMsg,
+      warning: warningMsg
+    });
   }
 });
 
