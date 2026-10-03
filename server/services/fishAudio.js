@@ -134,14 +134,240 @@ class FishAudioService {
     return waveform;
   }
 
-  // Generate speech audio from text using OpenRouter (fish-audio/s2.1-pro-free:free)
-  async generateSpeech(text, customModel = null, customVoiceId = null) {
+  // Resolve voice dynamically based on lead phone DDI, target country, or spoken language
+  resolveVoice(context = {}) {
     const settings = storage.getSettings();
     const config = settings.fishAudio || {};
-    const product = settings.product || {};
+    const regionalVoices = config.regionalVoices || {};
+    const defaultVoiceId = config.voiceId || process.env.FISH_AUDIO_VOICE_ID || '7f92f8afb8ec43bf81429cc1c9199cb1';
+
+    // 1. Explicit voice ID passed
+    if (context.customVoiceId && String(context.customVoiceId).trim()) {
+      return {
+        voiceId: String(context.customVoiceId).trim(),
+        country: 'Personalizado',
+        language: 'Manual',
+        key: 'custom',
+        reason: 'Voice ID explicitamente selecionado'
+      };
+    }
+
+    const text = context.text || '';
+
+    // 2. Explicit voice/accent directive tag in LLM response text
+    // E.g.: [VOZ: es-MX], [VOICE: Mexico], [VOICE_ID: 7f92...]
+    const voiceTagMatch = text.match(/\[\s*(?:VOZ|VOICE|ACCENT)\s*:\s*([^\]]+)\]/i);
+    if (voiceTagMatch) {
+      const tagVal = voiceTagMatch[1].trim();
+      for (const [key, voiceData] of Object.entries(regionalVoices)) {
+        if (
+          key.toLowerCase() === tagVal.toLowerCase() ||
+          voiceData.country.toLowerCase() === tagVal.toLowerCase() ||
+          (voiceData.language && voiceData.language.toLowerCase().includes(tagVal.toLowerCase()))
+        ) {
+          if (voiceData.voiceId && voiceData.voiceId.trim()) {
+            return {
+              voiceId: voiceData.voiceId.trim(),
+              country: voiceData.country,
+              language: voiceData.language,
+              key,
+              reason: `Etiqueta de voz [${tagVal}] detectada no texto da IA`
+            };
+          }
+        }
+      }
+      if (tagVal.length > 10 && !tagVal.includes(' ')) {
+        return {
+          voiceId: tagVal,
+          country: 'Tag Direta',
+          language: 'Auto',
+          key: 'direct_tag',
+          reason: `Tag direta de Voice ID [${tagVal}] detectada`
+        };
+      }
+    }
+
+    // 3. Resolve by Lead Phone Number DDI (Country Code)
+    const phone = String(context.phone || '').replace(/[^0-9]/g, '');
+    if (phone) {
+      const ddiMap = [
+        { ddi: '55', key: 'pt-BR' },  // Brasil
+        { ddi: '52', key: 'es-MX' },  // México
+        { ddi: '57', key: 'es-CO' },  // Colômbia
+        { ddi: '54', key: 'es-AR' },  // Argentina
+        { ddi: '591', key: 'es-BO' }, // Bolívia
+        { ddi: '595', key: 'es-PY' }, // Paraguai
+        { ddi: '51', key: 'es-PE' },  // Peru
+        { ddi: '56', key: 'es-CL' },  // Chile
+        { ddi: '593', key: 'es-419' },// Equador -> LatAm
+        { ddi: '58', key: 'es-419' }, // Venezuela -> LatAm
+        { ddi: '502', key: 'es-419' },// Guatemala -> LatAm
+        { ddi: '504', key: 'es-419' },// Honduras -> LatAm
+        { ddi: '503', key: 'es-419' },// El Salvador -> LatAm
+        { ddi: '505', key: 'es-419' },// Nicarágua -> LatAm
+        { ddi: '506', key: 'es-419' },// Costa Rica -> LatAm
+        { ddi: '507', key: 'es-419' },// Panamá -> LatAm
+        { ddi: '598', key: 'es-AR' }, // Uruguai -> Rioplatense
+        { ddi: '1', key: 'en-US' },   // EUA / Canadá
+        { ddi: '34', key: 'es-419' }, // Espanha
+        { ddi: '351', key: 'pt-BR' }  // Portugal
+      ];
+
+      // Sort by longest DDI first so 591 matches before 59
+      ddiMap.sort((a, b) => b.ddi.length - a.ddi.length);
+
+      for (const item of ddiMap) {
+        if (phone.startsWith(item.ddi)) {
+          const regional = regionalVoices[item.key];
+          if (regional && regional.voiceId && regional.voiceId.trim()) {
+            return {
+              voiceId: regional.voiceId.trim(),
+              country: regional.country,
+              language: regional.language,
+              key: item.key,
+              reason: `DDI +${item.ddi} detectado no WhatsApp (${phone})`
+            };
+          }
+          // If country-specific voice is blank, check if it's Spanish and fallback to es-419 (LatAm Geral)
+          if (item.key.startsWith('es-') && regionalVoices['es-419']?.voiceId?.trim()) {
+            return {
+              voiceId: regionalVoices['es-419'].voiceId.trim(),
+              country: regionalVoices['es-419'].country,
+              language: regionalVoices['es-419'].language,
+              key: 'es-419',
+              reason: `DDI +${item.ddi} (hispano) -> Fallback para LatAm Geral (es-419)`
+            };
+          }
+        }
+      }
+    }
+
+    // 4. Resolve by Target Country (configured in product or lead)
+    const targetCountry = context.targetCountry || settings.product?.targetCountry;
+    if (targetCountry) {
+      const countryMap = {
+        'Brasil': 'pt-BR',
+        'México': 'es-MX',
+        'Mexico': 'es-MX',
+        'Colômbia': 'es-CO',
+        'Colombia': 'es-CO',
+        'Argentina': 'es-AR',
+        'Bolívia': 'es-BO',
+        'Bolivia': 'es-BO',
+        'Paraguai': 'es-PY',
+        'Paraguay': 'es-PY',
+        'Peru': 'es-PE',
+        'Perú': 'es-PE',
+        'Chile': 'es-CL',
+        'LatAm': 'es-419',
+        'Global': 'en-US'
+      };
+
+      const key = countryMap[targetCountry];
+      if (key && regionalVoices[key]?.voiceId?.trim()) {
+        return {
+          voiceId: regionalVoices[key].voiceId.trim(),
+          country: regionalVoices[key].country,
+          language: regionalVoices[key].language,
+          key,
+          reason: `País alvo da oferta configurado: ${targetCountry}`
+        };
+      }
+    }
+
+    // 5. Automatic Language & Dialect Detection from Speech Text
+    if (text) {
+      const lower = text.toLowerCase();
+      const spanishMatches = (lower.match(/\b(hola|cómo|gracias|bueno|material|actividades|para|estás|dinero|cuenta|pago|claro|saludo|hijo|niño|pequeño|semana)\b/g) || []).length;
+      const ptMatches = (lower.match(/\b(olá|opa|tudo bem|obrigado|obrigada|você|criança|filho|atividades|estudo|semana|gente|pra|pro|focar)\b/g) || []).length;
+      const enMatches = (lower.match(/\b(hello|hi|thanks|thank you|kids|welcome|great|activities|learning)\b/g) || []).length;
+
+      if (enMatches > spanishMatches && enMatches > ptMatches && regionalVoices['en-US']?.voiceId?.trim()) {
+        return {
+          voiceId: regionalVoices['en-US'].voiceId.trim(),
+          country: regionalVoices['en-US'].country,
+          language: regionalVoices['en-US'].language,
+          key: 'en-US',
+          reason: 'Idioma inglês detectado pelo vocabulário da fala'
+        };
+      }
+
+      if (spanishMatches > ptMatches) {
+        if (/\b(ahorita|órale|chido|padre|platicar|spei)\b/.test(lower) && regionalVoices['es-MX']?.voiceId?.trim()) {
+          return {
+            voiceId: regionalVoices['es-MX'].voiceId.trim(),
+            country: regionalVoices['es-MX'].country,
+            language: regionalVoices['es-MX'].language,
+            key: 'es-MX',
+            reason: 'Dialeto mexicano detectado pelo vocabulário'
+          };
+        }
+        if (/\b(nequi|bre-b|chévere|parce|con gusto)\b/.test(lower) && regionalVoices['es-CO']?.voiceId?.trim()) {
+          return {
+            voiceId: regionalVoices['es-CO'].voiceId.trim(),
+            country: regionalVoices['es-CO'].country,
+            language: regionalVoices['es-CO'].language,
+            key: 'es-CO',
+            reason: 'Dialeto colombiano detectado pelo vocabulário'
+          };
+        }
+        if (/\b(che|vos|tenés|podés|alias)\b/.test(lower) && regionalVoices['es-AR']?.voiceId?.trim()) {
+          return {
+            voiceId: regionalVoices['es-AR'].voiceId.trim(),
+            country: regionalVoices['es-AR'].country,
+            language: regionalVoices['es-AR'].language,
+            key: 'es-AR',
+            reason: 'Dialeto argentino detectado pelo vocabulário'
+          };
+        }
+        if (regionalVoices['es-419']?.voiceId?.trim()) {
+          return {
+            voiceId: regionalVoices['es-419'].voiceId.trim(),
+            country: regionalVoices['es-419'].country,
+            language: regionalVoices['es-419'].language,
+            key: 'es-419',
+            reason: 'Espanhol detectado pelo vocabulário -> LatAm Geral (es-419)'
+          };
+        }
+      }
+
+      if (ptMatches > 0 && regionalVoices['pt-BR']?.voiceId?.trim()) {
+        return {
+          voiceId: regionalVoices['pt-BR'].voiceId.trim(),
+          country: regionalVoices['pt-BR'].country,
+          language: regionalVoices['pt-BR'].language,
+          key: 'pt-BR',
+          reason: 'Português do Brasil detectado pelo vocabulário'
+        };
+      }
+    }
+
+    // 6. Global Fallback Voice
+    return {
+      voiceId: defaultVoiceId,
+      country: 'Padrão Geral',
+      language: 'Fallback',
+      key: 'default',
+      reason: 'Voz padrão geral configurada'
+    };
+  }
+
+  // Generate speech audio from text using OpenRouter (fish-audio/s2.1-pro-free:free)
+  async generateSpeech(text, customModel = null, customVoiceId = null, leadContext = null) {
+    const settings = storage.getSettings();
+    const config = settings.fishAudio || {};
     const apiKey = config.apiKey || process.env.OPENROUTER_API_KEY || process.env.FISH_AUDIO_API_KEY;
     const model = customModel || config.model || 'fish-audio/s2.1-pro-free:free';
-    const voiceId = customVoiceId || product.voiceAccentId || config.voiceId || process.env.FISH_AUDIO_VOICE_ID || '7f92f8afb8ec43bf81429cc1c9199cb1';
+
+    // Normalize context object
+    const contextObj = typeof leadContext === 'string'
+      ? { phone: leadContext, text, customVoiceId }
+      : { ...(leadContext || {}), text, customVoiceId };
+
+    const resolved = this.resolveVoice(contextObj);
+    const voiceId = resolved.voiceId;
+
+    console.log(`[Fish Audio AI] Voz selecionada: ${resolved.country} (${resolved.language}) -> ID: ${voiceId} [${resolved.reason}]`);
 
     if (!text || text.trim().length === 0) {
       throw new Error('Texto para conversão em áudio não fornecido.');
@@ -194,7 +420,11 @@ class FishAudioService {
           filename: path.basename(finalOggPath),
           provider: 'openrouter',
           model,
-          voiceId: voiceId.trim()
+          voiceId: voiceId.trim(),
+          detectedCountry: resolved.country,
+          detectedLanguage: resolved.language,
+          resolutionReason: resolved.reason,
+          regionalKey: resolved.key
         };
       } catch (openRouterErr) {
         const errMsg = openRouterErr.response?.data?.toString() || openRouterErr.message;

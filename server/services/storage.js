@@ -68,7 +68,99 @@ const DEFAULT_STATE = {
       voiceId: process.env.FISH_AUDIO_VOICE_ID || '7f92f8afb8ec43bf81429cc1c9199cb1',
       enabled: true,
       autoAudioMode: 'hybrid_high_conversion',
-      speed: 0.85
+      speed: 0.85,
+      regionalVoices: {
+        'pt-BR': {
+          country: 'Brasil',
+          language: 'Português (Brasil)',
+          flag: '🇧🇷',
+          ddi: '55',
+          voiceId: '7f92f8afb8ec43bf81429cc1c9199cb1',
+          sampleText: 'Oi, tudo bem? Aqui é do time de atendimento, tô passando pra te mandar as atividades!',
+          description: 'Voz brasileira nativa, tom acolhedor e consultivo.'
+        },
+        'es-MX': {
+          country: 'México',
+          language: 'Español (México)',
+          flag: '🇲🇽',
+          ddi: '52',
+          voiceId: '',
+          sampleText: '¡Hola! ¿Cómo estás? Te comparto con mucho gusto el material completo para que lo revises.',
+          description: 'Acento mexicano nativo, entonación cálida y cercana.'
+        },
+        'es-CO': {
+          country: 'Colômbia',
+          language: 'Español (Colombia)',
+          flag: '🇨🇴',
+          ddi: '57',
+          voiceId: '',
+          sampleText: '¡Hola! Qué gusto saludarte. Con todo gusto te comparto el material para que empiecen hoy mismo.',
+          description: 'Acento colombiano suave, amable y respetuoso.'
+        },
+        'es-AR': {
+          country: 'Argentina',
+          language: 'Español (Argentina)',
+          flag: '🇦🇷',
+          ddi: '54',
+          voiceId: '',
+          sampleText: '¡Hola! ¿Cómo estás? Te paso con mucho gusto el material para que lo veas ahora mismo.',
+          description: 'Acento argentino/porteño, fluido y empático.'
+        },
+        'es-BO': {
+          country: 'Bolívia',
+          language: 'Español (Bolivia)',
+          flag: '🇧🇴',
+          ddi: '591',
+          voiceId: '',
+          sampleText: '¡Hola! Qué alegría saludarte. Te paso toda la información y el material para comenzar.',
+          description: 'Acento boliviano andino/oriental, formal y cálido.'
+        },
+        'es-PY': {
+          country: 'Paraguai',
+          language: 'Español (Paraguay)',
+          flag: '🇵🇾',
+          ddi: '595',
+          voiceId: '',
+          sampleText: '¡Hola! Un gusto saludarte. Te envío los materiales completos para que puedas aprovecharlos.',
+          description: 'Acento paraguayo servicial y cordial.'
+        },
+        'es-PE': {
+          country: 'Peru',
+          language: 'Español (Perú)',
+          flag: '🇵🇪',
+          ddi: '51',
+          voiceId: '',
+          sampleText: '¡Hola! Qué gusto saludarte. Te comparto las actividades completas para comenzar.',
+          description: 'Español peruano neutro, claro y confiable.'
+        },
+        'es-CL': {
+          country: 'Chile',
+          language: 'Español (Chile)',
+          flag: '🇨🇱',
+          ddi: '56',
+          voiceId: '',
+          sampleText: '¡Hola! ¿Cómo estás? Te comparto altiro el material para que lo puedas revisar.',
+          description: 'Español chileno dinámico y cercano.'
+        },
+        'es-419': {
+          country: 'LatAm Geral (Neutro)',
+          language: 'Español Neutro (Latinoamérica)',
+          flag: '🌎',
+          ddi: '',
+          voiceId: '',
+          sampleText: '¡Hola! Un gran saludo. Te comparto el material completo con todo cariño para ti.',
+          description: 'Español neutro latinoamericano universal para cualquier país hispano.'
+        },
+        'en-US': {
+          country: 'Estados Unidos / Global',
+          language: 'English (US)',
+          flag: '🇺🇸',
+          ddi: '1',
+          voiceId: '',
+          sampleText: 'Hi there! Great to connect with you. Here are the complete activities for you to get started.',
+          description: 'Native English speaker, friendly and engaging tone.'
+        }
+      }
     },
     antiBan: {
       minThinkingDelay: 1800, // 1.8s
@@ -234,6 +326,9 @@ class StorageService {
           if (!this.data.settings.fishAudio.apiKey && process.env.OPENROUTER_API_KEY) {
             this.data.settings.fishAudio.apiKey = process.env.OPENROUTER_API_KEY;
           }
+          if (!this.data.settings.fishAudio.regionalVoices) {
+            this.data.settings.fishAudio.regionalVoices = { ...DEFAULT_STATE.settings.fishAudio.regionalVoices };
+          }
           if (!this.data.settings.transcription?.apiKey && process.env.GROQ_API_KEY) {
             if (!this.data.settings.transcription) {
               this.data.settings.transcription = { ...DEFAULT_STATE.settings.transcription };
@@ -295,8 +390,7 @@ class StorageService {
       if (fs.existsSync(STORE_FILE)) {
         const raw = fs.readFileSync(STORE_FILE, 'utf-8');
         const parsed = JSON.parse(raw);
-        // Deep merge with DEFAULT_STATE to guarantee all properties exist
-        return {
+        const loaded = {
           ...DEFAULT_STATE,
           ...parsed,
           settings: {
@@ -306,6 +400,10 @@ class StorageService {
             fishAudio: {
               ...DEFAULT_STATE.settings.fishAudio,
               ...(parsed.settings?.fishAudio || {}),
+              regionalVoices: {
+                ...DEFAULT_STATE.settings.fishAudio.regionalVoices,
+                ...(parsed.settings?.fishAudio?.regionalVoices || {})
+              },
               speed: (parsed.settings?.fishAudio?.speed && parsed.settings?.fishAudio?.speed < 1.0)
                 ? parsed.settings.fishAudio.speed
                 : 0.85
@@ -377,7 +475,15 @@ class StorageService {
       this.data.settings.ai = { ...this.data.settings.ai, ...partialSettings.ai };
     }
     if (partialSettings.fishAudio) {
-      this.data.settings.fishAudio = { ...this.data.settings.fishAudio, ...partialSettings.fishAudio };
+      const existingRegional = this.data.settings.fishAudio?.regionalVoices || DEFAULT_STATE.settings.fishAudio.regionalVoices;
+      const updatedRegional = partialSettings.fishAudio.regionalVoices
+        ? { ...existingRegional, ...partialSettings.fishAudio.regionalVoices }
+        : existingRegional;
+      this.data.settings.fishAudio = {
+        ...this.data.settings.fishAudio,
+        ...partialSettings.fishAudio,
+        regionalVoices: updatedRegional
+      };
     }
     if (partialSettings.transcription) {
       this.data.settings.transcription = { ...this.data.settings.transcription, ...partialSettings.transcription };

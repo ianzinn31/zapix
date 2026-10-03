@@ -553,9 +553,9 @@ class WhatsAppService {
           .trim();
 
         if (audioSpeechText && audioSpeechText.length > 0 && !signal.aborted) {
-          // Generate audio via Fish Audio TTS
+          // Generate audio via Fish Audio TTS with automatic AI regional voice resolution
           try {
-            const generatedAudio = await fishAudio.generateSpeech(audioSpeechText);
+            const generatedAudio = await fishAudio.generateSpeech(audioSpeechText, null, null, { phone, jid, text: audioSpeechText });
             if (signal.aborted) return;
 
             // Anti-ban: Simulate human recording voice note
@@ -1027,7 +1027,7 @@ class WhatsAppService {
       if (fishSettings.autoAudio !== false && !signal.aborted) {
         const audioScript = `Oi! Conseguiu abrir as atividades? Como você viu, eu te entreguei todo o material completo de coração aberto antes mesmo de qualquer coisa, porque eu confio em você e sei o quanto vai fazer a diferença! Para nos ajudar a manter esse projeto lindo e atualizado, a gente pede uma contribuição simbólica de apenas ${Math.round(Number(product.price || 15))} reais. Se puder fazer agora, me ajuda demais! Um beijo carinhoso!`;
         try {
-          const generatedAudio = await fishAudio.generateSpeech(audioScript);
+          const generatedAudio = await fishAudio.generateSpeech(audioScript, null, null, { phone, jid: targetJid, text: audioScript });
           if (!signal.aborted && this.status === 'connected' && this.sock) {
             const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
             await antiBan.sleep(thinkingDelay, signal);
@@ -1348,7 +1348,7 @@ class WhatsAppService {
 
     if (manualSpeechText && manualSpeechText.length > 0) {
       const speechText = manualSpeechText;
-      const generatedAudio = await fishAudio.generateSpeech(speechText);
+      const generatedAudio = await fishAudio.generateSpeech(speechText, null, null, { phone, jid, text: speechText });
       const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
       const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
 
@@ -1494,7 +1494,7 @@ class WhatsAppService {
       throw new Error(`JID inválido para o contato: ${phone}`);
     }
 
-    const generatedAudio = await fishAudio.generateSpeech(speechText);
+    const generatedAudio = await fishAudio.generateSpeech(speechText, null, null, { phone, jid, text: speechText });
     const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
     
     await antiBan.sleep(thinkingDelay);

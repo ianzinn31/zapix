@@ -495,11 +495,11 @@ export default function App() {
   };
 
   // Fish Audio test synthesizer
-  const handleTestAudio = async (text, voiceId, model) => {
+  const handleTestAudio = async (text, voiceId, model, options = {}) => {
     const res = await fetch('/api/fish-audio/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voiceId, model })
+      body: JSON.stringify({ text, voiceId, model, ...options })
     });
     if (!res.ok) {
       const errData = await res.json();

@@ -339,13 +339,13 @@ router.delete('/logs', (req, res) => {
 
 // === Fish Audio Test Synthesis ===
 router.post('/fish-audio/test', async (req, res) => {
-  const { text, voiceId, model } = req.body;
+  const { text, voiceId, model, country, phone, regionalKey } = req.body;
   if (!text) {
     return res.status(400).json({ error: 'Texto obrigatório' });
   }
 
   try {
-    const result = await fishAudio.generateSpeech(text, model, voiceId);
+    const result = await fishAudio.generateSpeech(text, model, voiceId, { targetCountry: country, phone, regionalKey });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
