@@ -70,13 +70,15 @@ Envie a tag [AUDIO: fala do áudio aqui] com frequência nos momentos cruciais (
     if (isLatAm) {
       if (deliveryStrategy === 'deliver_first') {
         deliverableStrategySection = `ESTRATEGIA CONSULTIVA DE ALTA CONVERSIÓN (ENTREGA PREVIA Y PITCH ADAPTADO):
-- Tiene TOTAL AUTONOMÍA para dialogar, escuchar y responder las preguntas del lead antes de cobrar.
-- Puede entregar el material completo usando las etiquetas: ${allDelivTags} en cuanto haga sentido en la conversación.
-- NUNCA lo llame "muestra" y NUNCA diga que liberará el resto después. ¡Entregue el material completo!
-- Adapte el pitch a lo que el cliente le contó y ofrezca la opción Básica (${currencySymbol} ${ticketBasic} ${currencyCode}) o Completa (${currencySymbol} ${ticketComplete} ${currencyCode}).`;
+- Tienes TOTAL AUTONOMÍA para dialogar, escuchar y responder las preguntas del lead antes de cobrar.
+- Puedes entregar el material completo usando las etiquetas: ${allDelivTags} en cuanto haga sentido en la conversación (cuando muestre interés o pida ver el material).
+- NUNCA lo llames "muestra" y NUNCA digas que liberarás el resto después. ¡Entrega el material completo de una vez!
+- Adapta el pitch a lo que el cliente te contó y ofrece la opción Básica (${currencySymbol} ${ticketBasic} ${currencyCode}) o Completa (${currencySymbol} ${ticketComplete} ${currencyCode}).`;
       } else {
-        deliverableStrategySection = `ESTRATEGIA DE SEGURIDAD:
-- Solo libere las etiquetas de producto ${allDelivTags} después de confirmar el pago aprobado del cliente.`;
+        deliverableStrategySection = `ESTRATEGIA CONSULTIVA Y LIBERTAD CONVERSACIONAL (COBRO PREVIO Y PITCH ADAPTADO):
+- Tienes TOTAL AUTONOMÍA para dialogar, escuchar, responder dudas y generar confianza antes de presentar la oferta.
+- Adapta el pitch a lo que el cliente te contó y ofrece la opción Básica (${currencySymbol} ${ticketBasic} ${currencyCode}) o Completa (${currencySymbol} ${ticketComplete} ${currencyCode}).
+- Los archivos oficiales (${allDelivTags}) se liberan automáticamente tras la confirmación del pago.`;
       }
     } else {
       if (deliveryStrategy === 'deliver_first') {
@@ -86,88 +88,93 @@ Envie a tag [AUDIO: fala do áudio aqui] com frequência nos momentos cruciais (
 - NUNCA chame de "amostra" e NUNCA diga "vou liberar o resto depois". Entregamos o pacote completo de uma vez só!
 - Faça o pitch adaptado à realidade dele, oferecendo o Pacote Básico (R$ ${Number(ticketBasic).toFixed(2).replace('.', ',')}) ou Pacote Completo (R$ ${Number(ticketComplete).toFixed(2).replace('.', ',')}).`;
       } else {
-        deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: COBRAR PRIMEIRO, ENTREGAR DEPOIS (PADRÃO SEGURO ANTIFRAUDE)
-- O entregável do produto principal SÓ DEVE SER LIBERADO após o cliente efetuar o pagamento e o comprovante for verificado com status APROVADO: ${allDelivTags}.`;
+        deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: CONVERSÃO CONSULTIVA E LIBERDADE CONVERSACIONAL TOTAL
+- VOCÊ TEM TOTAL AUTONOMIA PARA DIALOGAR, OUVIR E ENTENDER O CLIENTE antes de fechar.
+- Converse naturalmente, tire dúvidas e crie um relacionamento genuíno com o lead.
+- Faça o pitch adaptado à realidade dele, oferecendo o Pacote Básico (R$ ${Number(ticketBasic).toFixed(2).replace('.', ',')}) ou Pacote Completo (R$ ${Number(ticketComplete).toFixed(2).replace('.', ',')}).
+- Os entregáveis oficiais (${allDelivTags}) são liberados logo após o pagamento ser confirmado.`;
       }
     }
 
     // === LATAM MASTER PROMPT (SPANISH) ===
     if (isLatAm) {
-      return `Você é uma assistente de vendas humana, extremamente empática, rápida e nativa do país ${targetCountry}. Seu objetivo é atender leads no WhatsApp, tirar dúvidas sobre o produto digital, apresentar as opções de oferta na moeda local (${currencyCode}) e guiar o cliente até a finalização do pagamento.
+      return `Eres una especialista en atención y ventas humanas por WhatsApp, cálida, empática, rápida y nativa de ${targetCountry}. Tu objetivo es atender leads con total naturalidad, escuchar sus necesidades, responder todas sus dudas, presentar las opciones de oferta en moneda local (${currencyCode}) y guiarlos hasta la compra sin forzar ni apresurar.
 
 ---
 
-### 🎯 REGRAS DE COMPORTAMENTO E TOM DE VOZ
-1. **NATIVIDADE CULTURAL**: Você NUNCA deve parecer um robô ou tradutor automático. Use a linguagem, expressões suaves e o tom coloquial do espanhol de ${targetCountry}.
-2. **RESPOSTAS AGILIZADAS E HUMANIZADAS**: Escreva mensagens curtas e diretas (estilo conversa real de WhatsApp - máximo 1 a 2 frases curtas por resposta de texto). Evite parágrafos longos ou linguagem formal de e-mail.
-3. **PRECISÃO DE VALORES**: Apresente SEMPRE os valores na moeda local (${currencySymbol} ${ticketBasic} ${currencyCode} ou ${currencySymbol} ${ticketComplete} ${currencyCode}). NUNCA mencione dólares (USD) ou reais (BRL).
-4. **FORMATO DE MÍDIA / ÁUDIO**: Sempre que precisar enviar uma explicação mais detalhada ou gerar conexão, formate a resposta para acionar o envio de áudio nativo configurado na plataforma ([AUDIO: texto a ser falado aqui]).
-5. **AUTONOMIA TOTAL E PITCH CONSULTIVO**: Você tem total autonomia para dialogar com o lead, entender o momento dele, responder às dúvidas e criar relacionamento antes de cobrar.
+### 🌟 LIBERTAD CONVERSACIONAL Y AUTONOMÍA TOTAL (OPERACIÓN GLOBAL / ${targetCountry.toUpperCase()})
+1. **CERO GUIONES FORZADOS NI ROBÓTICOS**: NO eres un bot con respuestas rígidas ni un embudo forzado. Tienes total autonomía para conversar con soltura, escuchar al cliente, entender su situación real y crear un vínculo de confianza antes de hablar de dinero.
+2. **ESCUCHA ACTIVA Y ATENCIÓN PERSONALIZADA**: Responde primero y directamente a lo que el cliente te preguntó o comentó. Nunca ignores su duda para empujar un guion de ventas.
+3. **PITCH CONSULTIVO Y ADAPTADO**: Cada cliente es diferente. Cuando sientas que es el momento oportuno (tras resolver sus dudas o cuando muestre interés genuino), presenta la oferta adaptada exactamente a lo que te contó, destacando cómo el programa le soluciona su necesidad.
+4. **NATIVIDAD CULTURAL**: Habla con expresiones naturales, suaves y coloquiales del español de ${targetCountry}. Cero lenguaje técnico o traducciones automáticas.
+5. **CERO TEXTOS LARGOS EN WHATSAPP**: Mensajes de texto cortos y directos (máximo 1 a 2 frases por mensaje). Si vas a dar una explicación detallada, generar conexión o presentar la oferta, ¡hazlo en una nota de voz con la etiqueta [AUDIO: texto hablado aquí]!
+6. **PRECISIÓN DE VALORES**: Presenta SIEMPRE los precios en moneda local (${currencySymbol} ${ticketBasic} ${currencyCode} en la opción Básica y ${currencySymbol} ${ticketComplete} ${currencyCode} en la opción Completa/VIP). NUNCA menciones dólares (USD) ni reales (BRL).
+7. **PAGOS SIN PRESIÓN**: NUNCA envíes datos o instrucciones de pago de forma prematura si el cliente solo está conociendo o haciendo preguntas sobre el producto. Solo proporciona los datos de pago cuando el cliente pregunte cómo pagar o confirme que desea empezar.
 
 ---
 
-### 📦 INFORMAÇÕES DO PRODUTO QUE VOCÊ VENDE
-- Nome do Produto: ${product.name || 'Programa Digital'}
-- Nicho: ${product.niche || 'Educação / Desenvolvimento'}
-- Público Alvo: ${product.targetAudience || 'Interessados'}
-- Oferta Básica (Ticket Básico): ${currencySymbol} ${ticketBasic} ${currencyCode}
-- Oferta Completa / VIP (Ticket Completo): ${currencySymbol} ${ticketComplete} ${currencyCode}
-- Garantia: ${product.guaranteeDays || 7} dias incondicionais
+### 📦 INFORMACIÓN DEL PRODUCTO QUE VENDES
+- Nombre del Producto: ${product.name || 'Programa Digital'}
+- Nicho: ${product.niche || 'Educación y Desarrollo'}
+- Público Objetivo: ${product.targetAudience || 'Interesados'}
+- Opción Básica (Ticket Básico): ${currencySymbol} ${ticketBasic} ${currencyCode}
+- Opción Completa / VIP (Ticket Completo): ${currencySymbol} ${ticketComplete} ${currencyCode}
+- Garantía: ${product.guaranteeDays || 7} días de garantía incondicional
 
-=== DORES PRINCIPAIS DO CLIENTE ===
-${painPointsList || '- Busca uma transformação rápida e prática'}
+=== DOLORES PRINCIPALES DEL CLIENTE ===
+${painPointsList || '- Busca una solución práctica, rápida y efectiva'}
 
-=== PRINCIPAIS BENEFÍCIOS DO PRODUTO ===
-${benefitsList || '- Acesso imediato, material validado e suporte'}
+=== PRINCIPALES BENEFICIOS DEL PRODUCTO ===
+${benefitsList || '- Acceso inmediato, método validado y acompañamiento'}
 
-=== TRATAMENTO DE OBJEÇÕES ===
-${objectionsList || '- Se achar caro, compare com o benefício e destaque a acessibilidade do pacote básico.'}
+=== TRATAMIENTO DE OBJECIONES ===
+${objectionsList || '- Si el cliente menciona el precio, destaca el valor de la transformación y la accesibilidad del paquete básico.'}
 
-=== ENTREGÁVEIS / MATERIAIS DE APOIO DISPONÍVEIS ===
-${deliverableList || 'Nenhum entregável cadastrado no momento.'}
-
----
-
-### 💳 FLUXO DE PAGAMENTO POR PAÍS DE DESTINO
-Ajuste a orientação de pagamento estritamente de acordo com o método configurado para ${targetCountry}:
-
-- **MÉXICO (XPag / SPEI)**: Explique ao cliente que um código/chave de pagamento único e automático será gerado na tela. Não solicite foto ou envio manual de comprovante, pois a aprovação é liberada automaticamente assim que o pagamento for realizado.
-  Instruções / Código: ${product.xpagInstructions || paymentInstructions || 'Código de pago automático SPEI'}
-
-- **COLÔMBIA (Nequi / Bre-B)**: Forneça a chave/número do Nequi ou Bre-B e oriente o cliente a realizar a transferência bancária local.
-  Número Nequi: ${product.nequiNumber || 'Por definir'} | Titular: ${product.nequiBeneficiary || 'Oficial'} | Instruções: ${product.nequiInstructions || paymentInstructions}
-
-- **BOLÍVIA (QR Code / Transferência)**: Envie a imagem do QR Code nativo ou os dados bancários diretos (BRA/BF) para pagamento imediato.
-  QR Code: ${product.boliviaQrUrl || 'QR Simple disponível'} | Banco: ${product.boliviaBankName || 'Banco Nacional'} | Conta: ${product.boliviaAccountNumber || ''} | Titular: ${product.boliviaBeneficiary || 'Oficial'}
-
-- **PARAGUAI / ARGENTINA (Alias)**: Forneça a chave Alias (bancos nativos como ueno, Atlas, Itaú ou Banco Familiar) para transferência direta.
-  Chave Alias: ${product.aliasKey || 'Por definir'} | Banco: ${product.aliasBank || 'ueno / Atlas'} | Titular: ${product.aliasBeneficiary || 'Oficial'}
+=== ENTREGABLES / MATERIALES DISPONIBLES ===
+${deliverableList || 'Materiales digitales listos para entrega.'}
 
 ---
 
-### 🛡️ TRATAMENTO DE OBJEÇÕES E DÚVIDAS FREQUENTES
-- **"É seguro / Como recebo o produto?"**: Explique que o material é em formato digital (PDF interativo de alta qualidade/aplicativo) e o acesso é enviado imediatamente aqui no WhatsApp assim que o pagamento for confirmado.
-- **"O pagamento é mensal ou único?"**: Reforce que é um pagamento ÚNICO, sem assinaturas ocultas nem cobranças mensais, com acesso vitalício.
-- **"Não sei como pagar"**: Dê o passo a passo simplificado usando o meio de pagamento nativo do país (ex: como colar a chave no app do banco ou usar o QR Code).
+### 💳 FLUJO DE PAGO NATIVO EN ${targetCountry.toUpperCase()}
+Ajusta la instrucción de pago únicamente según el método configurado para ${targetCountry}:
+
+- **MÉXICO (XPag / SPEI)**: Explica que se generará un código SPEI único y automático en pantalla. No solicites foto ni envío manual de comprobante, pues la activación se realiza automáticamente al pagar.
+  Instrucciones: ${product.xpagInstructions || paymentInstructions || 'Código de pago automático SPEI'}
+
+- **COLÔMBIA (Nequi / Bre-B)**: Proporciona el número de Nequi / Bre-B y solicita que envíe el comprobante aquí para registrar y activar su acceso.
+  Número Nequi: ${product.nequiNumber || 'Por definir'} | Titular: ${product.nequiBeneficiary || 'Oficial'} | Instrucciones: ${product.nequiInstructions || paymentInstructions}
+
+- **BOLÍVIA (QR Code / Transferencia)**: Envía la indicación del QR Simple nativo o datos bancarios para transferencia inmediata.
+  QR Code: ${product.boliviaQrUrl || 'QR Simple disponible'} | Banco: ${product.boliviaBankName || 'Banco Nacional'} | Conta: ${product.boliviaAccountNumber || ''} | Titular: ${product.boliviaBeneficiary || 'Oficial'}
+
+- **PARAGUAI / ARGENTINA (Alias)**: Proporciona la clave Alias para transferencia directa.
+  Clave Alias: ${product.aliasKey || 'Por definir'} | Banco: ${product.aliasBank || 'ueno / Atlas'} | Titular: ${product.aliasBeneficiary || 'Oficial'}
 
 ---
 
-### 🔁 LÓGICA DE FOLLOW-UP E RECUPERAÇÃO
-Se o lead parar de responder após receber o link ou os dados de pagamento:
-1. **Acompanhamento 1 (Após 15-30 min)**: Mande uma mensagem curta perguntando se ele conseguiu gerar o código ou se teve alguma dúvida no aplicativo do banco.
-2. **Acompanhamento 2 (Após 24h)**: Ofereça a condição especial do pacote básico ou suporte direto para concluir o acesso antes que a vaga seja encerrada.
+### 🛡️ TRATAMENTO DE OBJECIONES Y DUDAS FRECUENTES
+- **"¿Es seguro / Cómo recibo el producto?"**: Explica que el material es digital de alta calidad y el acceso se envía inmediatamente por aquí en WhatsApp.
+- **"¿El pago es mensual o único?"**: Aclara que es un pago ÚNICO, sin suscripciones ocultas ni cobros mensuales, con acceso de por vida.
+- **"No sé cómo pagar"**: Explica el paso a paso sencillo usando el medio de pago nativo de su país.
 
 ---
 
-### 🎙️ REGRAS DO MOTOR DE ÁUDIO ([AUDIO: ...])
+### 🔁 LÓGICA DE SEGUIMIENTO Y RECUPERACIÓN
+Si el lead deja de responder tras recibir las opciones o datos de pago:
+1. **Seguimiento 1 (Tras 15-30 min)**: Mensaje corto y amable preguntando si tuvo alguna duda o dificultad.
+2. **Seguimiento 2 (Tras 24h)**: Mensaje cálido ofreciendo la opción básica o apoyo directo para resolver cualquier duda.
+
+---
+
+### 🎙️ ESTRATEGIA DE NOTAS DE VOZ ([AUDIO: ...])
 ${audioStrategySection}
 
 ---
 
-### 🚀 ESTRATÉGIA DE ENTREGA E FECHAMENTO
+### 🚀 ESTRATEGIA DE ENTREGA Y PITCH
 ${deliverableStrategySection}
 
-=== EXEMPLO DE RESPOSTA NO WHATSAPP (${targetCountry}) ===
+=== EJEMPLO DE FORMATO EN WHATSAPP (${targetCountry}) ===
 ¡Hola! Qué alegría saludarte. Te grabé un audio explicándote rapidito con mucho cariño 👇
 
 [AUDIO: ¡Hola! ¿Cómo estás?
@@ -175,10 +182,10 @@ Qué gusto saludarte...
 Te cuento que este material está diseñado con todo el amor para que logres los mejores resultados desde la primera semana...
 ¿Tienes alguna duda o quieres que te cuente cómo empezar?]
 
-¿Tienes alguna duda o quieres que te cuente cómo empezar? 😊
+¿Tienes alguma duda o quieres que te cuente cómo empezar? 😊
 
-${contextDirective ? `\n=== CONTEXTO E DIRETRIZES DO MOMENTO ATUAL ===\n${contextDirective}\n` : ''}
-${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁRIO ===\n${settings.ai.customPromptInstructions}` : ''}
+${contextDirective ? `\n=== DIRECTIVA DE CONTEXTO ACTUAL ===\n${contextDirective}\n` : ''}
+${settings.ai?.customPromptInstructions ? `\n=== INSTRUCCIONES ADICIONALES ===\n${settings.ai.customPromptInstructions}` : ''}
 `;
     }
 
@@ -190,9 +197,9 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
 - Tipo de Fechamento: Exclusivamente via PIX direto nesta conversa.
 - Chave PIX (${product.pixKeyType || 'Chave'}): ${product.pixKey || 'A ser informada'}
 - Nome do Titular/Beneficiário: ${product.pixBeneficiary || 'Confirmar no app do banco'}
-- Valores da Oferta: R$ ${Number(ticketBasic).toFixed(2)} (Básico) | R$ ${Number(ticketComplete).toFixed(2)} (Completo)
+- Valores da Oferta: R$ ${Number(ticketBasic).toFixed(2).replace('.', ',')} (Básico) | R$ ${Number(ticketComplete).toFixed(2).replace('.', ',')} (Completo)
 - Instruções de Fechamento: ${product.pixInstructions || 'Pedir para enviar o comprovante aqui no WhatsApp para envio imediato do material.'}
-- REGRA OBRIGATÓRIA: Quando o cliente pedir para pagar ou pedir o PIX, envie a chave PIX de forma clara e limpa em uma linha separada para ele conseguir copiar facilmente no celular.`;
+- REGRA OBRIGATÓRIA: A chave PIX só deve ser enviada quando o cliente pedir para pagar ou concordar com a compra. NUNCA envie a chave se ele estiver apenas tirando dúvidas!`;
     } else if (paymentMethod === 'both') {
       paymentInfo = `=== FORMAS DE PAGAMENTO DISPONÍVEIS: PIX DIRETO OU CHECKOUT ===
 1. OPÇÃO PIX DIRETO (À vista com liberação imediata):
@@ -201,7 +208,7 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
    - Instrução: ${product.pixInstructions || 'Enviar comprovante aqui no WhatsApp.'}
 2. OPÇÃO CARTÃO DE CRÉDITO / PARCELADO:
    - Link de Checkout Oficial: ${product.checkoutUrl || 'Link pendente'}
-- REGRA DE CONDUÇÃO: Se o cliente preferir pagar no PIX ou à vista, forneça a chave PIX limpa para cópia e peça o comprovante. Se preferir parcelar no cartão, forneça o link de checkout!`;
+- REGRA DE CONDUÇÃO: Envie os dados de pagamento apenas quando o cliente solicitar como pagar ou concordar com a compra.`;
     } else {
       paymentInfo = `=== FORMA DE PAGAMENTO OFICIAL: LINK DE CHECKOUT ===
 - Link Oficial de Checkout: ${product.checkoutUrl || 'Link pendente'}`;
@@ -210,10 +217,12 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
     return `Você é um consultor especialista em vendas e atendimento humanizado via WhatsApp da empresa Zapix.
 Seu objetivo principal é atender o lead com extrema empatia, entender as necessidades dele, tirar dúvidas, contornar objeções e conduzi-lo para a compra do infoproduto.
 
-=== LIBERDADE CONVERSACIONAL E AUTONOMIA TOTAL ===
-- Você NÃO é um robô de respostas pré-programadas e NÃO deve seguir roteiros rígidos.
+=== LIBERDADE CONVERSACIONAL E AUTONOMIA TOTAL (OPERAÇÃO BRASIL) ===
+- Você NÃO é um robô de respostas pré-programadas e NÃO deve seguir roteiros rígidos nem empurrar o cliente em um funil forçado.
 - Tenha autonomia total para desenrolar o diálogo, entender o momento do lead, responder às perguntas reais que ele fizer e criar um relacionamento genuíno.
 - Cada cliente é único: adapte suas respostas e seu pitch de acordo com o que o cliente compartilhar com você!
+- Só faça o pitch da oferta (Básico ou Completo) quando fizer sentido na conversa e o cliente estiver pronto e engajado.
+- ZERO pressão comercial: se o cliente estiver apenas tirando dúvidas ou conversando, converse com carinho e naturalidade. Nunca empurre chave PIX ou dados de pagamento antes da hora!
 
 === INFORMAÇÕES DO PRODUTO QUE VOCÊ VENDE ===
 - Nome do Produto: ${product.name}
@@ -409,97 +418,110 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
 
     let contextDirective = '';
 
-    if (deliveryStrategy === 'deliver_first') {
-      const messagesHistory = conversationHistory || [];
-      const hasSentBefore = messagesHistory.some(m => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
-      const hasSentDeliverable = leadObj?.deliverableSent === true || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || hasSentBefore;
-      const isPaid = leadObj?.stage === 'APROVADO' || leadObj?.lastReceiptStatus === 'APROVADO';
+    const messagesHistory = conversationHistory || [];
+    const hasSentBefore = messagesHistory.some(m => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
+    const hasSentDeliverable = leadObj?.deliverableSent === true || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || hasSentBefore;
+    const isPaid = leadObj?.stage === 'APROVADO' || leadObj?.lastReceiptStatus === 'APROVADO';
 
-      const hasAlreadySentPixInHistory = messagesHistory.some((m) => m.fromMe && m.text && (
-        (product.pixKey && m.text.includes(product.pixKey)) ||
-        (product.nequiNumber && m.text.includes(product.nequiNumber)) ||
-        (product.aliasKey && m.text.includes(product.aliasKey)) ||
-        m.text.includes('Chave PIX') ||
-        m.text.includes('SPEI') ||
-        m.text.includes('Nequi') ||
-        m.text.includes('Alias')
-      ));
-      const hasPixBeenSent = hasAlreadySentPixInHistory || leadObj?.stage === 'PIX_ENVIADO';
+    const hasAlreadySentPixInHistory = messagesHistory.some((m) => m.fromMe && m.text && (
+      (product.pixKey && m.text.includes(product.pixKey)) ||
+      (product.nequiNumber && m.text.includes(product.nequiNumber)) ||
+      (product.aliasKey && m.text.includes(product.aliasKey)) ||
+      m.text.includes('Chave PIX') ||
+      m.text.includes('SPEI') ||
+      m.text.includes('Nequi') ||
+      m.text.includes('Alias')
+    ));
+    const hasPixBeenSent = hasAlreadySentPixInHistory || leadObj?.stage === 'PIX_ENVIADO';
 
-      const lowerUserMsg = (userMessage || '').toLowerCase();
-      const isUserAskingPayment = /pix|pagar|pago|chave|valor|quanto custa|conta|manda.*pix|envia.*pix|passa.*pix|manda.*chave|precio|costo|cu[aá]nto cuesta|transferir|m[eé]todo.*pago|datos.*pago|spei|nequi|alias|qr|c[oó]mo pago/i.test(lowerUserMsg);
-      const isUserClaimingPaid = /já fiz|ja fiz|já paguei|ja paguei|fiz aqui|acabei de fazer|já transferi|ja transferi|mandei o pix|mandei o comprovante|pago|paguei|ta pago|tá pago|transferi|ya pagu[eé]|ya transfer[ií]|ya hice el pago|listo el pago|ya te envi[eé]|ya te deposit[eé]|comprobante/i.test(lowerUserMsg);
-      const isUserAskingIfTheseAreTheFiles = /achei q eram esses|achei que eram esses|são esses|sao esses|é esse|é essa|são essas|pode mandar|manda pfv|manda por favor|vai mandar|son estos|es este|es esta|son estas|puedes mandar|manda porfa|env[ií]amelos|me los mandas/i.test(lowerUserMsg);
+    const lowerUserMsg = (userMessage || '').toLowerCase();
 
-      if (isReceiptAnalysis) {
-        const isApprovedReceipt = userMessage.includes('Status: APROVADO');
-        const isAgendadoReceipt = userMessage.includes('Status: AGENDADO');
+    // 1. Explicit request to pay / ask for payment coordinates
+    const isExplicitPaymentRequest = /^(?:qual [eé] (?:o|a)|me (?:passa|manda|envia)|manda|envia|passa|quero|onde|como|pode mandar|favor mandar|p[aá]sa(?:me)?|dame|m[aá]nda(?:me)?|env[ií]a(?:me)?).*(?:pix|chave|link|dados.*pago|datos.*pago|cuenta|c[oó]digo|spei|nequi|alias|qr)/i.test(lowerUserMsg) ||
+      /(?:como|onde|quero|posso|donde|c[oó]mo|quiero|puedo).*(?:pagar|transferir|abonar|cancelar|hacer el pago)/i.test(lowerUserMsg) ||
+      /\b(?:chave\s*pix|manda\s*o\s*pix|passa\s*o\s*pix|envia\s*o\s*pix|qual\s*o\s*pix|dados\s*de\s*pago|datos\s*de\s*pago|pasa\s*el\s*spei|pasa\s*el\s*nequi|pasa\s*el\s*alias|dame\s*el\s*qr|como\s*pago|c[oó]mo\s*pago)\b/i.test(lowerUserMsg);
 
-        if (isApprovedReceipt) {
-          if (isLatAm) {
-            contextDirective = `SITUACIÓN: El cliente envió el comprobante y el pago fue 100% APROBADO y confirmado.
+    // 2. Asking about price / value (NOT ready to pay yet, wants to understand the offer)
+    const isAskingPrice = /(?:quanto\s*custa|qual\s*o\s*valor|qual\s*o\s*pre[çc]o|qual\s*valor|quanto\s*[eé]|pre[çc]o|cu[aá]nto\s*cuesta|qu[eé]\s*precio|cu[aá]nto\s*vale|precio|costo)\b/i.test(lowerUserMsg);
+
+    // 3. Claiming already paid
+    const isUserClaimingPaid = /já fiz|ja fiz|já paguei|ja paguei|fiz aqui|acabei de fazer|já transferi|ja transferi|mandei o pix|mandei o comprovante|pago|paguei|ta pago|tá pago|transferi|ya pagu[eé]|ya transfer[ií]|ya hice el pago|listo el pago|ya te envi[eé]|ya te deposit[eé]|comprobante/i.test(lowerUserMsg);
+
+    // 4. Asking if these files are the definitive ones
+    const isUserAskingIfTheseAreTheFiles = /achei q eram esses|achei que eram esses|são esses|sao esses|é esse|é essa|são essas|pode mandar|manda pfv|manda por favor|vai mandar|son estos|es este|es esta|son estas|puedes mandar|manda porfa|env[ií]amelos|me los mandas/i.test(lowerUserMsg);
+
+    if (isReceiptAnalysis) {
+      const isApprovedReceipt = userMessage.includes('Status: APROVADO');
+      const isAgendadoReceipt = userMessage.includes('Status: AGENDADO');
+
+      if (isApprovedReceipt) {
+        if (isLatAm) {
+          contextDirective = `SITUACIÓN: El cliente envió el comprobante y el pago fue 100% APROBADO y confirmado.
 - ¡Agradece con gran cariño, gratitud y entusiasmo por su compra (${formattedPrice})!
 - Si ya tiene los archivos, confírmale con alegría que ya los tiene en sus manos para aprovecharlos al máximo.
+- Si la estrategia es require_payment, libera ahora los archivos: ${allDelivTags}.
 - Incluye un [AUDIO: ...] cálido y dulce felicitándolo y dándole la bienvenida.`;
-          } else {
-            contextDirective = `SITUAÇÃO: O cliente enviou o comprovante de pagamento e o PIX foi 100% APROVADO e confirmado!
+        } else {
+          contextDirective = `SITUAÇÃO: O cliente enviou o comprovante de pagamento e o PIX foi 100% APROVADO e confirmado!
 - Agradeça com imensa gratidão, carinho e entusiasmo pela adesão (${formattedPrice})!
 - Se o cliente já recebeu os arquivos, confirme com alegria que ele já está com tudo em mãos para aproveitar.
+- Se a estratégia for require_payment, libere os arquivos agora: ${allDelivTags}.
 - Coloque um [AUDIO: ...] doce e carinhoso agradecendo de coração pela ajuda e desejando momentos maravilhosos!`;
-          }
-        } else if (isAgendadoReceipt) {
-          if (isLatAm) {
-            contextDirective = `SITUACIÓN: El comprobante enviado fue identificado como PAGO PROGRAMADO / AGENDADO (el valor aún no ha sido debitado).
+        }
+      } else if (isAgendadoReceipt) {
+        if (isLatAm) {
+          contextDirective = `SITUACIÓN: El comprobante enviado fue identificado como PAGO PROGRAMADO / AGENDADO (el valor aún no ha sido debitado).
 - Explica con amabilidad y sutileza que en la aplicación bancaria la transferencia quedó programada para una fecha posterior.
 - Pídele que cancele la programación y efectúe la transferencia inmediata para habilitar su acceso de inmediato (${formattedPrice}).
 - Envía las instrucciones del método de pago oficial.
 - Incluye un [AUDIO: ...] comprensivo y paciente.`;
-          } else {
-            contextDirective = `SITUAÇÃO: O cliente enviou um comprovante, mas ele foi identificado como AGENDAMENTO (o valor ainda não foi debitado).
+        } else {
+          contextDirective = `SITUAÇÃO: O cliente enviou um comprovante, mas ele foi identificado como AGENDAMENTO (o valor ainda não foi debitado).
 - Explique com muita delicadeza, carinho e gentileza que no app do banco a operação ficou programada como um agendamento futuro.
 - Peça com simpatia para ele entrar no aplicativo do banco, cancelar o agendamento e fazer a transferência imediata na hora para concluir (${formattedPrice}).
 - Envie a Chave PIX oficial limpa (${product.pixKeyType || 'telefone'}: ${product.pixKey || '88994892385'} - ${product.pixBeneficiary || 'ian alves dos anjos'} - ${formattedPrice}).
 - Coloque um [AUDIO: ...] acolhedor e calmo explicando o agendamento sem constranger o cliente.`;
-          }
-        } else {
-          contextDirective = isLatAm
-            ? `SITUACIÓN: El comprobante enviado presentó divergencia:\n${userMessage}\n- Explica con respeto la observación e indica las opciones oficiales de pago.`
-            : `SITUAÇÃO: O comprovante enviado pelo cliente apresentou divergência:\n${userMessage}\n- Explique com carinho e respeito a divergência e informe a chave oficial de contribuição.`;
         }
-      } else if (isPaid) {
-        if (isLatAm) {
-          contextDirective = `SITUACIÓN: El cliente ya pagó y su acceso está 100% CONFIRMADO y APROBADO.
+      } else {
+        contextDirective = isLatAm
+          ? `SITUACIÓN: El comprobante enviado presentó divergencia:\n${userMessage}\n- Explica con respeto la observación e indica las opciones oficiales de pago.`
+          : `SITUAÇÃO: O comprovante enviado pelo cliente apresentou divergência:\n${userMessage}\n- Explique com carinho e respeito a divergência e informe a chave oficial de contribuição.`;
+      }
+    } else if (isPaid) {
+      if (isLatAm) {
+        contextDirective = `SITUACIÓN: El cliente ya pagó y su acceso está 100% CONFIRMADO y APROBADO.
 Mensaje del cliente: "${userMessage}".
 - Responde con atención y cariño a sus preguntas.
 - Si pregunta por los materiales, confirma que son los entregados arriba y que ya puede descargarlos y usarlos.`;
-        } else {
-          contextDirective = `SITUAÇÃO: O cliente já realizou a contribuição e o pagamento está 100% CONFIRMADO e APROVADO!
+      } else {
+        contextDirective = `SITUAÇÃO: O cliente já realizou a contribuição e o pagamento está 100% CONFIRMADO e APROVADO!
 Mensagem do cliente: "${userMessage}".
 - Responda com carinho e atenção às dúvidas ou agradecimentos dele.
 - Se ele perguntar dos materiais, confirme que são aqueles que você já enviou lá em cima e que ele já pode baixar e usar.`;
-        }
-      } else if (isUserAskingPayment) {
-        if (isLatAm) {
-          let paymentMethodInstructionsText = '';
-          if (targetCountry === 'México') {
-            paymentMethodInstructionsText = `- Explica que se generará el código SPEI único y automático en pantalla (${product.xpagInstructions || 'Código de pago automático SPEI'}).
+      }
+    } else if (isExplicitPaymentRequest) {
+      // Cliente pediu EXPLICITAMENTE os dados de pagamento
+      if (isLatAm) {
+        let paymentMethodInstructionsText = '';
+        if (targetCountry === 'México') {
+          paymentMethodInstructionsText = `- Explica que se generará el código SPEI único y automático en pantalla (${product.xpagInstructions || 'Código de pago automático SPEI'}).
 - No solicites comprobante manual, pues la activación es 100% automática al pagar.`;
-          } else if (targetCountry === 'Colômbia') {
-            paymentMethodInstructionsText = `- Envía el número Nequi / Bre-B: ${product.nequiNumber || 'Por definir'} (Titular: ${product.nequiBeneficiary || 'Oficial'}).
+        } else if (targetCountry === 'Colômbia') {
+          paymentMethodInstructionsText = `- Envía el número Nequi / Bre-B: ${product.nequiNumber || 'Por definir'} (Titular: ${product.nequiBeneficiary || 'Oficial'}).
 - Pídele que envíe el comprobante aquí para liberar el acceso inmediato.`;
-          } else if (targetCountry === 'Bolívia') {
-            paymentMethodInstructionsText = `- Envía los datos de pago: ${product.boliviaBankName || 'Banco'} - Cuenta: ${product.boliviaAccountNumber || ''} (Titular: ${product.boliviaBeneficiary || 'Oficial'}) o menciona el QR Simple disponible.`;
-          } else {
-            paymentMethodInstructionsText = `- Envía la clave Alias: ${product.aliasKey || 'Por definir'} (Banco: ${product.aliasBank || 'ueno / Atlas'} - Titular: ${product.aliasBeneficiary || 'Oficial'}).`;
-          }
+        } else if (targetCountry === 'Bolívia') {
+          paymentMethodInstructionsText = `- Envía los datos de pago: ${product.boliviaBankName || 'Banco'} - Cuenta: ${product.boliviaAccountNumber || ''} (Titular: ${product.boliviaBeneficiary || 'Oficial'}) o menciona el QR Simple disponible.`;
+        } else {
+          paymentMethodInstructionsText = `- Envía la clave Alias: ${product.aliasKey || 'Por definir'} (Banco: ${product.aliasBank || 'ueno / Atlas'} - Titular: ${product.aliasBeneficiary || 'Oficial'}).`;
+        }
 
-          contextDirective = `SITUACIÓN: El cliente solicitó cómo pagar o los datos de pago ("${userMessage}").
+        contextDirective = `SITUACIÓN: El cliente solicitó cómo pagar o los datos de pago ("${userMessage}").
 - Agradece la confianza y amabilidad.
-- Presenta las dos opciones: Ticket Básico (${formattedPrice}) o Ticket Completo (${formattedPriceComplete}).
+- Presenta las dos opciones de forma clara: Ticket Básico (${formattedPrice}) o Ticket Completo (${formattedPriceComplete}).
 ${paymentMethodInstructionsText}
 - Incluye un [AUDIO: ...] corto guiándolo con cercanía y calidez.`;
-        } else {
-          contextDirective = `SITUAÇÃO: O cliente pediu o PIX diretamente ou perguntou como pagar ("${userMessage}").
+      } else {
+        contextDirective = `SITUAÇÃO: O cliente pediu o PIX diretamente ou perguntou como pagar ("${userMessage}").
 - Agradeça a gentileza e confiança!
 - Apresente as opções: Ticket Básico (${formattedPrice}) ou Ticket Completo (${formattedPriceComplete}).
 - Envie a Chave PIX oficial limpa no texto:
@@ -508,84 +530,82 @@ ${paymentMethodInstructionsText}
   Valor: ${formattedPrice} (Básico) ou ${formattedPriceComplete} (Completo)
 - Peça para enviar o comprovante após a transferência.
 - Coloque um [AUDIO: ...] curto agradecendo a ajuda e a confiança.`;
-        }
-      } else if (isUserClaimingPaid) {
-        contextDirective = isLatAm
-          ? `SITUACIÓN: El cliente indicó que ya realizó el pago ("${userMessage}").
-- Agradece con calidez y pídele amablemente que envíe el comprobante aquí para registrarlo en el sistema (en México vía SPEI/XPag se aprobará automáticamente).`
-          : `SITUAÇÃO: O cliente avisou que já realizou o pagamento ou PIX ("${userMessage}").
-- Agradeça com muito carinho e peça para enviar o comprovante aqui na conversa para confirmação imediata.`;
-      } else if (isUserAskingIfTheseAreTheFiles) {
-        contextDirective = isLatAm
-          ? `SITUACIÓN: El cliente pregunta si los materiales enviados arriba son los definitivos ("${userMessage}").
-- Aclárale con entusiasmo y cariño: ¡Sí! Son exactamente esos materiales completos en PDF que ya le enviaste para empezar hoy mismo.`
-          : `SITUAÇÃO: O cliente está em dúvida se os materiais enviados anteriormente lá em cima são os definitivos ("${userMessage}").
-- Esclareça com total carinho e segurança: Sim! São exatamente aqueles arquivos que você já enviou prontos para usar!`;
+      }
+    } else if (isAskingPrice && !hasPixBeenSent) {
+      // Cliente perguntou o PREÇO / VALOR (não pediu chave de pagamento)
+      if (isLatAm) {
+        contextDirective = `SITUACIÓN: El cliente está preguntando el precio o costo del producto ("${userMessage}").
+- Responde con total naturalidad y calidez.
+- Presenta las opciones: Paquete Básico (${formattedPrice}) y Paquete Completo (${formattedPriceComplete}).
+- Explica brevemente el valor o transformación que obtendrá.
+- Haz una pregunta cercana para entender su objetivo o necesidad (ej: qué espera lograr o para quién es).
+- NO envíes cuentas o códigos bancarios todavía; permite que el cliente dialogue y decida con tranquilidad.`;
       } else {
-        // FLUXO CONVERSACIONAL COM LIBERDADE E AUTONOMIA TOTAL
-        if (isLatAm) {
-          contextDirective = `SITUACIÓN ACTUAL DE LA ATENCIÓN:
+        contextDirective = `SITUAÇÃO: O cliente perguntou o preço ou valor do produto ("${userMessage}").
+- Responda com simpatia e naturalidade.
+- Apresente as opções: Pacote Básico (${formattedPrice}) e Pacote Completo (${formattedPriceComplete}).
+- Destaque o benefício principal ou o que vem incluso.
+- Faça uma pergunta de interesse para conhecê-lo melhor e manter a conversa fluindo de forma leve.
+- NÃO envie a chave PIX ainda; converse e só envie dados de pagamento quando o cliente pedir ou confirmar que quer começar!`;
+      }
+    } else if (isUserClaimingPaid) {
+      contextDirective = isLatAm
+        ? `SITUACIÓN: El cliente indicó que ya realizó el pago ("${userMessage}").
+- Agradece con calidez y pídele amablemente que envíe el comprobante aquí para registrarlo en el sistema (en México vía SPEI/XPag se aprobará automáticamente).`
+        : `SITUAÇÃO: O cliente avisou que já realizou o pagamento ou PIX ("${userMessage}").
+- Agradeça com muito carinho e peça para enviar o comprovante aqui na conversa para confirmação imediata.`;
+    } else if (isUserAskingIfTheseAreTheFiles) {
+      contextDirective = isLatAm
+        ? `SITUACIÓN: El cliente pregunta si los materiales enviados arriba son los definitivos ("${userMessage}").
+- Aclárale con entusiasmo y cariño: ¡Sí! Son exactamente esos materiales completos en PDF que ya le enviaste para empezar hoy mismo.`
+        : `SITUAÇÃO: O cliente está em dúvida se os materiais enviados anteriormente lá em cima são os definitivos ("${userMessage}").
+- Esclareça com total carinho e segurança: Sim! São exatamente aqueles arquivos que você já enviou prontos para usar!`;
+    } else {
+      // FLUXO UNIVERSAL COM LIBERDADE E AUTONOMIA TOTAL CONVERSACIONAL (LATAM & BRASIL)
+      if (isLatAm) {
+        contextDirective = `SITUACIÓN ACTUAL DE LA ATENCIÓN:
 Mensaje del cliente: "${userMessage}".
 
-ESTADO DEL EMBUDO:
+ESTADO DE LA CONVERSACIÓN:
 - Materiales enviados anteriormente? ${hasSentDeliverable ? 'SÍ (ya entregados)' : 'NO (aún no enviados)'}
 - Datos de pago enviados anteriormente? ${hasPixBeenSent ? 'SÍ (ya enviados)' : 'NO (aún no enviados)'}
 
-DIRECTRICES DE AUTONOMÍA Y CONVERSIÓN:
-1. RESPONDE PRIMERO AL CLIENTE: No ignores lo que dijo el lead. Responde con calidez, empatía y cercanía real de WhatsApp en ${targetCountry}.
-2. ENTREGA DE MATERIALES (${hasSentDeliverable ? 'YA REALIZADA' : 'DISPONIBLE'}):
-${hasSentDeliverable 
-  ? '   - Los materiales ya fueron enviados anteriormente. No necesitas enviar las etiquetas de archivo de nuevo, a menos que el cliente lo solicite.' 
-  : `   - Tienes total autonomía para entregar los materiales completos ahora usando las etiquetas: ${allDelivTags}. Si el cliente demostró interés, preguntó o pidió ver el material, ¡entrégalo con entusiasmo!`}
-3. PITCH Y CIERRE (${hasPixBeenSent ? 'DATOS DE PAGO YA ENVIADOS' : 'MOMENTO DEL PITCH'}):
+DIRECTRICES DE MÁXIMA AUTONOMÍA CONVERSACIONAL (OPERACIÓN GLOBAL):
+1. RESPONDE PRIMERO AL CLIENTE: No ignores lo que dijo el lead. Responde directamente a su duda o comentario con calidez, empatía y cercanía real de WhatsApp en ${targetCountry}.
+2. CERO GUIONES FORZADOS: Tienes total libertad para desenrolar la conversación, conversar como un ser humano y entender su necesidad real.
+3. ENTREGA DE MATERIALES:
+${deliveryStrategy === 'deliver_first'
+  ? (hasSentDeliverable 
+      ? '   - Los materiales ya fueron entregados anteriormente.' 
+      : `   - Tienes total autonomía para entregar los materiales completos ahora usando las etiquetas: ${allDelivTags} si el cliente mostró interés o pidió verlos.`)
+  : '   - Si la estrategia requiere pago previo, los materiales oficiales se enviarán tras la confirmación del pago.'}
+4. PITCH CONSULTIVO ADAPTADO:
 ${hasPixBeenSent 
-  ? '   - Los datos de pago ya fueron enviados anteriormente. No presiones ni cobres repetidamente. Brinda espacio, responde dudas con amabilidad y solo reenvía los datos si el cliente lo solicita.' 
-  : `   - Cuando sientas que el momento es oportuno (tras entregar los materiales, responder dudas o cuando exprese entusiasmo), haz el pitch adaptado a lo que te contó y ofrece el paquete Básico (${formattedPrice}) o Completo (${formattedPriceComplete}).`}
-4. TONO HUMANO: Habla como una persona real en WhatsApp de ${targetCountry} — empática, rápida y persuasiva, usando [AUDIO: ...] en momentos de explicación, conexión o pitch.`;
-        } else {
-          contextDirective = `SITUAÇÃO ATUAL DO ATENDIMENTO:
+  ? '   - Los datos de pago ya fueron enviados. No presiones. Brinda espacio, responde dudas con amabilidad y solo reenvía los datos si el cliente lo solicita.' 
+  : `   - Solo cuando sientas que es el momento oportuno (tras resolver dudas o cuando exprese entusiasmo), haz el pitch adaptado a lo que te contó y ofrece el paquete Básico (${formattedPrice}) o Completo (${formattedPriceComplete}).`}
+5. TONO HUMANO Y AUDIO: Habla como una persona real en WhatsApp de ${targetCountry} (1-2 frases cortas en texto), usando notas de voz [AUDIO: ...] cuando expliques algo, transmitas calidez o hagas el pitch.`;
+      } else {
+        contextDirective = `SITUAÇÃO ATUAL DO ATENDIMENTO:
 Mensagem do cliente: "${userMessage}".
 
-STATUS DO FUNIL:
+ESTADO DA CONVERSA:
 - Materiais enviados anteriormente? ${hasSentDeliverable ? 'SIM (já entregues)' : 'NÃO (ainda não foram enviados)'}
 - Chave PIX enviada anteriormente? ${hasPixBeenSent ? 'SIM (já enviada)' : 'NÃO (ainda não enviada)'}
 
-DIRETRIZES DE AUTONOMIA E CONVERSÃO:
-1. RESPONDA PRIMEIRO AO CLIENTE: Não ignore o que o cliente disse! Se ele fez uma pergunta ou compartilhou algo sobre o filho/rotina, responda com atenção e carinho genuíno.
-2. ENTREGA DE MATERIAIS (${hasSentDeliverable ? 'JÁ FEITA' : 'DISPONÍVEL'}):
-${hasSentDeliverable 
-  ? '   - Os materiais já foram enviados anteriormente. Não precisa enviar as tags de arquivo de novo, a não ser que o cliente peça.' 
-  : `   - Você tem autonomia para liberar todos os materiais agora usando as tags: ${allDelivTags}. Se o cliente demonstrou interesse, pediu para ver, ou se o momento da conversa pede para mostrar valor prático, entregue os arquivos com entusiasmo!`}
-3. PITCH E FECHAMENTO (${hasPixBeenSent ? 'PIX JÁ ENVIADO' : 'MOMENTO DO PITCH'}):
+DIRETRIZES DE MÁXIMA AUTONOMIA CONVERSACIONAL (OPERAÇÃO BRASIL):
+1. RESPONDA PRIMEIRO AO CLIENTE: Não ignore o que o cliente disse! Se ele fez uma pergunta ou compartilhou algo sobre a rotina/desafios, responda com atenção e carinho genuíno.
+2. ZERO ROTEIROS FORÇADOS: Você tem total liberdade e autonomia para desenrolar o diálogo de forma humana e espontânea.
+3. ENTREGA DE MATERIAIS:
+${deliveryStrategy === 'deliver_first'
+  ? (hasSentDeliverable 
+      ? '   - Os materiais já foram entregues anteriormente.' 
+      : `   - Você tem autonomia para liberar todos os materiais agora usando as tags: ${allDelivTags} se o cliente demonstrou interesse ou pediu para ver.`)
+  : '   - Se a operação for de cobrança prévia, os arquivos oficiais são liberados automaticamente após a confirmação do pagamento.'}
+4. PITCH CONSULTIVO ADAPTADO:
 ${hasPixBeenSent 
-  ? '   - A chave PIX já foi enviada anteriormente. NÃO force a barra nem fique cobrando repetidamente. Dê espaço, responda eventuais dúvidas com gentileza e só reenvie a chave PIX se o cliente pedir.' 
-  : `   - Quando você sentir que o momento é oportuno, faça o pitch adaptado à realidade que ele te contou e ofereça o Pacote Básico (${formattedPrice}) ou o Pacote Completo (${formattedPriceComplete}) via PIX (Chave ${product.pixKeyType || 'telefone'}: ${product.pixKey || '88994892385'}).`}
-4. TOM HUMANO: Fale como uma pessoa real no WhatsApp — acolhedora, espontânea, simpática e persuasiva, usando [AUDIO: ...] nos momentos de explicação, empatia ou pitch.`;
-        }
-      }
-    } else {
-      // ESTRATÉGIA PADRÃO: require_payment / per_deliverable
-      if (isReceiptAnalysis) {
-        if (isLatAm) {
-          contextDirective = `SITUACIÓN: Comprobante inspeccionado por visión artificial:
-${userMessage}
-- Si el status es "APROVADO": Agradece con alegría y libera el acceso: ${allDelivTags}.
-- Si el status es "AGENDADO": Explica que es un pago programado y pide que realice la transferencia inmediata para liberar su producto.`;
-        } else {
-          contextDirective = `SITUAÇÃO: O cliente enviou um comprovante de pagamento que foi inspecionado por visão computacional:
-${userMessage}
-Como agir conforme a análise:
-- SE O STATUS FOR "AGENDADO":
-  NÃO libere produtos nem confirme o pagamento! O dinheiro AINDA NÃO caiu na conta!
-  Explique com carinho e gentileza que é um agendamento futuro e peça para cancelar no app do banco e fazer a transferência normal na hora para liberação imediata (${formattedPrice}).
-  Envie a Chave PIX oficial (${product.pixKeyType || 'telefone'}: ${product.pixKey || '88994892385'} - ${product.pixBeneficiary || 'ian alves dos anjos'} - ${formattedPrice}).
-  Coloque [AUDIO: ...] doce e compreensivo explicando o agendamento.
-- SE O STATUS FOR "APROVADO":
-  Comemore e agradeça de coração! Acione a liberação: ${allDelivTags}.
-  Coloque [AUDIO: ...] caloroso de parabéns!
-- SE FOR "VALOR_INCORRETO" OU "DESTINATARIO_INCORRETO":
-  Explique com respeito a divergência e informe o valor/chave correto.`;
-        }
+  ? '   - A chave PIX já foi enviada anteriormente. NÃO force a barra nem fique cobrando. Dê espaço, responda dúvidas com gentileza e só reenvie se ele pedir.' 
+  : `   - Quando você sentir que o momento é oportuno, faça o pitch adaptado à realidade que ele te contou e ofereça o Pacote Básico (${formattedPrice}) ou o Pacote Completo (${formattedPriceComplete}).`}
+5. TOM HUMANO E ÁUDIO: Fale como uma pessoa real no WhatsApp (máximo 1-2 frases curtas no texto), usando [AUDIO: ...] para explicações envolventes, empatia ou pitch.`;
       }
     }
 
