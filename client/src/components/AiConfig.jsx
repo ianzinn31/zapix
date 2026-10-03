@@ -21,7 +21,7 @@ import {
 
 export default function AiConfig({ aiSettings, onSave }) {
   const [formData, setFormData] = useState({
-    primaryModel: aiSettings?.primaryModel || 'z-ai/glm-5.3-flash',
+    primaryModel: aiSettings?.primaryModel || 'z-ai/glm-5.3',
     primaryApiKey: aiSettings?.primaryApiKey || '',
     fallbackModel: aiSettings?.fallbackModel || 'google/diffusiongemma-26b-a4b-it',
     fallbackApiKey: aiSettings?.fallbackApiKey || '',
@@ -39,10 +39,10 @@ export default function AiConfig({ aiSettings, onSave }) {
 
   // Dynamic models state
   const defaultNimModels = [
-    { id: 'z-ai/glm-5.3-flash', name: 'z-ai/glm-5.3-flash', org: 'z-ai' },
-    { id: 'meta/llama-3.2-11b-vision-instruct', name: 'meta/llama-3.2-11b-vision-instruct', org: 'meta' },
-    { id: 'google/diffusiongemma-26b-a4b-it', name: 'google/diffusiongemma-26b-a4b-it', org: 'google' },
-    { id: 'deepseek-ai/deepseek-v4.1-flash', name: 'deepseek-ai/deepseek-v4.1-flash', org: 'deepseek-ai' }
+    { id: 'z-ai/glm-5.3', name: 'z-ai/glm-5.3 (Raciocínio Avançado 128k & Ultra Rápido)', org: 'z-ai' },
+    { id: 'google/diffusiongemma-26b-a4b-it', name: 'google/diffusiongemma-26b-a4b-it (Rápido & Inteligente)', org: 'google' },
+    { id: 'meta/llama-3.2-11b-vision-instruct', name: 'meta/llama-3.2-11b-vision-instruct (Baixa Latência 350ms)', org: 'meta' },
+    { id: 'nvidia/nemotron-3.5-lightning-30b-a3b', name: 'nvidia/nemotron-3.5-lightning-30b-a3b', org: 'nvidia' }
   ];
 
   const defaultOpenRouterModels = [

@@ -48,7 +48,7 @@ export function isSamePhoneNumber(p1, p2) {
 const DEFAULT_STATE = {
   settings: {
     ai: {
-      primaryModel: 'z-ai/glm-5.3-flash',
+      primaryModel: 'z-ai/glm-5.3',
       primaryApiKey: process.env.NVIDIA_NIM_PRIMARY_API_KEY || '',
       fallbackModel: 'google/diffusiongemma-26b-a4b-it',
       fallbackApiKey: process.env.NVIDIA_NIM_FALLBACK_API_KEY || '',
@@ -240,12 +240,29 @@ class StorageService {
             }
             this.data.settings.transcription.apiKey = process.env.GROQ_API_KEY;
           }
-          // Upgrade deprecated model names to current active NVIDIA models
-          if (this.data.settings.ai.primaryModel === 'meta/llama-3.3-70b-instruct' || !this.data.settings.ai.primaryModel) {
-            this.data.settings.ai.primaryModel = 'meta/llama-3.2-11b-vision-instruct';
+          // Upgrade deprecated or 404 model names to verified active NVIDIA NIM models
+          const invalidPrimary = [
+            'z-ai/glm-5.3-flash',
+            'moonshotai/kimi-k2.6',
+            'meta/llama-3.3-70b-instruct',
+            'meta/llama-3.1-70b-instruct',
+            'nvidia/nemotron-4-340b-instruct'
+          ];
+          if (invalidPrimary.includes(this.data.settings.ai.primaryModel) || !this.data.settings.ai.primaryModel) {
+            this.data.settings.ai.primaryModel = 'z-ai/glm-5.3';
           }
-          if (this.data.settings.ai.fallbackModel === 'mistralai/mixtral-8x22b-instruct' || !this.data.settings.ai.fallbackModel) {
-            this.data.settings.ai.fallbackModel = 'meta/llama-3.2-11b-vision-instruct';
+          const invalidFallback = [
+            'mistralai/mixtral-8x22b-instruct',
+            'nvidia/nemotron-4-340b-instruct',
+            'meta/llama-3.3-70b-instruct',
+            'meta/llama-3.1-70b-instruct'
+          ];
+          if (invalidFallback.includes(this.data.settings.ai.fallbackModel) || !this.data.settings.ai.fallbackModel) {
+            this.data.settings.ai.fallbackModel = 'google/diffusiongemma-26b-a4b-it';
+          }
+          if (this.data.settings.ai.isFallbackActive && this.data.settings.ai.primaryModel === 'z-ai/glm-5.3') {
+            this.data.settings.ai.isFallbackActive = false;
+            this.data.settings.ai.lastFallbackReason = null;
           }
           await supabaseService.saveSettings(this.data.settings);
         } else {
@@ -306,6 +323,33 @@ class StorageService {
           sales: parsed.sales || DEFAULT_STATE.sales,
           systemLogs: parsed.systemLogs || DEFAULT_STATE.systemLogs
         };
+
+        // Normalize deprecated models and reset fallback if using active model
+        const invalidPrimary = [
+          'z-ai/glm-5.3-flash',
+          'moonshotai/kimi-k2.6',
+          'meta/llama-3.3-70b-instruct',
+          'meta/llama-3.1-70b-instruct',
+          'nvidia/nemotron-4-340b-instruct'
+        ];
+        if (invalidPrimary.includes(loaded.settings.ai.primaryModel) || !loaded.settings.ai.primaryModel) {
+          loaded.settings.ai.primaryModel = 'z-ai/glm-5.3';
+        }
+        const invalidFallback = [
+          'mistralai/mixtral-8x22b-instruct',
+          'nvidia/nemotron-4-340b-instruct',
+          'meta/llama-3.3-70b-instruct',
+          'meta/llama-3.1-70b-instruct'
+        ];
+        if (invalidFallback.includes(loaded.settings.ai.fallbackModel) || !loaded.settings.ai.fallbackModel) {
+          loaded.settings.ai.fallbackModel = 'google/diffusiongemma-26b-a4b-it';
+        }
+        if (loaded.settings.ai.isFallbackActive && loaded.settings.ai.primaryModel === 'z-ai/glm-5.3') {
+          loaded.settings.ai.isFallbackActive = false;
+          loaded.settings.ai.lastFallbackReason = null;
+        }
+
+        return loaded;
       }
     } catch (err) {
       console.error('Error loading store.json, using defaults:', err);

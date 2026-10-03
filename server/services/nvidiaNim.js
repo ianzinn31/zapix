@@ -182,7 +182,12 @@ Qué gusto saludarte...
 Te cuento que este material está diseñado con todo el amor para que logres los mejores resultados desde la primera semana...
 ¿Tienes alguna duda o quieres que te cuente cómo empezar?]
 
-¿Tienes alguma duda o quieres que te cuente cómo empezar? 😊
+=== REGLAS CRÍTICAS DE MEMORIA Y NO REPETICIÓN ===
+1. MEMORIA ACTIVA DE TODO EL HISTORIAL: Lee con atención los mensajes previos antes de responder. Recuerda todo lo que el cliente ya compartió (nombres, edad de los hijos, dudas previas, situación familiar).
+2. NUNCA REPITAS PREGUNTAS: Si ya preguntaste la edad del niño/a, el nombre o cualquier dato y el cliente ya respondió en el historial, ¡JAMÁS vuelvas a preguntarlo! Usa la información que ya tienes.
+3. NUNCA REPITAS SALUDOS SI LA CONVERSACIÓN YA INICIÓ: Si ya hay mensajes previos en el historial, NO vuelvas a decir "¡Hola!", "¡Qué alegría!", ni te vuelvas a presentar como si fuera el primer mensaje. Continúa la conversación con total fluidez desde donde quedó.
+4. NUNCA REPITAS EL MISMO PITCH O EXPLICACIÓN: Si ya explicaste qué contiene el paquete o el precio, no repitas el discurso completo. Responde puntualmente a lo que el cliente acaba de decir.
+5. COHERENCIA TOTAL: Haz que cada mensaje avance la conversación con fluidez humana en WhatsApp.
 
 ${contextDirective ? `\n=== DIRECTIVA DE CONTEXTO ACTUAL ===\n${contextDirective}\n` : ''}
 ${settings.ai?.customPromptInstructions ? `\n=== INSTRUCCIONES ADICIONALES ===\n${settings.ai.customPromptInstructions}` : ''}
@@ -271,6 +276,13 @@ Qual a idade do seu pequeno(a)? 😊
 
 ${audioStrategySection}
 ${deliverableStrategySection}
+
+=== REGRAS CRÍTICAS DE MEMÓRIA DA CONVERSA E NÃO-REPETIÇÃO ===
+1. MEMÓRIA ATIVA DE TODO O HISTÓRICO: Leia com atenção todo o histórico de mensagens anteriores antes de responder. Lembre-se de tudo o que o cliente já te contou (nomes, idade dos filhos, dores, rotina, dúvidas anteriores).
+2. NUNCA REPITA PERGUNTAS: Se você já perguntou algo (ex: idade da criança, desafios de aprendizado, etc.) e o cliente já respondeu, JAMAIS pergunte novamente! Use a informação dada para avançar no diálogo.
+3. NUNCA REPITA SAUDAÇÃO SE A CONVERSA JÁ ESTIVER EM ANDAMENTO: Se já houver mensagens trocadas anteriormente, NÃO volte a dizer "Olá!", "Que bom falar com você!", "Tudo bem?", nem se reapresente como se fosse o primeiro contato. Continue a conversa com total naturalidade de onde parou.
+4. NUNCA REPITA O MESMO DISCURSO OU PITCH: Se você já explicou o que é o material ou passou o valor, não envie o mesmo texto ou áudio explicativo de novo. Responda pontualmente à mensagem atual do cliente.
+5. COERÊNCIA TOTAL: Faça a conversa avançar de forma fluida, como uma conversa real entre duas pessoas no WhatsApp.
 
 ${contextDirective ? `\n=== CONTEXTO E DIRETRIZES DO MOMENTO ATUAL ===\n${contextDirective}\n` : ''}
 ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁRIO ===\n${settings.ai.customPromptInstructions}` : ''}
@@ -562,13 +574,18 @@ ${paymentMethodInstructionsText}
 - Esclareça com total carinho e segurança: Sim! São exatamente aqueles arquivos que você já enviou prontos para usar!`;
     } else {
       // FLUXO UNIVERSAL COM LIBERDADE E AUTONOMIA TOTAL CONVERSACIONAL (LATAM & BRASIL)
+      const totalHistoryCount = (conversationHistory || []).length;
       if (isLatAm) {
+        const historyNotice = totalHistoryCount >= 2
+          ? `\n- ANDAMIENTO DE LA CONVERSACIÓN: Ya existen ${totalHistoryCount} mensajes en el historial. NO saludes de nuevo, NO te presentes y NO repitas preguntas que el cliente ya respondió. Continúa directo en el tema.`
+          : '';
+
         contextDirective = `SITUACIÓN ACTUAL DE LA ATENCIÓN:
 Mensaje del cliente: "${userMessage}".
 
 ESTADO DE LA CONVERSACIÓN:
 - Materiales enviados anteriormente? ${hasSentDeliverable ? 'SÍ (ya entregados)' : 'NO (aún no enviados)'}
-- Datos de pago enviados anteriormente? ${hasPixBeenSent ? 'SÍ (ya enviados)' : 'NO (aún no enviados)'}
+- Datos de pago enviados anteriormente? ${hasPixBeenSent ? 'SÍ (ya enviados)' : 'NO (aún no enviados)'}${historyNotice}
 
 DIRECTRICES DE MÁXIMA AUTONOMÍA CONVERSACIONAL (OPERACIÓN GLOBAL):
 1. RESPONDE PRIMERO AL CLIENTE: No ignores lo que dijo el lead. Responde directamente a su duda o comentario con calidez, empatía y cercanía real de WhatsApp en ${targetCountry}.
@@ -585,14 +602,18 @@ ${hasPixBeenSent
   : `   - Solo cuando sientas que es el momento oportuno (tras resolver dudas o cuando exprese entusiasmo), haz el pitch adaptado a lo que te contó y ofrece el paquete Básico (${formattedPrice}) o Completo (${formattedPriceComplete}).`}
 5. TONO HUMANO Y AUDIO: Habla como una persona real en WhatsApp de ${targetCountry} (1-2 frases cortas en texto), usando notas de voz [AUDIO: ...] cuando expliques algo, transmitas calidez o hagas el pitch.`;
       } else {
+        const historyNotice = totalHistoryCount >= 2
+          ? `\n- ANDAMENTO DA CONVERSA: Já existem ${totalHistoryCount} mensagens trocadas neste atendimento. NÃO dê saudações, NÃO se reapresente e NÃO repita perguntas que o cliente já respondeu no histórico. Continue direto no assunto.`
+          : '';
+
         contextDirective = `SITUAÇÃO ATUAL DO ATENDIMENTO:
 Mensagem do cliente: "${userMessage}".
 
 ESTADO DA CONVERSA:
 - Materiais enviados anteriormente? ${hasSentDeliverable ? 'SIM (já entregues)' : 'NÃO (ainda não foram enviados)'}
-- Chave PIX enviada anteriormente? ${hasPixBeenSent ? 'SIM (já enviada)' : 'NÃO (ainda não enviada)'}
+- Chave PIX enviada anteriormente? ${hasPixBeenSent ? 'SIM (já enviada)' : 'NÃO (ainda não enviada)'}${historyNotice}
 
-DIRETRIZES DE MÁXIMA AUTONOMIA CONVERSACIONAL (OPERAÇÃO BRASIL):
+DIRETRIZES DE MÁXIMA AUTONOMÍA CONVERSACIONAL (OPERAÇÃO BRASIL):
 1. RESPONDA PRIMEIRO AO CLIENTE: Não ignore o que o cliente disse! Se ele fez uma pergunta ou compartilhou algo sobre a rotina/desafios, responda com atenção e carinho genuíno.
 2. ZERO ROTEIROS FORÇADOS: Você tem total liberdade e autonomia para desenrolar o diálogo de forma humana e espontânea.
 3. ENTREGA DE MATERIAIS:
@@ -616,29 +637,63 @@ ${hasPixBeenSent
       { role: 'system', content: systemPrompt }
     ];
 
-    // Add recent history (up to last 10 messages)
-    const recentHistory = conversationHistory.slice(-10);
-    for (const h of recentHistory) {
-      messages.push({
-        role: h.fromMe ? 'assistant' : 'user',
-        content: h.text || ''
-      });
+    // Take up to 60 messages from conversation history (guarantees complete dialogue memory without losing early details)
+    const allHistory = (conversationHistory || []).slice(-60);
+
+    // Smart context deduplication:
+    // When incoming messages arrive via WhatsApp, the debouncer saves them in storage before calling generateResponse.
+    // We detect if the trailing messages in history already represent userMessage to avoid duplicate turns.
+    let lastAssistantIdx = -1;
+    for (let i = allHistory.length - 1; i >= 0; i--) {
+      if (allHistory[i].fromMe) {
+        lastAssistantIdx = i;
+        break;
+      }
     }
 
-    // Add the current incoming message as the final message
-    if (userMessage && (!recentHistory.length || recentHistory[recentHistory.length - 1].text !== userMessage)) {
+    const trailingUserMsgs = allHistory.slice(lastAssistantIdx + 1);
+    const trailingUserText = trailingUserMsgs.map(m => (m.text || '').trim()).filter(Boolean).join('\n');
+
+    if (trailingUserMsgs.length > 0 && userMessage && (
+      trailingUserText === userMessage.trim() ||
+      trailingUserMsgs.some(m => (m.text || '').trim() === userMessage.trim()) ||
+      userMessage.trim().includes(trailingUserText)
+    )) {
+      // Prior history up to the last assistant response
+      const priorHistory = allHistory.slice(0, lastAssistantIdx + 1);
+      for (const h of priorHistory) {
+        const textContent = h.text || (h.type === 'audio' ? '🎵 [Áudio]' : h.type === 'image' ? '📷 [Imagem]' : '📎 [Arquivo]');
+        messages.push({
+          role: h.fromMe ? 'assistant' : 'user',
+          content: textContent
+        });
+      }
+      // Single clean consolidated user turn
       messages.push({ role: 'user', content: userMessage });
+    } else {
+      // Standard history addition
+      for (const h of allHistory) {
+        const textContent = h.text || (h.type === 'audio' ? '🎵 [Áudio]' : h.type === 'image' ? '📷 [Imagem]' : '📎 [Arquivo]');
+        messages.push({
+          role: h.fromMe ? 'assistant' : 'user',
+          content: textContent
+        });
+      }
+      // If userMessage is not yet at the end, append it
+      if (userMessage && (messages.length === 1 || messages[messages.length - 1].content !== userMessage)) {
+        messages.push({ role: 'user', content: userMessage });
+      }
     }
 
     let responseText = null;
-    let modelUsed = settings.primaryModel || 'z-ai/glm-5.3-flash';
+    let modelUsed = settings.primaryModel || 'z-ai/glm-5.3';
 
     // 1. Try Primary NVIDIA NIM Model (timeout: 180s = 3 min)
     try {
       const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
       if (primaryKey) {
         responseText = await this.callModel(
-          settings.primaryModel || 'z-ai/glm-5.3-flash',
+          settings.primaryModel || 'z-ai/glm-5.3',
           primaryKey,
           messages,
           settings.temperature ?? 0.7,
@@ -658,7 +713,7 @@ ${hasPixBeenSent
       console.warn(`[NVIDIA NIM Primary Error]: ${primaryErr.message}`);
       storage.addLog(
         'FALLBACK_TRIGGERED',
-        `NVIDIA NIM Primário (${settings.primaryModel || 'z-ai/glm-5.3-flash'}) não respondeu em 3 min (${primaryErr.message}). Ativando fallback secundário (${settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it'}).`
+        `NVIDIA NIM Primário (${settings.primaryModel || 'z-ai/glm-5.3'}) não respondeu em 3 min (${primaryErr.message}). Ativando fallback secundário (${settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it'}).`
       );
       storage.updateSettings({
         ai: {
@@ -800,8 +855,8 @@ ${hasPixBeenSent
     const leadFirstName = (lead.name || '').split(' ')[0] || '';
     const cleanLeadName = /^[0-9+() -]+$/.test(leadFirstName) ? '' : leadFirstName;
 
-    // Build context from recent messages so the audio is 100% personalized to what they actually discussed
-    const recentMessages = (conversationHistory || []).slice(-8).map(m => {
+    // Build context from recent messages so the audio is 100% personalized to what they actually discussed (up to 30 messages)
+    const recentMessages = (conversationHistory || []).slice(-30).map(m => {
       const sender = m.fromMe ? 'Atendente' : (cleanLeadName || 'Cliente');
       return `${sender}: ${m.text || '[mídia/áudio]'}`;
     }).join('\n');
@@ -834,7 +889,7 @@ Gere agora o texto exato falado para ser gravado em áudio sob medida para este 
       const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
       if (primaryKey) {
         const generated = await this.callModel(
-          settings.primaryModel || 'z-ai/glm-5.3-flash',
+          settings.primaryModel || 'z-ai/glm-5.3',
           primaryKey,
           messages,
           0.7,
