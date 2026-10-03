@@ -794,6 +794,14 @@ class StorageService {
     if (this.data.leads[cleanPhone]) {
       this.data.leads[cleanPhone] = resetData;
     }
+    if (this.data.xpagCharges) {
+      delete this.data.xpagCharges[cleanPhone];
+      delete this.data.xpagCharges[phone];
+    }
+    this.deleteMessagesForPhone(cleanPhone);
+    if (phone !== cleanPhone) {
+      this.deleteMessagesForPhone(phone);
+    }
     this.save();
     supabaseService.upsertLead(resetData);
     return resetData;
@@ -837,6 +845,28 @@ class StorageService {
         isSamePhoneNumber(m.phone, cleanPhone)
       );
     });
+  }
+
+  deleteMessagesForPhone(phone) {
+    if (!phone) return;
+    const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+    const mappedPhone = this.getPhoneForLid(cleanPhone);
+    const mappedLid = this.getLidForPhone(cleanPhone);
+    this.data.messages = this.data.messages.filter((m) => {
+      const mClean = (m.phone || '').replace(/[^0-9]/g, '');
+      return !(
+        mClean === cleanPhone ||
+        (mappedPhone && mClean === mappedPhone) ||
+        (mappedLid && mClean === mappedLid) ||
+        isSamePhoneNumber(m.phone, cleanPhone)
+      );
+    });
+    if (this.data.xpagCharges) {
+      delete this.data.xpagCharges[cleanPhone];
+      delete this.data.xpagCharges[phone];
+    }
+    this.save();
+    supabaseService.deleteMessagesForPhone(cleanPhone);
   }
 
   addMessage(msg) {

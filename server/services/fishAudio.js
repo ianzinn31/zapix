@@ -187,12 +187,110 @@ class FishAudioService {
       }
     }
 
-    // 3. Resolve by Lead Phone Number DDI (Country Code)
+    const lower = text.toLowerCase();
+    const spanishMatches = (lower.match(/\b(hola|cómo|gracias|bueno|material|actividades|para|estás|dinero|cuenta|pago|claro|saludo|hijo|niño|pequeño|semana|platico|oye|padre|chido|peque|peques|platicar|échale|revises|puedes|con gusto|notita|te cuento|pensado|aprenden|jugando|súper|fácil|soltando|palabras|platica|nuestro|nuestra|ahorita|órale)\b/g) || []).length;
+    const ptMatches = (lower.match(/\b(olá|opa|tudo bem|obrigado|obrigada|você|criança|filho|atividades|estudo|semana|gente|pra|pro|focar|áudio|notinha|nosso|nossa)\b/g) || []).length;
+    const enMatches = (lower.match(/\b(hello|hi|thanks|thank you|kids|welcome|great|activities|learning)\b/g) || []).length;
+
+    const isSpanish = spanishMatches > ptMatches || context.language === 'es';
+    const isEnglish = (enMatches > spanishMatches && enMatches > ptMatches) || context.language === 'en';
+    const isPortuguese = (ptMatches > spanishMatches && !isSpanish) || context.language === 'pt';
+
+    // 3. Resolve by Target Country (configured in product or detected in lead)
+    const targetCountry = context.targetCountry || settings.product?.targetCountry;
+    if (targetCountry) {
+      const countryMap = {
+        'Brasil': 'pt-BR',
+        'México': 'es-MX',
+        'Mexico': 'es-MX',
+        'Colômbia': 'es-CO',
+        'Colombia': 'es-CO',
+        'Argentina': 'es-AR',
+        'Bolívia': 'es-BO',
+        'Bolivia': 'es-BO',
+        'Paraguai': 'es-PY',
+        'Paraguay': 'es-PY',
+        'Peru': 'es-PE',
+        'Perú': 'es-PE',
+        'Chile': 'es-CL',
+        'LatAm': 'es-419',
+        'Estados Unidos': 'en-US',
+        'Global': 'en-US'
+      };
+
+      const key = countryMap[targetCountry];
+      // If conversation is in Spanish and target is a Hispanic country (e.g. Mexico), use that country's voice!
+      if (key && (isSpanish || !isPortuguese)) {
+        if (key.startsWith('es-') && regionalVoices[key]?.voiceId?.trim()) {
+          return {
+            voiceId: regionalVoices[key].voiceId.trim(),
+            country: regionalVoices[key].country,
+            language: regionalVoices[key].language,
+            key,
+            reason: `Voz de ${targetCountry} (${key}) selecionada pelo mercado-alvo e fala em espanhol`
+          };
+        }
+      }
+
+      // If target country is Brasil and text is Portuguese
+      if (key === 'pt-BR' && (isPortuguese || !isSpanish) && regionalVoices['pt-BR']?.voiceId?.trim()) {
+        return {
+          voiceId: regionalVoices['pt-BR'].voiceId.trim(),
+          country: regionalVoices['pt-BR'].country,
+          language: regionalVoices['pt-BR'].language,
+          key: 'pt-BR',
+          reason: `País alvo Brasil (pt-BR)`
+        };
+      }
+    }
+
+    // 4. Dialect & Slang Detection from Speech Text
+    if (isSpanish) {
+      if (/\b(ahorita|órale|chido|padre|platicar|platica|platico|oye|peque|peques|spei|notita)\b/.test(lower) && regionalVoices['es-MX']?.voiceId?.trim()) {
+        return {
+          voiceId: regionalVoices['es-MX'].voiceId.trim(),
+          country: regionalVoices['es-MX'].country,
+          language: regionalVoices['es-MX'].language,
+          key: 'es-MX',
+          reason: 'Dialeto mexicano nativo detectado no texto da fala'
+        };
+      }
+      if (/\b(nequi|bre-b|chévere|parce|con gusto|de una|a la orden)\b/.test(lower) && regionalVoices['es-CO']?.voiceId?.trim()) {
+        return {
+          voiceId: regionalVoices['es-CO'].voiceId.trim(),
+          country: regionalVoices['es-CO'].country,
+          language: regionalVoices['es-CO'].language,
+          key: 'es-CO',
+          reason: 'Dialeto colombiano nativo detectado no texto da fala'
+        };
+      }
+      if (/\b(che|vos|tenés|podés|mirá|posta|dale|alias)\b/.test(lower) && regionalVoices['es-AR']?.voiceId?.trim()) {
+        return {
+          voiceId: regionalVoices['es-AR'].voiceId.trim(),
+          country: regionalVoices['es-AR'].country,
+          language: regionalVoices['es-AR'].language,
+          key: 'es-AR',
+          reason: 'Dialeto argentino/rioplatense detectado no texto da fala'
+        };
+      }
+    }
+
+    if (isEnglish && regionalVoices['en-US']?.voiceId?.trim()) {
+      return {
+        voiceId: regionalVoices['en-US'].voiceId.trim(),
+        country: regionalVoices['en-US'].country,
+        language: regionalVoices['en-US'].language,
+        key: 'en-US',
+        reason: 'Idioma inglês detectado pelo vocabulário da fala'
+      };
+    }
+
+    // 5. Resolve by Lead Phone Number DDI (Country Code)
+    // CRITICAL SAFEGUARD: If the speech text is Spanish, a Brazilian DDI 55 MUST NOT force a Portuguese voice!
     const phone = String(context.phone || '').replace(/[^0-9]/g, '');
     const isLid = phone.length > 13 && (phone.startsWith('1') || phone.startsWith('2'));
     if (phone && !isLid) {
       const ddiMap = [
-        { ddi: '55', key: 'pt-BR' },  // Brasil
         { ddi: '52', key: 'es-MX' },  // México
         { ddi: '57', key: 'es-CO' },  // Colômbia
         { ddi: '54', key: 'es-AR' },  // Argentina
@@ -211,14 +309,20 @@ class FishAudioService {
         { ddi: '598', key: 'es-AR' }, // Uruguai -> Rioplatense
         { ddi: '1', key: 'en-US' },   // EUA / Canadá
         { ddi: '34', key: 'es-419' }, // Espanha
+        { ddi: '55', key: 'pt-BR' },  // Brasil
         { ddi: '351', key: 'pt-BR' }  // Portugal
       ];
 
-      // Sort by longest DDI first so 591 matches before 59
+      // Sort by longest DDI first
       ddiMap.sort((a, b) => b.ddi.length - a.ddi.length);
 
       for (const item of ddiMap) {
         if (phone.startsWith(item.ddi)) {
+          // If text is Spanish and DDI is 55 (testing with Brazilian phone), DO NOT use pt-BR!
+          if (item.ddi === '55' && isSpanish) {
+            // Skip pt-BR and fall back to target country voice (e.g. es-MX)
+            continue;
+          }
           const regional = regionalVoices[item.key];
           if (regional && regional.voiceId && regional.voiceId.trim()) {
             return {
@@ -229,7 +333,6 @@ class FishAudioService {
               reason: `DDI +${item.ddi} detectado no WhatsApp (${phone})`
             };
           }
-          // If country-specific voice is blank, check if it's Spanish and fallback to es-419 (LatAm Geral)
           if (item.key.startsWith('es-') && regionalVoices['es-419']?.voiceId?.trim()) {
             return {
               voiceId: regionalVoices['es-419'].voiceId.trim(),
@@ -243,113 +346,36 @@ class FishAudioService {
       }
     }
 
-    // 4. Resolve by Target Country (configured in product or lead)
-    const targetCountry = context.targetCountry || settings.product?.targetCountry;
-    if (targetCountry) {
-      const countryMap = {
-        'Brasil': 'pt-BR',
-        'México': 'es-MX',
-        'Mexico': 'es-MX',
-        'Colômbia': 'es-CO',
-        'Colombia': 'es-CO',
-        'Argentina': 'es-AR',
-        'Bolívia': 'es-BO',
-        'Bolivia': 'es-BO',
-        'Paraguai': 'es-PY',
-        'Paraguay': 'es-PY',
-        'Peru': 'es-PE',
-        'Perú': 'es-PE',
-        'Chile': 'es-CL',
-        'LatAm': 'es-419',
-        'Global': 'en-US'
-      };
-
-      const key = countryMap[targetCountry];
-      if (key && regionalVoices[key]?.voiceId?.trim()) {
+    // 6. Generic Language Fallbacks
+    if (isSpanish) {
+      if (regionalVoices['es-MX']?.voiceId?.trim()) {
         return {
-          voiceId: regionalVoices[key].voiceId.trim(),
-          country: regionalVoices[key].country,
-          language: regionalVoices[key].language,
-          key,
-          reason: `País alvo da oferta configurado: ${targetCountry}`
+          voiceId: regionalVoices['es-MX'].voiceId.trim(),
+          country: regionalVoices['es-MX'].country,
+          language: regionalVoices['es-MX'].language,
+          key: 'es-MX',
+          reason: 'Fala em espanhol -> Voz do México (es-MX)'
         };
       }
-      if (key && key.startsWith('es-') && regionalVoices['es-419']?.voiceId?.trim()) {
+      if (regionalVoices['es-419']?.voiceId?.trim()) {
         return {
           voiceId: regionalVoices['es-419'].voiceId.trim(),
           country: regionalVoices['es-419'].country,
           language: regionalVoices['es-419'].language,
           key: 'es-419',
-          reason: `País alvo hispano (${targetCountry}) -> Fallback para LatAm Geral (es-419)`
+          reason: 'Fala em espanhol -> LatAm Geral (es-419)'
         };
       }
     }
 
-    // 5. Automatic Language & Dialect Detection from Speech Text
-    if (text) {
-      const lower = text.toLowerCase();
-      const spanishMatches = (lower.match(/\b(hola|cómo|gracias|bueno|material|actividades|para|estás|dinero|cuenta|pago|claro|saludo|hijo|niño|pequeño|semana)\b/g) || []).length;
-      const ptMatches = (lower.match(/\b(olá|opa|tudo bem|obrigado|obrigada|você|criança|filho|atividades|estudo|semana|gente|pra|pro|focar)\b/g) || []).length;
-      const enMatches = (lower.match(/\b(hello|hi|thanks|thank you|kids|welcome|great|activities|learning)\b/g) || []).length;
-
-      if (enMatches > spanishMatches && enMatches > ptMatches && regionalVoices['en-US']?.voiceId?.trim()) {
-        return {
-          voiceId: regionalVoices['en-US'].voiceId.trim(),
-          country: regionalVoices['en-US'].country,
-          language: regionalVoices['en-US'].language,
-          key: 'en-US',
-          reason: 'Idioma inglês detectado pelo vocabulário da fala'
-        };
-      }
-
-      if (spanishMatches > ptMatches) {
-        if (/\b(ahorita|órale|chido|padre|platicar|spei)\b/.test(lower) && regionalVoices['es-MX']?.voiceId?.trim()) {
-          return {
-            voiceId: regionalVoices['es-MX'].voiceId.trim(),
-            country: regionalVoices['es-MX'].country,
-            language: regionalVoices['es-MX'].language,
-            key: 'es-MX',
-            reason: 'Dialeto mexicano detectado pelo vocabulário'
-          };
-        }
-        if (/\b(nequi|bre-b|chévere|parce|con gusto)\b/.test(lower) && regionalVoices['es-CO']?.voiceId?.trim()) {
-          return {
-            voiceId: regionalVoices['es-CO'].voiceId.trim(),
-            country: regionalVoices['es-CO'].country,
-            language: regionalVoices['es-CO'].language,
-            key: 'es-CO',
-            reason: 'Dialeto colombiano detectado pelo vocabulário'
-          };
-        }
-        if (/\b(che|vos|tenés|podés|alias)\b/.test(lower) && regionalVoices['es-AR']?.voiceId?.trim()) {
-          return {
-            voiceId: regionalVoices['es-AR'].voiceId.trim(),
-            country: regionalVoices['es-AR'].country,
-            language: regionalVoices['es-AR'].language,
-            key: 'es-AR',
-            reason: 'Dialeto argentino detectado pelo vocabulário'
-          };
-        }
-        if (regionalVoices['es-419']?.voiceId?.trim()) {
-          return {
-            voiceId: regionalVoices['es-419'].voiceId.trim(),
-            country: regionalVoices['es-419'].country,
-            language: regionalVoices['es-419'].language,
-            key: 'es-419',
-            reason: 'Espanhol detectado pelo vocabulário -> LatAm Geral (es-419)'
-          };
-        }
-      }
-
-      if (ptMatches > 0 && regionalVoices['pt-BR']?.voiceId?.trim()) {
-        return {
-          voiceId: regionalVoices['pt-BR'].voiceId.trim(),
-          country: regionalVoices['pt-BR'].country,
-          language: regionalVoices['pt-BR'].language,
-          key: 'pt-BR',
-          reason: 'Português do Brasil detectado pelo vocabulário'
-        };
-      }
+    if (isPortuguese && regionalVoices['pt-BR']?.voiceId?.trim()) {
+      return {
+        voiceId: regionalVoices['pt-BR'].voiceId.trim(),
+        country: regionalVoices['pt-BR'].country,
+        language: regionalVoices['pt-BR'].language,
+        key: 'pt-BR',
+        reason: 'Fala em português -> Brasil (pt-BR)'
+      };
     }
 
     // 6. Global Fallback Voice

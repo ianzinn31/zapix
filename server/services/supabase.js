@@ -164,6 +164,10 @@ export class SupabaseService {
     }
   }
 
+  async deleteMessagesForPhone(phone) {
+    return this.deleteMessagesByPhone(phone);
+  }
+
   // --- Messages ---
   async getMessages(phone) {
     if (!this.isConfigured) return null;

@@ -800,18 +800,29 @@ class WhatsAppService {
         const product = settings.product || {};
         const deliveryStrategy = product.deliveryStrategy || 'require_payment'; // 'require_payment' | 'deliver_first' | 'per_deliverable'
         const leadObj = storage.getLead(phone);
-        const userWantsPix = /pix|pagar|pago|chave|valor|conta|manda.*pix|envia.*pix|passa.*pix|manda.*chave/i.test(userText || '');
+
+        const lowerUser = (userText || '').toLowerCase().trim();
+        const userExplicitlyWantsPayment =
+          /(?:como|d[oó]nde|qual|onde)\s+(?:fa[çc]o\s+pra\s+|consigo\s+|le\s+hago\s+para\s+)?(?:pagar|pago|transferir|abonar|fazer\s+o\s+pix|fazer\s+o\s+pagamento|hacer\s+el\s+pago)/i.test(lowerUser) ||
+          /\b(?:quero\s+pagar|quiero\s+pagar|posso\s+pagar|puedo\s+pagar|vou\s+pagar|voy\s+a\s+pagar)\b/i.test(lowerUser) ||
+          /\b(?:me\s+)?(?:passa|manda|envia|compart[a|e]|pasa|pasame|mandame|envíame|enviame)\s+(?:os\s+dados|os\s+dados\s+do\s+pix|a\s+chave|a\s+chave\s+pix|o\s+pix|a\s+conta|los\s+datos|los\s+datos\s+de\s+pago|la\s+cuenta|la\s+clabe|el\s+spei|el\s+nequi|el\s+alias|el\s+qr|el\s+link|o\s+link)\b/i.test(lowerUser) ||
+          /\b(?:qual\s+[eé]\s+o\s+pix|qual\s+a\s+chave|qual\s+chave|cu[aá]l\s+es\s+la\s+cuenta|cu[aá]l\s+es\s+la\s+clabe|cu[aá]l\s+es\s+el\s+spei)\b/i.test(lowerUser) ||
+          /\b(?:chave\s*pix|link\s*de\s*pago|link\s*de\s*pagamento|datos\s*de\s*pago|dados\s*de\s*pagamento|c[oó]digo\s*spei|cuenta\s*bancaria|n[uú]mero\s*nequi)\b/i.test(lowerUser);
+        const userWantsPix = userExplicitlyWantsPayment;
 
         // If operation strategy is 'deliver_first' (entrega TUDO antes e cobra depois):
         if (deliveryStrategy === 'deliver_first') {
           const sentMsgs = storage.getMessages(phone) || [];
           const sentTexts = sentMsgs
-            .filter((m) => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'))
+            .filter((m) => m.fromMe && m.text && (
+              m.text.includes('📎 [Enviado]:') ||
+              m.text.includes('📎 [Arquivo]:') ||
+              m.text.includes('📎 [Documento]:')
+            ))
             .map((m) => m.text.toLowerCase());
 
-          const hasReceivedAny = sentTexts.length > 0 || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || leadObj?.deliverableSent === true;
+          const hasReceivedAny = sentTexts.length > 0;
           const isTriggeredByTag = tagMatches.length > 0 || deliverablesToSend.length > 0;
-          const lowerUser = (userText || '').toLowerCase();
           const lowerReply = (replyText || '').toLowerCase();
           const userIncomingMsgs = sentMsgs.filter((m) => !m.fromMe);
           const hasChildDetails = /\b\d+\s*(?:anos?|aninhos|meses)\b|prezinho|escola|começando|creche|maternal|fundamental|alfabetiz/i.test(lowerUser);
@@ -822,10 +833,10 @@ class WhatsAppService {
           const isAskingAudio = /(?:mandar?|enviar?|grabar?|puedes mandar|me podr[ií]as mandar|manda|envia)\s+(?:un\s+)?audio|escuchar\s+en\s+audio|audio\s+explicando|manda\s+(?:um\s+)?[aá]udio|grava\s+(?:um\s+)?[aá]udio|pode\s+mandar\s+[aá]udio/i.test(lowerUser);
           const isTurn2OrEngaged = (!isAskingAudio && userIncomingMsgs.length >= 2) || hasChildDetails || isTriggeredByTag || isExplicitDeliveryAgreement;
 
-          // If the customer explicitly asked for the PIX and already received materials: don't resend materials!
-          if (userWantsPix && hasReceivedAny) {
+          // If the customer explicitly asked for the payment coordinates and already received materials: don't resend materials!
+          if (userExplicitlyWantsPayment && hasReceivedAny) {
             deliverablesToSend.length = 0;
-          } else if (!hasReceivedAny && isTurn2OrEngaged && !userWantsPix) {
+          } else if (!hasReceivedAny && isTurn2OrEngaged && !userExplicitlyWantsPayment) {
             // Deliver ALL registered deliverables together upfront as the complete package (all 3 files)!
             deliverablesToSend.length = 0;
             deliverablesToSend.push(...allDeliverables);
@@ -925,50 +936,80 @@ class WhatsAppService {
         let textBefore = sanitizeBubbleText(rawTextBeforeAudio);
         let textAfter = sanitizeBubbleText(rawTextAfterAudio);
 
-        // 6. Safeguard: Ensure PIX key is present ONLY during the initial Phase 2 closing (AFTER deliverables have been sent), or when customer explicitly asked for PIX!
+        // 6. Safeguard: Ensure payment coordinates (PIX / SPEI / Nequi / Alias) are appended ONLY when appropriate:
+        //    a) Customer explicitly requested how/where to pay (userExplicitlyWantsPayment)
+        //    b) AI explicitly chose to close and included a payment tag or explicit closing phrase
+        //    c) NEVER append payment details during initial greetings, exploratory dialogue, or when asking discovery questions (e.g. child's age)
         const isLatAmLead = aiResult.locale?.isLatAm || false;
         const sentMsgsForPixCheck = storage.getMessages(phone) || [];
         const hasAlreadySentPixInHistory = sentMsgsForPixCheck.some((m) => m.fromMe && m.text && (
           (product.pixKey && m.text.includes(product.pixKey)) ||
+          (product.nequiNumber && m.text.includes(product.nequiNumber)) ||
+          (product.aliasKey && m.text.includes(product.aliasKey)) ||
           m.text.includes('Chave PIX') ||
-          m.text.includes('Copiar Chave PIX')
+          m.text.includes('Copiar Chave PIX') ||
+          m.text.includes('TRANSFERENCIA SPEI') ||
+          m.text.includes('CLABE:') ||
+          m.text.includes('DATOS OFICIALES PARA TRANSFERENCIA') ||
+          m.text.includes('STP (Sistema de Transferencia')
         ));
-        const hasSentDeliverablesInHistory = sentMsgsForPixCheck.some((m) => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
-        const hasReceivedDeliverables = hasSentDeliverablesInHistory || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || leadObj?.deliverableSent === true;
 
-        const isFirstTimePhase2Pix = deliveryStrategy === 'deliver_first' &&
-          hasReceivedDeliverables &&
+        const hasSentDeliverablesInHistory = sentMsgsForPixCheck.some((m) => m.fromMe && m.text && (
+          m.text.includes('📎 [Enviado]:') ||
+          m.text.includes('📎 [Arquivo]:') ||
+          m.text.includes('📎 [Documento]:')
+        ));
+
+        const rawAiText = aiResult.text || '';
+        const lowerAi = rawAiText.toLowerCase();
+
+        const aiExplicitlySendsPayment =
+          /\[(?:ENVIAR_)?(?:PAGAMENTO|PAGO|COBRANCA|SPEI|PIX|DATOS_PAGO|CHAVE_PIX)\]/i.test(rawAiText) ||
+          /(?:te paso los datos para que puedas transferir|te comparto los datos de la transferencia|puedes realizar la transferencia a la siguiente|aquí te dejo los datos para el pago|aquí tienes los datos oficiales para|segue abaixo a chave pix|vou te passar a chave pix|pode fazer a transferência para a chave)/i.test(lowerAi);
+
+        // Discovery question safeguard: if the AI response ends with a question, it is conversational discovery!
+        const replyTextToCheck = (textAfter || textBefore || '').trim();
+        const endsWithQuestion = /\?\s*$/.test(replyTextToCheck);
+        const isDiscoveryDialogue = endsWithQuestion && !userExplicitlyWantsPayment;
+
+        // In deliver_first: only close if materials were ALREADY delivered in message history AND we are not asking a discovery question
+        const isFirstTimePhase2Closing = deliveryStrategy === 'deliver_first' &&
+          hasSentDeliverablesInHistory &&
           deliverablesToSend.length === 0 &&
           !hasAlreadySentPixInHistory &&
-          leadObj?.stage !== 'PIX_ENVIADO';
+          (aiExplicitlySendsPayment || userExplicitlyWantsPayment || (sentMsgsForPixCheck.filter(m => !m.fromMe).length >= 2 && !endsWithQuestion));
+
+        const shouldAppendPayment = (userExplicitlyWantsPayment || aiExplicitlySendsPayment || isFirstTimePhase2Closing) &&
+          !isDiscoveryDialogue &&
+          !hasAlreadySentPixInHistory;
 
         let activeSpeiCharge = null;
 
-        if (!isLatAmLead && product.pixKey && (isFirstTimePhase2Pix || userWantsPix)) {
+        if (!isLatAmLead && product.pixKey && shouldAppendPayment) {
           const pixPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
           const pixBlock = `Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${pixPrice}\n\nAssim que você fizer, me envia o comprovante aqui tá bom? ❤️`;
           const emotionalAppeal = `Eu confiei em você de olhos fechados e já te entreguei todo o material completo antes mesmo de você pagar! Fiz isso de coração aberto porque sei o quanto você se preocupa e quer o melhor para o seu pequeno... ❤️\n\nAgora estou aqui de coração te pedindo pra fazer a sua parte com essa contribuição simbólica de apenas R$ ${pixPrice}, que é o que mantém nosso trabalho vivo e de pé!`;
 
           if (textAfter.length > 0) {
-            if (isFirstTimePhase2Pix && !userWantsPix && !textAfter.toLowerCase().includes('confi')) {
+            if (isFirstTimePhase2Closing && !userExplicitlyWantsPayment && !textAfter.toLowerCase().includes('confi')) {
               textAfter = `${emotionalAppeal}\n\n${textAfter}`;
             }
             if (!textAfter.includes(product.pixKey)) {
               textAfter += `\n\n${pixBlock}`;
             }
           } else if (textBefore.length > 0 && !hasAudioTag) {
-            if (isFirstTimePhase2Pix && !userWantsPix && !textBefore.toLowerCase().includes('confi')) {
+            if (isFirstTimePhase2Closing && !userExplicitlyWantsPayment && !textBefore.toLowerCase().includes('confi')) {
               textBefore = `${emotionalAppeal}\n\n${textBefore}`;
             }
             if (!textBefore.includes(product.pixKey)) {
               textBefore += `\n\n${pixBlock}`;
             }
           } else {
-            textAfter = (isFirstTimePhase2Pix && !userWantsPix) ? `${emotionalAppeal}\n\n${pixBlock}` : pixBlock;
+            textAfter = (isFirstTimePhase2Closing && !userExplicitlyWantsPayment) ? `${emotionalAppeal}\n\n${pixBlock}` : pixBlock;
           }
 
-          storage.upsertLead(phone, { stage: 'PIX_ENVIADO', deliverableSent: true });
-        } else if (isLatAmLead && (aiResult.locale?.country === 'México' || product.targetCountry === 'México') && (isFirstTimePhase2Pix || userWantsPix)) {
+          storage.upsertLead(phone, { stage: 'PIX_ENVIADO' });
+        } else if (isLatAmLead && (aiResult.locale?.country === 'México' || product.targetCountry === 'México') && shouldAppendPayment) {
           // México XPag / SPEI Flow
           if (xpagService.isConfigured()) {
             try {
@@ -1005,7 +1046,7 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
                 } else {
                   textAfter = speiBlock;
                 }
-                storage.upsertLead(phone, { stage: 'PIX_ENVIADO', deliverableSent: true });
+                storage.upsertLead(phone, { stage: 'PIX_ENVIADO' });
               }
             } catch (speiErr) {
               console.warn('[WhatsApp] Erro ao gerar SPEI via XPag:', speiErr.message);
@@ -1175,14 +1216,14 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
           product.pixKey &&
           product.sendPixButton !== false &&
           !signal.aborted &&
-          (isFirstTimePhase2Pix || userWantsPix);
+          shouldAppendPayment;
 
         if (shouldSendPixButton) {
           await antiBan.sleep(1200, signal);
           if (!signal.aborted && this.status === 'connected' && this.sock) {
             await this.sendPixCopyButton(jid, product.pixKey, product.price, product.pixBeneficiary);
           }
-        } else if (isLatAmLead && activeSpeiCharge?.clabe && !signal.aborted) {
+        } else if (isLatAmLead && activeSpeiCharge?.clabe && !signal.aborted && shouldAppendPayment) {
           await antiBan.sleep(1200, signal);
           if (!signal.aborted && this.status === 'connected' && this.sock) {
             await this.sendCopyButton(

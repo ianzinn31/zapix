@@ -398,6 +398,7 @@ Eres una especialista en atención y ventas humanas por WhatsApp, cálida, empá
 5. **COMUNICACIÓN NATURAL EN WHATSAPP**: Mensajes de texto dinámicos y humanos (máximo 1 a 2 frases por mensaje). Tienes libertad total para enviar notas de voz [AUDIO: ...] cuando quieras generar mayor cercanía, explicar detalles o conectar emocionalmente. ¡Tú decides con total autonomía si envías el texto antes del audio, el audio antes del texto, o respondes únicamente en texto!
 6. **PRECISIÓN DE VALORES**: Presenta SIEMPRE los precios en moneda local (${currencySymbol} ${ticketBasic} ${currencyCode} en la opción Básica y ${currencySymbol} ${ticketComplete} ${currencyCode} en la opción Completa/VIP). NUNCA menciones dólares (USD) ni reales (BRL).
 7. **PAGOS SIN PRESIÓN**: NUNCA envíes datos o instrucciones de pago de forma prematura si el cliente solo está conociendo o haciendo preguntas sobre el producto. Solo proporciona los datos de pago cuando el cliente pregunte cómo pagar o confirme que desea empezar.
+8. **DESARROLLA LA CONVERSACIÓN PRIMERO (PROHIBIDO COBRAR DE ENTRADA)**: En los primeros intercambios con el cliente, concéntrate 100% en conversar, descubrir la edad del niño/a, qué dificultades tienen y presentar los beneficios de forma cercana. JAMÁS cobres ni envíes datos bancarios o cuentas de transferencia antes de que la conversación se desarrolle y el cliente muestre clara intención de compra.
 
 ---
 
@@ -476,11 +477,12 @@ Oye, te cuento que este material está diseñado con todo el amor para que los p
 Son actividades padrísimas, súper coloridas y fáciles de imprimir para hacer en casa...
 Para orientarte mejor, ¿qué edad tiene tu pequeño o pequeña?]
 
-Opción B (Audio primero, texto después con datos o resumen):
+Opción B (Audio primero, texto después con opciones - solo tras conversar y generar interés):
 [AUDIO: ¡Hola! Qué alegría saludarte... Te cuento que preparamos una opción súper accesible para ti hoy...]
 
-Aquí tienes los datos oficiales para activar tu acceso:
-${paymentInstructions}
+Opciones disponibles para comenzar hoy:
+Opción Básica: ${currencySymbol} ${ticketBasic} ${currencyCode} | Opción Completa: ${currencySymbol} ${ticketComplete} ${currencyCode}
+¿Te gustaría comenzar con alguna de estas opciones?
 
 Opción C (Solo texto - respuestas directas y dinámicas):
 ¡Hola! Sí, todo el material es en formato digital de alta resolución, listo para descargar e imprimir cuando gustes. ¿Te gustaría que te envíe los detalles de las opciones disponibles?
@@ -596,12 +598,12 @@ Nosso material foi feito com todo carinho para as crianças aprenderem brincando
 São atividades bem ilustradas e práticas, que o pequeno nem percebe que está estudando!
 Qual a idade do seu pequeno(a)?]
 
-Opção B (Áudio primeiro, texto depois com resumo ou chave PIX):
-[AUDIO: Oi!... Preparei todo o material com o maior amor do mundo para o seu filho... Dá uma olhadinha nas atividades que te enviei tá bom?]
+Opção B (Áudio primeiro, texto depois com opções - apenas após conversar e quando o cliente mostrar interesse):
+[AUDIO: Oi!... Preparei tudo com o maior amor do mundo para o seu filho... Separei as opções mais especiais para você!]
 
-Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
-Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
-Valor: R$ ${Number(ticketBasic).toFixed(2).replace('.', ',')}
+Opções para começar hoje:
+Pacote Básico: R$ ${Number(ticketBasic).toFixed(2).replace('.', ',')} | Pacote Completo: R$ ${Number(ticketComplete).toFixed(2).replace('.', ',')}
+Gostaria de garantir o acesso com alguma dessas opções?
 
 Opção C (Apenas texto - respostas diretas e dinâmicas):
 Oi Maria! O material conta com mais de 100 atividades ilustradas para imprimir quantas vezes quiser. Você quer que eu te envie o pacote completo agora? 😊
@@ -809,8 +811,12 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
     let contextDirective = '';
 
     const messagesHistory = conversationHistory || [];
-    const hasSentBefore = messagesHistory.some(m => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
-    const hasSentDeliverable = leadObj?.deliverableSent === true || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || hasSentBefore;
+    const hasSentBefore = messagesHistory.some(m => m.fromMe && m.text && (
+      m.text.includes('📎 [Enviado]:') ||
+      m.text.includes('📎 [Arquivo]:') ||
+      m.text.includes('📎 [Documento]:')
+    ));
+    const hasSentDeliverable = hasSentBefore;
     const isPaid = leadObj?.stage === 'APROVADO' || leadObj?.lastReceiptStatus === 'APROVADO';
 
     const hasAlreadySentPixInHistory = messagesHistory.some((m) => m.fromMe && m.text && (
@@ -818,11 +824,16 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
       (product.nequiNumber && m.text.includes(product.nequiNumber)) ||
       (product.aliasKey && m.text.includes(product.aliasKey)) ||
       m.text.includes('Chave PIX') ||
+      m.text.includes('Copiar Chave PIX') ||
+      m.text.includes('TRANSFERENCIA SPEI') ||
+      m.text.includes('CLABE:') ||
+      m.text.includes('DATOS OFICIALES') ||
+      m.text.includes('STP (Sistema de Transferencia') ||
       m.text.includes('SPEI') ||
       m.text.includes('Nequi') ||
       m.text.includes('Alias')
     ));
-    const hasPixBeenSent = hasAlreadySentPixInHistory || leadObj?.stage === 'PIX_ENVIADO';
+    const hasPixBeenSent = hasAlreadySentPixInHistory;
 
     const lowerUserMsg = (userMessage || '').toLowerCase();
 
