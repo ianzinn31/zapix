@@ -623,6 +623,12 @@ class StorageService {
     return this.data.systemLogs.slice(-limit).reverse();
   }
 
+  clearLogs() {
+    this.data.systemLogs = [];
+    this.save();
+    return true;
+  }
+
   addLog(type, message, meta = null) {
     const logItem = {
       id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,

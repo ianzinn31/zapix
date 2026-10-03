@@ -326,6 +326,17 @@ router.post('/sales/simulate', (req, res) => {
   res.json(sale);
 });
 
+// === System Logs ===
+router.get('/logs', (req, res) => {
+  const limit = parseInt(req.query.limit, 10) || 100;
+  res.json(storage.getLogs(limit));
+});
+
+router.delete('/logs', (req, res) => {
+  storage.clearLogs();
+  res.json({ success: true, message: 'Logs limpos com sucesso.' });
+});
+
 // === Fish Audio Test Synthesis ===
 router.post('/fish-audio/test', async (req, res) => {
   const { text, voiceId, model } = req.body;
