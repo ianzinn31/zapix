@@ -79,7 +79,16 @@ router.get('/leads', (req, res) => {
 router.put('/leads/:phone', (req, res) => {
   const { phone } = req.params;
   const updates = req.body;
-  const updated = storage.upsertLead(phone, updates);
+  const newPhone = updates.phone || updates.newPhone;
+  let updated;
+  if (newPhone && newPhone.replace(/[^0-9]/g, '') !== phone.replace(/[^0-9]/g, '')) {
+    updated = storage.migrateLidLead(phone, newPhone, updates.name);
+    if (!updated) {
+      updated = storage.upsertLead(phone, updates);
+    }
+  } else {
+    updated = storage.upsertLead(phone, updates);
+  }
   whatsapp.emit('lead:updated', updated);
   storage.addLog('INFO', `Lead ${phone} atualizado manualmente.`);
   res.json(updated);

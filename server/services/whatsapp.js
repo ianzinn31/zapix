@@ -117,6 +117,71 @@ class WhatsAppService {
     return this.initialize();
   }
 
+  // Scan persistent Baileys auth folder for reverse LID mappings (lid-mapping-*_reverse.json)
+  scanAuthLidMappings() {
+    if (!fs.existsSync(AUTH_DIR)) return;
+    try {
+      const files = fs.readdirSync(AUTH_DIR);
+      let count = 0;
+      for (const file of files) {
+        if (file.startsWith('lid-mapping-') && file.endsWith('_reverse.json')) {
+          const lidUser = file.replace('lid-mapping-', '').replace('_reverse.json', '');
+          try {
+            const content = fs.readFileSync(path.join(AUTH_DIR, file), 'utf8');
+            const pnUser = JSON.parse(content);
+            if (typeof pnUser === 'string' && pnUser.trim()) {
+              const cleanPn = pnUser.trim().replace(/[^0-9]/g, '');
+              const cleanLid = lidUser.replace(/[^0-9]/g, '');
+              if (cleanPn && cleanLid && cleanPn !== cleanLid) {
+                storage.saveLidMapping(cleanLid, cleanPn);
+                const migrated = storage.migrateLidLead(cleanLid, cleanPn);
+                if (migrated) {
+                  this.emit('lead:updated', migrated);
+                  count++;
+                }
+              }
+            }
+          } catch (_) {}
+        }
+      }
+      if (count > 0) {
+        storage.addLog('SUCCESS', `Sincronizados ${count} números reais de telefone a partir dos dados do WhatsApp.`);
+      }
+    } catch (err) {
+      console.warn('[WhatsApp] Erro ao escanear lid-mappings em auth:', err.message);
+    }
+  }
+
+  // Actively sync and resolve real phone numbers for all leads currently stored as LIDs
+  async syncLidMappingsForAllLeads() {
+    this.scanAuthLidMappings();
+    const leads = storage.getLeads();
+    for (const lead of leads) {
+      const phoneClean = (lead.phone || '').replace(/[^0-9]/g, '');
+      const isLid = lead.jid?.endsWith('@lid') || (phoneClean.length >= 14 && !phoneClean.startsWith('55') && !phoneClean.startsWith('52') && !phoneClean.startsWith('54'));
+      if (isLid) {
+        let realPhone = storage.getPhoneForLid(phoneClean);
+        if (!realPhone && this.sock?.signalRepository?.lidMapping) {
+          try {
+            const targetLid = lead.jid || `${phoneClean}@lid`;
+            const pnResult = await this.sock.signalRepository.lidMapping.getPNForLID(targetLid);
+            const pnStr = typeof pnResult === 'string' ? pnResult : (pnResult?.pn || '');
+            if (pnStr) {
+              realPhone = pnStr.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            }
+          } catch (_) {}
+        }
+        if (realPhone && realPhone !== phoneClean) {
+          storage.saveLidMapping(phoneClean, realPhone);
+          const migrated = storage.migrateLidLead(phoneClean, realPhone, lead.name);
+          if (migrated) {
+            this.emit('lead:updated', migrated);
+          }
+        }
+      }
+    }
+  }
+
   // Safe presence update that never throws or crashes on closed/dead sockets
   async safePresence(jid, type) {
     try {
@@ -180,6 +245,9 @@ class WhatsAppService {
             connectedNumber: this.connectedNumber
           });
           storage.addLog('SUCCESS', `WhatsApp conectado com sucesso no número: ${this.connectedNumber}`);
+          setTimeout(() => {
+            this.syncLidMappingsForAllLeads();
+          }, 1500);
         }
 
         if (connection === 'close') {
@@ -217,6 +285,110 @@ class WhatsAppService {
         }
       });
 
+      // 1. WhatsApp LID to Phone mappings update
+      this.sock.ev.on('lid-mapping.update', (mapping) => {
+        try {
+          if (mapping?.lid && mapping?.pn) {
+            const cleanLid = mapping.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            const cleanPn = mapping.pn.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            if (cleanLid && cleanPn && cleanLid !== cleanPn) {
+              storage.saveLidMapping(cleanLid, cleanPn);
+              const migrated = storage.migrateLidLead(cleanLid, cleanPn);
+              if (migrated) {
+                this.emit('lead:updated', migrated);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[WhatsApp] Erro ao processar lid-mapping.update:', e.message);
+        }
+      });
+
+      // 2. Contacts synchronization from WhatsApp Web
+      this.sock.ev.on('contacts.upsert', (contacts) => {
+        try {
+          if (Array.isArray(contacts)) {
+            for (const c of contacts) {
+              const lid = c.lid ? c.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null;
+              const pn = c.phoneNumber || (c.id && (c.id.includes('@s.whatsapp.net') || c.id.includes('@c.us')) ? c.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null);
+              const name = c.name || c.notify;
+              if (lid && pn && lid !== pn) {
+                storage.saveLidMapping(lid, pn);
+                const migrated = storage.migrateLidLead(lid, pn, name);
+                if (migrated) {
+                  this.emit('lead:updated', migrated);
+                }
+              } else if (pn && name) {
+                const lead = storage.getLead(pn);
+                if (lead && (!lead.name || /^[0-9]+$/.test(lead.name))) {
+                  storage.upsertLead(pn, { name });
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[WhatsApp] Erro ao processar contacts.upsert:', e.message);
+        }
+      });
+
+      this.sock.ev.on('contacts.update', (updates) => {
+        try {
+          if (Array.isArray(updates)) {
+            for (const c of updates) {
+              const lid = c.lid ? c.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null;
+              const pn = c.phoneNumber || (c.id && (c.id.includes('@s.whatsapp.net') || c.id.includes('@c.us')) ? c.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null);
+              const name = c.name || c.notify;
+              if (lid && pn && lid !== pn) {
+                storage.saveLidMapping(lid, pn);
+                const migrated = storage.migrateLidLead(lid, pn, name);
+                if (migrated) {
+                  this.emit('lead:updated', migrated);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[WhatsApp] Erro ao processar contacts.update:', e.message);
+        }
+      });
+
+      // 3. Message history sync (includes contacts and LID-PN pairs)
+      this.sock.ev.on('messaging-history.set', ({ contacts, lidPnMappings }) => {
+        try {
+          if (Array.isArray(lidPnMappings)) {
+            for (const m of lidPnMappings) {
+              if (m?.lid && m?.pn) {
+                const cleanLid = m.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                const cleanPn = m.pn.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                if (cleanLid && cleanPn && cleanLid !== cleanPn) {
+                  storage.saveLidMapping(cleanLid, cleanPn);
+                  const migrated = storage.migrateLidLead(cleanLid, cleanPn);
+                  if (migrated) {
+                    this.emit('lead:updated', migrated);
+                  }
+                }
+              }
+            }
+          }
+          if (Array.isArray(contacts)) {
+            for (const c of contacts) {
+              const lid = c.lid ? c.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null;
+              const pn = c.phoneNumber || (c.id && (c.id.includes('@s.whatsapp.net') || c.id.includes('@c.us')) ? c.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null);
+              const name = c.name || c.notify;
+              if (lid && pn && lid !== pn) {
+                storage.saveLidMapping(lid, pn);
+                const migrated = storage.migrateLidLead(lid, pn, name);
+                if (migrated) {
+                  this.emit('lead:updated', migrated);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[WhatsApp] Erro ao processar messaging-history.set:', e.message);
+        }
+      });
+
       // Handle Incoming Messages
       this.sock.ev.on('messages.upsert', async (m) => {
         if (m.type !== 'notify') return;
@@ -229,8 +401,49 @@ class WhatsAppService {
           }
 
           const fromMe = Boolean(msg.key?.fromMe);
-          const phone = jid.split('@')[0];
+          const altJid = msg.key?.participantAlt || msg.key?.remoteJidAlt || '';
+
+          let lid = jid.endsWith('@lid') ? jid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null;
+          let realPhone = (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@c.us'))
+            ? jid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '')
+            : null;
+
+          if (altJid) {
+            if (altJid.endsWith('@s.whatsapp.net') || altJid.endsWith('@c.us')) {
+              realPhone = altJid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            } else if (altJid.endsWith('@lid') && !lid) {
+              lid = altJid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            }
+          }
+
+          // Check cached storage mappings
+          if (lid && !realPhone) {
+            realPhone = storage.getPhoneForLid(lid);
+          }
+
+          // Check Baileys internal signalRepository.lidMapping
+          if (lid && !realPhone && this.sock?.signalRepository?.lidMapping) {
+            try {
+              const pnResult = await this.sock.signalRepository.lidMapping.getPNForLID(jid);
+              const pnStr = typeof pnResult === 'string' ? pnResult : (pnResult?.pn || '');
+              if (pnStr) {
+                realPhone = pnStr.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+              }
+            } catch (_) {}
+          }
+
           const pushName = (msg.pushName || msg.verifiedBizName || '').trim();
+
+          // If we mapped a LID to a real phone, migrate any prior temporary lead entries
+          if (lid && realPhone && realPhone !== lid) {
+            storage.saveLidMapping(lid, realPhone);
+            const migrated = storage.migrateLidLead(lid, realPhone, pushName);
+            if (migrated) {
+              this.emit('lead:updated', migrated);
+            }
+          }
+
+          const phone = realPhone || lid || jid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
 
           // Extract text content
           let messageContent =
@@ -394,10 +607,12 @@ class WhatsAppService {
             timestamp: (Number(msg.messageTimestamp) * 1000) || Date.now()
           });
 
-          // Ensure lead exists with their actual WhatsApp pushName and exact routing JID
+          // Ensure lead exists with their actual WhatsApp pushName, exact routing JID, and resolved identity
           if (!fromMe) {
             storage.upsertLead(phone, {
               jid,
+              ...(lid ? { lid } : {}),
+              ...(realPhone ? { realPhone } : {}),
               ...(pushName ? { name: pushName, pushName } : {})
             });
           }
@@ -1440,22 +1655,32 @@ class WhatsAppService {
     if (str.includes('@')) {
       return str;
     }
-    let clean = str.replace(/[^0-9]/g, '');
+    const clean = str.replace(/[^0-9]/g, '');
     if (!clean) return null;
 
+    // 1. Check if lead exists in storage and has an exact routing jid
     const lead = storage.getLead(clean) || storage.getLead(str);
     if (lead?.jid && String(lead.jid).includes('@')) {
       return lead.jid;
     }
-    // WhatsApp Privacy LID heuristic (14+ digits)
-    if (clean.length >= 14) {
+
+    // 2. Check if this phone maps to a known LID
+    const mappedLid = storage.getLidForPhone(clean);
+    if (mappedLid) {
+      return `${mappedLid}@lid`;
+    }
+
+    // 3. WhatsApp Privacy LID heuristic (14+ digits not starting with known country code)
+    if (clean.length >= 14 && !clean.startsWith('55') && !clean.startsWith('52') && !clean.startsWith('54')) {
       return `${clean}@lid`;
     }
-    // Brazilian standard mobile numbers without country code 55 (10 or 11 digits)
+
+    // 4. Brazilian standard mobile numbers without country code 55 (10 or 11 digits)
+    let finalPhone = clean;
     if ((clean.length === 10 || clean.length === 11) && !clean.startsWith('55')) {
-      clean = `55${clean}`;
+      finalPhone = `55${clean}`;
     }
-    return `${clean}@s.whatsapp.net`;
+    return `${finalPhone}@s.whatsapp.net`;
   }
 
   // Asynchronous resolver that checks WhatsApp network if necessary
@@ -1559,14 +1784,37 @@ class WhatsAppService {
     return { success: true };
   }
 
-  // Fetch contact profile information (avatar, name) from WhatsApp
+  // Fetch contact profile information (avatar, name, real phone) from WhatsApp
   async fetchContactInfo(phone) {
     if (!this.sock) {
       return { phone, error: 'WhatsApp não está conectado no momento' };
     }
     try {
+      const clean = String(phone).replace(/[^0-9]/g, '');
       const jid = await this.resolveJidAsync(phone);
       if (!jid) return { phone, error: 'JID inválido' };
+
+      // 1. Resolve real phone number if contact currently has LID
+      let resolvedPhone = null;
+      if (jid.endsWith('@lid') || clean.length >= 14) {
+        resolvedPhone = storage.getPhoneForLid(clean);
+        if (!resolvedPhone && this.sock.signalRepository?.lidMapping) {
+          try {
+            const pnResult = await this.sock.signalRepository.lidMapping.getPNForLID(jid);
+            const pnStr = typeof pnResult === 'string' ? pnResult : (pnResult?.pn || '');
+            if (pnStr) {
+              resolvedPhone = pnStr.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            }
+          } catch (_) {}
+        }
+        if (resolvedPhone && resolvedPhone !== clean) {
+          storage.saveLidMapping(clean, resolvedPhone);
+          const migrated = storage.migrateLidLead(clean, resolvedPhone);
+          if (migrated) {
+            phone = resolvedPhone;
+          }
+        }
+      }
       
       let avatarUrl = null;
       try {
@@ -1575,15 +1823,18 @@ class WhatsAppService {
 
       let pushName = null;
       try {
-        const contact = this.sock.contacts?.[jid];
+        const contact = this.sock.contacts?.[jid] || this.sock.contacts?.[`${phone}@s.whatsapp.net`];
         if (contact && (contact.name || contact.notify)) {
           pushName = contact.name || contact.notify;
         }
       } catch (e) {}
 
-      const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
-      const lead = storage.getLead(cleanPhone) || storage.getLead(phone);
-      const updated = storage.upsertLead(phone, {
+      const effectivePhone = resolvedPhone || phone;
+      const cleanEffective = String(effectivePhone).replace(/[^0-9]/g, '');
+      const lead = storage.getLead(cleanEffective) || storage.getLead(effectivePhone);
+      const updated = storage.upsertLead(effectivePhone, {
+        jid,
+        ...(resolvedPhone ? { realPhone: resolvedPhone } : {}),
         ...(avatarUrl ? { avatarUrl } : {}),
         ...(pushName ? { name: pushName, pushName } : {})
       });

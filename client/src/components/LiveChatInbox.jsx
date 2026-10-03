@@ -25,21 +25,86 @@ import {
   Phone
 } from 'lucide-react';
 
+export function isLidNumber(raw) {
+  if (!raw) return false;
+  const num = String(raw).replace(/[^0-9]/g, '');
+  return num.length >= 14 && !num.startsWith('55') && !num.startsWith('52') && !num.startsWith('54');
+}
+
 export function formatPhoneNumber(raw) {
   if (!raw) return '';
   const num = String(raw).replace(/[^0-9]/g, '');
+  if (!num) return '';
+
+  // WhatsApp LID (Privacy account ID without mapped phone number yet)
+  if (isLidNumber(num)) {
+    return `ID WhatsApp: ${num.slice(0, 5)}...${num.slice(-4)}`;
+  }
+
+  // Brasil (+55)
   if (num.length === 13 && num.startsWith('55')) {
     return `+55 (${num.slice(2, 4)}) ${num.slice(4, 9)}-${num.slice(9)}`;
   }
   if (num.length === 12 && num.startsWith('55')) {
     return `+55 (${num.slice(2, 4)}) ${num.slice(4, 8)}-${num.slice(8)}`;
   }
-  if (num.length === 11) {
+  if (num.length === 11 && !num.startsWith('55') && !num.startsWith('5')) {
     return `(${num.slice(0, 2)}) ${num.slice(2, 7)}-${num.slice(7)}`;
   }
-  if (num.length === 10) {
+  if (num.length === 10 && !num.startsWith('55')) {
     return `(${num.slice(0, 2)}) ${num.slice(2, 6)}-${num.slice(6)}`;
   }
+
+  // México (+52)
+  if (num.startsWith('52')) {
+    if (num.length === 13 && num.startsWith('521')) {
+      return `+52 (${num.slice(3, 5)}) ${num.slice(5, 9)}-${num.slice(9)}`;
+    }
+    if (num.length === 12) {
+      return `+52 (${num.slice(2, 4)}) ${num.slice(4, 8)}-${num.slice(8)}`;
+    }
+  }
+
+  // Colômbia (+57)
+  if (num.startsWith('57') && num.length === 12) {
+    return `+57 ${num.slice(2, 5)} ${num.slice(5, 8)}-${num.slice(8)}`;
+  }
+
+  // Argentina (+54)
+  if (num.startsWith('54')) {
+    if (num.length === 13 && num.startsWith('549')) {
+      return `+54 9 ${num.slice(3, 5)} ${num.slice(5, 9)}-${num.slice(9)}`;
+    }
+    if (num.length >= 11) {
+      return `+54 ${num.slice(2, 5)} ${num.slice(5)}`;
+    }
+  }
+
+  // Bolívia (+591)
+  if (num.startsWith('591') && num.length === 11) {
+    return `+591 ${num.slice(3, 7)}-${num.slice(7)}`;
+  }
+
+  // Paraguai (+595)
+  if (num.startsWith('595') && num.length === 12) {
+    return `+595 ${num.slice(3, 6)} ${num.slice(6)}`;
+  }
+
+  // Peru (+51)
+  if (num.startsWith('51') && num.length === 11) {
+    return `+51 ${num.slice(2, 5)} ${num.slice(5, 8)} ${num.slice(8)}`;
+  }
+
+  // Chile (+56)
+  if (num.startsWith('56') && num.length === 11) {
+    return `+56 9 ${num.slice(3, 7)}-${num.slice(7)}`;
+  }
+
+  // EUA / Canadá (+1)
+  if (num.startsWith('1') && num.length === 11) {
+    return `+1 (${num.slice(1, 4)}) ${num.slice(4, 7)}-${num.slice(7)}`;
+  }
+
   return `+${num}`;
 }
 
@@ -64,6 +129,8 @@ export default function LiveChatInbox({
   const [playingAudioId, setPlayingAudioId] = useState(null);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneInput, setPhoneInput] = useState('');
   const [leadToDelete, setLeadToDelete] = useState(null);
   const [leadToReset, setLeadToReset] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -87,6 +154,7 @@ export default function LiveChatInbox({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     setEditingName(false);
+    setEditingPhone(false);
   }, [messages, selectedLeadPhone]);
 
   const handleSend = async (e) => {
@@ -111,6 +179,19 @@ export default function LiveChatInbox({
       await onUpdateLead(activeLead.phone, { name: nameInput.trim() });
     }
     setEditingName(false);
+  };
+
+  const handleSavePhone = async () => {
+    if (!activeLead || !phoneInput.trim()) return;
+    const cleanNum = phoneInput.replace(/[^0-9]/g, '');
+    if (!cleanNum) return;
+    if (onUpdateLead) {
+      await onUpdateLead(activeLead.phone, { phone: cleanNum, newPhone: cleanNum });
+    }
+    setEditingPhone(false);
+    if (onSelectLead) {
+      onSelectLead(cleanNum);
+    }
   };
 
   const handleSyncLeadInfo = async () => {
@@ -357,10 +438,15 @@ export default function LiveChatInbox({
                       )}
                       <div>
                         <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#f8fafc', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {lead.name || formatPhoneNumber(lead.phone)}
+                          {lead.name || (isLidNumber(lead.phone) ? 'Lead WhatsApp' : formatPhoneNumber(lead.phone))}
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                          {formatPhoneNumber(lead.phone)}
+                        <div style={{ fontSize: '0.72rem', color: isLidNumber(lead.phone) ? '#38bdf8' : '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span>{formatPhoneNumber(lead.phone)}</span>
+                          {isLidNumber(lead.phone) && (
+                            <span style={{ fontSize: '0.6rem', padding: '0 4px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', borderRadius: '3px', fontWeight: 700 }}>
+                              LID
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -560,9 +646,69 @@ export default function LiveChatInbox({
                       </>
                     )}
 
-                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                      ({formatPhoneNumber(activeLead.phone)})
-                    </span>
+                    {/* Lead Phone with inline edit and sync */}
+                    {editingPhone ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '6px' }}>
+                        <input
+                          type="text"
+                          value={phoneInput}
+                          onChange={(e) => setPhoneInput(e.target.value)}
+                          placeholder="Ex: 5588994892385"
+                          autoFocus
+                          style={{
+                            background: '#0f172a',
+                            border: '1px solid #06b6d4',
+                            borderRadius: '4px',
+                            color: '#fff',
+                            fontSize: '0.8rem',
+                            padding: '3px 8px',
+                            width: '150px'
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSavePhone();
+                            if (e.key === 'Escape') setEditingPhone(false);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSavePhone}
+                          style={{ background: '#06b6d4', border: 'none', borderRadius: '4px', padding: '5px', cursor: 'pointer', color: '#fff', display: 'flex' }}
+                          title="Salvar Número"
+                        >
+                          <Check size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingPhone(false)}
+                          style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '4px', padding: '5px', cursor: 'pointer', color: '#94a3b8', display: 'flex' }}
+                          title="Cancelar"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '0.75rem', color: isLidNumber(activeLead.phone) ? '#38bdf8' : '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          ({formatPhoneNumber(activeLead.phone)})
+                          {isLidNumber(activeLead.phone) && (
+                            <span style={{ fontSize: '0.62rem', padding: '1px 5px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', borderRadius: '3px', fontWeight: 600 }}>
+                              LID
+                            </span>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPhoneInput(activeLead.phone || '');
+                            setEditingPhone(true);
+                          }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '2px', display: 'flex' }}
+                          title="Editar/Vincular Número de Telefone Real"
+                        >
+                          <Edit2 size={11} />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Funnel Stage Selector */}

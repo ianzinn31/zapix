@@ -284,6 +284,7 @@ const DEFAULT_STATE = {
     }
   },
   leads: {},
+  lidMappings: {},
   messages: [],
   deliverables: [],
   sales: [],
@@ -416,6 +417,7 @@ class StorageService {
             remarketing: { ...DEFAULT_STATE.settings.remarketing, ...(parsed.settings?.remarketing || {}) }
           },
           leads: parsed.leads || DEFAULT_STATE.leads,
+          lidMappings: parsed.lidMappings || DEFAULT_STATE.lidMappings || {},
           messages: parsed.messages || DEFAULT_STATE.messages,
           deliverables: parsed.deliverables || DEFAULT_STATE.deliverables,
           sales: parsed.sales || DEFAULT_STATE.sales,
@@ -508,6 +510,94 @@ class StorageService {
     return this.data.settings;
   }
 
+  // LID Mappings (WhatsApp Privacy Identity -> Real Phone Number)
+  saveLidMapping(lid, phone) {
+    if (!lid || !phone) return;
+    const cleanLid = String(lid).replace(/[^0-9]/g, '');
+    const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+    if (!cleanLid || !cleanPhone || cleanLid === cleanPhone) return;
+
+    if (!this.data.lidMappings) {
+      this.data.lidMappings = {};
+    }
+    this.data.lidMappings[cleanLid] = cleanPhone;
+    this.data.lidMappings[cleanPhone] = cleanLid;
+    this.save();
+  }
+
+  getPhoneForLid(lid) {
+    if (!lid) return null;
+    const clean = String(lid).replace(/[^0-9]/g, '');
+    return this.data.lidMappings?.[clean] || null;
+  }
+
+  getLidForPhone(phone) {
+    if (!phone) return null;
+    const clean = String(phone).replace(/[^0-9]/g, '');
+    return this.data.lidMappings?.[clean] || null;
+  }
+
+  migrateLidLead(lid, realPhone, optionalName = null) {
+    if (!lid || !realPhone) return null;
+    const cleanLid = String(lid).replace(/[^0-9]/g, '');
+    const cleanPhone = String(realPhone).replace(/[^0-9]/g, '');
+    if (!cleanLid || !cleanPhone || cleanLid === cleanPhone) return null;
+
+    this.saveLidMapping(cleanLid, cleanPhone);
+
+    const oldLead = this.data.leads[cleanLid] || this.data.leads[lid];
+    const existingReal = this.data.leads[cleanPhone] || this.data.leads[realPhone];
+
+    const routingJid = oldLead?.jid || (cleanLid.length >= 14 ? `${cleanLid}@lid` : `${cleanLid}@s.whatsapp.net`);
+
+    let name = optionalName || existingReal?.name || oldLead?.name || cleanPhone;
+    if (name === cleanLid && optionalName) {
+      name = optionalName;
+    } else if (name === cleanLid) {
+      name = cleanPhone;
+    }
+
+    const mergedLead = {
+      ...(oldLead || {}),
+      ...(existingReal || {}),
+      id: cleanPhone,
+      phone: cleanPhone,
+      realPhone: cleanPhone,
+      lid: cleanLid,
+      jid: routingJid,
+      name,
+      updatedAt: Date.now()
+    };
+
+    this.data.leads[cleanPhone] = mergedLead;
+
+    // Remove obsolete LID key from leads map so it doesn't duplicate in CRM
+    if (this.data.leads[cleanLid] && cleanLid !== cleanPhone) {
+      delete this.data.leads[cleanLid];
+    }
+    if (this.data.leads[lid] && lid !== cleanPhone) {
+      delete this.data.leads[lid];
+    }
+
+    // Migrate messages to real phone number
+    if (Array.isArray(this.data.messages)) {
+      for (const msg of this.data.messages) {
+        if (msg.phone === cleanLid || msg.phone === lid) {
+          msg.phone = cleanPhone;
+        }
+      }
+    }
+
+    this.save();
+    supabaseService.upsertLead(mergedLead);
+    if (cleanLid !== cleanPhone) {
+      supabaseService.deleteLead(cleanLid);
+    }
+
+    console.log(`[Storage] Lead migrado com sucesso: LID ${cleanLid} -> Telefone Real ${cleanPhone} (${name})`);
+    return mergedLead;
+  }
+
   // Leads
   getLeads() {
     return Object.values(this.data.leads).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -518,9 +608,26 @@ class StorageService {
     const cleanPhone = String(phone).replace(/[^0-9]/g, '');
     if (this.data.leads[phone]) return this.data.leads[phone];
     if (this.data.leads[cleanPhone]) return this.data.leads[cleanPhone];
-    for (const leadKey of Object.keys(this.data.leads)) {
-      if (isSamePhoneNumber(leadKey, cleanPhone)) {
-        return this.data.leads[leadKey];
+
+    // Check if phone is a LID that maps to a real phone
+    const mappedPhone = this.getPhoneForLid(cleanPhone);
+    if (mappedPhone && this.data.leads[mappedPhone]) {
+      return this.data.leads[mappedPhone];
+    }
+
+    // Check if phone is a real phone that maps from a LID
+    const mappedLid = this.getLidForPhone(cleanPhone);
+    if (mappedLid && this.data.leads[mappedLid]) {
+      return this.data.leads[mappedLid];
+    }
+
+    // Search across leads by phone, lid, or fuzzy phone match
+    for (const lead of Object.values(this.data.leads)) {
+      if (lead.phone === cleanPhone || lead.lid === cleanPhone || lead.realPhone === cleanPhone || lead.id === cleanPhone) {
+        return lead;
+      }
+      if (isSamePhoneNumber(lead.phone, cleanPhone) || (lead.lid && isSamePhoneNumber(lead.lid, cleanPhone))) {
+        return lead;
       }
     }
     return null;
@@ -655,7 +762,17 @@ class StorageService {
     if (!phone) return this.data.messages;
     const cleanPhone = String(phone).replace(/[^0-9]/g, '');
     if (!cleanPhone) return [];
-    return this.data.messages.filter((m) => isSamePhoneNumber(m.phone, cleanPhone));
+    const mappedPhone = this.getPhoneForLid(cleanPhone);
+    const mappedLid = this.getLidForPhone(cleanPhone);
+    return this.data.messages.filter((m) => {
+      const mClean = (m.phone || '').replace(/[^0-9]/g, '');
+      return (
+        mClean === cleanPhone ||
+        (mappedPhone && mClean === mappedPhone) ||
+        (mappedLid && mClean === mappedLid) ||
+        isSamePhoneNumber(m.phone, cleanPhone)
+      );
+    });
   }
 
   addMessage(msg) {
