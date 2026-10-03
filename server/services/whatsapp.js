@@ -818,7 +818,8 @@ class WhatsAppService {
             (lowerUser.includes('manda') || lowerUser.includes('envia') || lowerUser.includes('quero ver') || lowerUser.includes('pode mandar') || lowerUser.includes('quero') || lowerUser.includes('sim')) &&
             (lowerReply.includes('enviando') || lowerReply.includes('entregando') || lowerReply.includes('liberando') || lowerReply.includes('preparei') || lowerReply.includes('separei') || lowerReply.includes('abaixo'));
 
-          const isTurn2OrEngaged = userIncomingMsgs.length >= 2 || hasChildDetails || isTriggeredByTag || isExplicitDeliveryAgreement;
+          const isAskingAudio = /(?:mandar?|enviar?|grabar?|puedes mandar|me podr[ií]as mandar|manda|envia)\s+(?:un\s+)?audio|escuchar\s+en\s+audio|audio\s+explicando|manda\s+(?:um\s+)?[aá]udio|grava\s+(?:um\s+)?[aá]udio|pode\s+mandar\s+[aá]udio/i.test(lowerUser);
+          const isTurn2OrEngaged = (!isAskingAudio && userIncomingMsgs.length >= 2) || hasChildDetails || isTriggeredByTag || isExplicitDeliveryAgreement;
 
           // If the customer explicitly asked for the PIX and already received materials: don't resend materials!
           if (userWantsPix && hasReceivedAny) {
@@ -924,6 +925,7 @@ class WhatsAppService {
         let textAfter = sanitizeBubbleText(rawTextAfterAudio);
 
         // 6. Safeguard: Ensure PIX key is present ONLY during the initial Phase 2 closing (AFTER deliverables have been sent), or when customer explicitly asked for PIX!
+        const isLatAmLead = aiResult.locale?.isLatAm || false;
         const sentMsgsForPixCheck = storage.getMessages(phone) || [];
         const hasAlreadySentPixInHistory = sentMsgsForPixCheck.some((m) => m.fromMe && m.text && (
           (product.pixKey && m.text.includes(product.pixKey)) ||
@@ -939,7 +941,7 @@ class WhatsAppService {
           !hasAlreadySentPixInHistory &&
           leadObj?.stage !== 'PIX_ENVIADO';
 
-        if (product.pixKey && (isFirstTimePhase2Pix || userWantsPix)) {
+        if (!isLatAmLead && product.pixKey && (isFirstTimePhase2Pix || userWantsPix)) {
           const pixPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
           const pixBlock = `Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${pixPrice}\n\nAssim que você fizer, me envia o comprovante aqui tá bom? ❤️`;
           const emotionalAppeal = `Eu confiei em você de olhos fechados e já te entreguei todo o material completo antes mesmo de você pagar! Fiz isso de coração aberto porque sei o quanto você se preocupa e quer o melhor para o seu pequeno... ❤️\n\nAgora estou aqui de coração te pedindo pra fazer a sua parte com essa contribuição simbólica de apenas R$ ${pixPrice}, que é o que mantém nosso trabalho vivo e de pé!`;
@@ -1005,7 +1007,13 @@ class WhatsAppService {
         const sendVoiceNote = async (speechText) => {
           if (!speechText || speechText.trim().length === 0 || signal.aborted) return;
           try {
-            const generatedAudio = await fishAudio.generateSpeech(speechText, null, null, { phone, jid, text: speechText });
+            const generatedAudio = await fishAudio.generateSpeech(speechText, null, null, {
+              phone,
+              jid,
+              text: speechText,
+              targetCountry: aiResult.locale?.country,
+              language: aiResult.locale?.language
+            });
             if (signal.aborted) return;
 
             const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);

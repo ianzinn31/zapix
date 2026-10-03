@@ -13,6 +13,10 @@ class NvidiaNimService {
     if (!phone) return null;
     const clean = String(phone).replace(/[^0-9]/g, '');
     if (!clean) return null;
+    // WhatsApp Privacy LIDs are 15-digit internal identifiers (e.g. 167297666814095), NOT international phone numbers!
+    if (clean.length > 13 && (clean.startsWith('1') || clean.startsWith('2'))) {
+      return null;
+    }
     if (clean.startsWith('55')) return 'Brasil';
     if (clean.startsWith('52')) return 'México';
     if (clean.startsWith('57')) return 'Colômbia';
@@ -23,44 +27,224 @@ class NvidiaNimService {
     if (clean.startsWith('56')) return 'Chile';
     if (clean.startsWith('593')) return 'Equador';
     if (clean.startsWith('58')) return 'Venezuela';
-    if (clean.startsWith('1')) return 'Estados Unidos';
+    if (clean.startsWith('1') && clean.length <= 11) return 'Estados Unidos';
     return null;
   }
 
+  // Real-time Language, Dialect & Slang Detection from customer messages & conversation history
+  detectLanguageAndCountry(userMessage = '', conversationHistory = [], phone = '') {
+    // Collect all incoming customer messages
+    const incomingTexts = [
+      userMessage,
+      ...(conversationHistory || [])
+        .filter(m => !m.fromMe && m.text)
+        .slice(-6)
+        .map(m => m.text)
+    ].filter(Boolean);
+
+    const fullText = incomingTexts.join(' ').toLowerCase();
+
+    // 1. Regional Slang & Vocabulary Patterns (Immediate Country Match)
+    // México:
+    const isMexicanSlang = /\b(qu[eé]\s+onda|oye|chido|chida|padr[ií]simo|padr[ií]sima|padre|porfa|porfis|[oó]rale|compa|wey|g[uü]ey|neta|ahorita|lana|carnal|pl[aá]tica|h[ií]jole|mande|aguas|sale)\b/i.test(fullText);
+
+    // Colombia:
+    const isColombianSlang = /\b(parce|parcero|parcera|ch[eé]vere|bacano|bacana|de\s+una|listo\s+parce|plata|berraco|pelao|pelaito|bien\s+pueda)\b/i.test(fullText);
+
+    // Argentina:
+    const isArgentineSlang = /\b(che\b|mir[aá]\b|viste|boludo|boluda|copado|copada|posta|dale\b|laburo|re\s+bien|quilombo|re\s+bueno|genial\s+che)\b/i.test(fullText);
+
+    // Chile:
+    const isChileanSlang = /\b(po\b|cachai|altiro|al\s+tiro|bac[aá]n|we[oó]n)\b/i.test(fullText);
+
+    // Peru:
+    const isPeruvianSlang = /\b(pe\b|causa|pata|choche)\b/i.test(fullText);
+
+    // Bolivia:
+    const isBolivianSlang = /\b(casero|casera|qr\s+simple|tigo\s+money)\b/i.test(fullText);
+
+    // 2. Language Scoring (Spanish vs Portuguese vs English)
+    const spanishMatches = (fullText.match(/\b(qu[eé]|c[oó]mo|cu[aá]nto|cu[aá]ntos|cu[aá]l|d[oó]nde|est[aá]s?|hola|buenas|oye|porfa|por\s+favor|gracias|muchas\s+gracias|actividades|info|informaci[oó]n|quiero|puedo|mandar|audio|escuchar|f[aá]cil|hacer|hijos?|ni[nñ]os?|peque[nñ]os?|precio|costo|es\s+que|se\s+me|me\s+dabas|con\s+todo\s+gusto|claro|genial|para\s+que|aprender|ingl[eé]s)\b/gi) || []).length;
+    const spanishPunctuation = (fullText.match(/[¿¡]/g) || []).length;
+    const spanishScore = spanishMatches + (spanishPunctuation * 3) + (isMexicanSlang ? 6 : 0) + (isColombianSlang ? 6 : 0) + (isArgentineSlang ? 6 : 0);
+
+    const portugueseMatches = (fullText.match(/\b(ol[aá]|oi\b|tudo\s+bem|tudo\s+bom|quanto\s+custa|qual\s+o\s+valor|qual\s+o\s+pre[cç]o|gostaria|voc[eê]|pra\b|pro\b|obrigado|obrigada|valeu|pix|cart[aã]o|boleto|crian[cç]as?|filhos?|pequenos?|ensino|blz|show|manda\b|envia\b|como\s+funciona|pode\s+me\s+explicar|t[aá]\s+bom|com\s+certeza|meu|minha|n[aã]o|sim\b)\b/gi) || []).length;
+    const portugueseCharacters = (fullText.match(/[ãõç]/gi) || []).length;
+    const portugueseScore = portugueseMatches + (portugueseCharacters * 2);
+
+    const englishMatches = (fullText.match(/\b(hello|hi\b|hey\b|how\s+much|what\s+is\s+the\s+price|please|thanks|thank\s+you|child|children|kids|learn|english|send\s+me|information|details)\b/gi) || []).length;
+    const englishScore = englishMatches * 2;
+
+    const phoneCountry = this.detectCountryFromPhone(phone);
+
+    // 3. Selection Matrix
+    if (spanishScore > portugueseScore && spanishScore > englishScore) {
+      let country = 'México'; // Default LatAm reference
+      if (isMexicanSlang) country = 'México';
+      else if (isColombianSlang) country = 'Colômbia';
+      else if (isArgentineSlang) country = 'Argentina';
+      else if (isChileanSlang) country = 'Chile';
+      else if (isPeruvianSlang) country = 'Peru';
+      else if (isBolivianSlang) country = 'Bolívia';
+      else if (phoneCountry && phoneCountry !== 'Brasil' && phoneCountry !== 'Estados Unidos') country = phoneCountry;
+
+      return {
+        language: 'es',
+        country,
+        isLatAm: true,
+        slang: isMexicanSlang ? 'mexicano' : isColombianSlang ? 'colombiano' : isArgentineSlang ? 'argentino' : isChileanSlang ? 'chileno' : 'latam_neutro'
+      };
+    }
+
+    if (portugueseScore > spanishScore && portugueseScore > englishScore) {
+      return {
+        language: 'pt',
+        country: 'Brasil',
+        isLatAm: false,
+        slang: 'brasileiro'
+      };
+    }
+
+    if (englishScore > spanishScore && englishScore > portugueseScore) {
+      return {
+        language: 'en',
+        country: 'Estados Unidos',
+        isLatAm: true,
+        slang: 'english'
+      };
+    }
+
+    // If text was short/ambiguous, rely on valid phone DDI
+    if (phoneCountry) {
+      const isLat = phoneCountry !== 'Brasil';
+      return {
+        language: isLat ? 'es' : 'pt',
+        country: phoneCountry,
+        isLatAm: isLat,
+        slang: phoneCountry === 'México' ? 'mexicano' : phoneCountry === 'Colômbia' ? 'colombiano' : phoneCountry === 'Argentina' ? 'argentino' : isLat ? 'latam_neutro' : 'brasileiro'
+      };
+    }
+
+    // Default fallback to settings product targetCountry
+    const settings = storage.getSettings();
+    const defaultCountry = settings.product?.targetCountry || 'Brasil';
+    const isLat = defaultCountry !== 'Brasil';
+    return {
+      language: isLat ? 'es' : 'pt',
+      country: defaultCountry,
+      isLatAm: isLat,
+      slang: defaultCountry === 'México' ? 'mexicano' : defaultCountry === 'Colômbia' ? 'colombiano' : defaultCountry === 'Argentina' ? 'argentino' : isLat ? 'latam_neutro' : 'brasileiro'
+    };
+  }
+
+  // Localize common Portuguese product descriptors to Spanish for the prompt context
+  localizeProductForPrompt(product, targetLanguage = 'es', targetCountry = 'México') {
+    if (targetLanguage !== 'es') {
+      return {
+        name: product.name || '',
+        niche: product.niche || '',
+        targetAudience: product.targetAudience || '',
+        painPoints: (product.mainPainPoints || []).map(p => `- ${p}`).join('\n'),
+        benefits: (product.mainBenefits || []).map(b => `- ${b}`).join('\n'),
+        objections: (product.objections || []).map(o => `- Objeção "${o.trigger}": ${o.response}`).join('\n')
+      };
+    }
+
+    const localizeText = (txt) => {
+      if (!txt) return '';
+      return String(txt)
+        .replace(/pais e professores que se preocupam com o futuro profissional dos seus filhos que precisarão saber inglês,?\s*crianças que tem dificuldades com a escola\.?/gi, 'padres de familia y docentes preocupados por el futuro de sus hijos, para que dominen el inglés desde pequeños de forma fácil y divertida, y niños que tienen dificultades con los métodos tradicionales de la escuela')
+        .replace(/atividades para crianças aprenderem inglês brincando/gi, 'Actividades lúdicas e interactivas para que los niños aprendan inglés jugando')
+        .replace(/crianças falam inglês nas primeiras semanas/gi, 'los niños empiezan a hablar sus primeras palabras y frases en inglés desde las primeras semanas')
+        .replace(/crianças aprendam inglês/gi, 'los niños aprendan inglés jugando')
+        .replace(/crianças que não sabem inglês/gi, 'niños que aún no dominan el inglés')
+        .replace(/crianças atrasadas/gi, 'niños que tienen rezago o dificultad en la escuela')
+        .replace(/crianças com dificuldades/gi, 'niños con dificultades de aprendizaje')
+        .replace(/futuro dos filhos/gi, 'preocupación por el futuro educativo y profesional de sus hijos')
+        .replace(/faceis de aplicar|fáceis de aplicar/gi, 'actividades súper fáciles y prácticas para imprimir y aplicar en casa')
+        .replace(/atividades interativas/gi, 'actividades 100% didácticas, ilustradas, interactivas y coloridas')
+        .replace(/pais e professores/gi, 'padres y maestros')
+        .replace(/escola tradicional/gi, 'escuela tradicional')
+        .replace(/educação e desenvolvimento/gi, 'Educación y Desarrollo Infantil')
+        .replace(/alfabetização/gi, 'alfabetización y desarrollo infantil')
+        .replace(/se preocupam com/gi, 'se preocupan por')
+        .replace(/futuro profissional/gi, 'futuro profesional')
+        .replace(/dos seus/gi, 'de sus')
+        .replace(/precisarão saber/gi, 'necesitarán saber')
+        .replace(/tem dificuldades/gi, 'tienen dificultades')
+        .replace(/com a escola/gi, 'con la escuela')
+        .replace(/dificuldades/gi, 'dificultades')
+        .replace(/escola/gi, 'escuela')
+        .replace(/atividades/gi, 'actividades')
+        .replace(/crianças/gi, 'niños')
+        .replace(/criança/gi, 'niño(a)')
+        .replace(/filhos/gi, 'hijos')
+        .replace(/filho/gi, 'hijo');
+    };
+
+    const painPoints = (product.mainPainPoints || [])
+      .map(p => `- ${localizeText(p)}`)
+      .join('\n');
+
+    const benefits = (product.mainBenefits || [])
+      .map(b => `- ${localizeText(b)}`)
+      .join('\n');
+
+    const objections = (product.objections || [])
+      .map(o => `- Objeción "${localizeText(o.trigger)}": ${localizeText(o.response)}`)
+      .join('\n');
+
+    return {
+      name: localizeText(product.name || 'Programa Educativo de Inglés Infantil'),
+      niche: localizeText(product.niche || 'Educación Infantil'),
+      targetAudience: localizeText(product.targetAudience || 'Padres de familia interesados en el aprendizaje de sus hijos'),
+      painPoints: painPoints || '- Busca una solución divertida, práctica y efectiva para sus hijos',
+      benefits: benefits || '- Actividades didácticas interactivas para aprender inglés jugando',
+      objections: objections || '- Si menciona el precio, resalta la transformación y la accesibilidad de la inversión.'
+    };
+  }
+
   // Construct sales-focused prompt with product context, deliverables, and behavioral rules
-  buildSystemPrompt(contextDirective = '', leadPhone = '') {
+  buildSystemPrompt(contextDirective = '', leadPhone = '', localeInfo = null) {
     const settings = storage.getSettings();
     const product = settings.product || {};
     const deliverables = storage.getDeliverables();
 
     // 1. Dynamic System Variables (LatAm & Brazil Architecture)
-    const detectedCountry = this.detectCountryFromPhone(leadPhone);
-    const targetCountry = detectedCountry || product.targetCountry || 'Brasil';
-    const isLatAm = targetCountry !== 'Brasil';
-    const currencyCode = product.currencyCode || (targetCountry === 'México' ? 'MXN' : targetCountry === 'Colômbia' ? 'COP' : targetCountry === 'Bolívia' ? 'BOB' : targetCountry === 'Paraguai' ? 'PYG' : targetCountry === 'Argentina' ? 'ARS' : 'BRL');
-    const currencySymbol = product.currencySymbol || (currencyCode === 'BRL' ? 'R$' : currencyCode === 'BOB' ? 'Bs' : currencyCode === 'PYG' ? 'Gs' : '$');
-    const ticketBasic = product.ticketBasic ?? product.price ?? 15;
-    const ticketComplete = product.ticketComplete ?? (Number(ticketBasic) * 1.6).toFixed(0);
+    const locale = localeInfo || this.detectLanguageAndCountry('', [], leadPhone);
+    const targetCountry = locale.country || product.targetCountry || 'Brasil';
+    const isLatAm = locale.isLatAm;
+    const targetLanguage = locale.language || (isLatAm ? 'es' : 'pt');
+    const ticketBasic = (Number(product.ticketBasic) > 0 ? Number(product.ticketBasic) : (Number(product.price) > 0 ? Number(product.price) : 15));
+    const ticketComplete = (Number(product.ticketComplete) > 0 ? Number(product.ticketComplete) : Math.round(Number(ticketBasic) * 1.6));
+    let currencyCode = isLatAm ? (targetCountry === 'México' ? 'MXN' : targetCountry === 'Colômbia' ? 'COP' : targetCountry === 'Bolívia' ? 'BOB' : targetCountry === 'Paraguai' ? 'PYG' : targetCountry === 'Argentina' ? 'ARS' : 'USD') : (product.currencyCode || 'BRL');
+    if (isLatAm && product.currencyCode && product.currencyCode !== 'BRL') {
+      currencyCode = product.currencyCode;
+    }
+    const currencySymbol = isLatAm ? (currencyCode === 'BOB' ? 'Bs' : currencyCode === 'PYG' ? 'Gs' : '$') : (product.currencySymbol || 'R$');
     const paymentMethodType = product.paymentMethodType || (targetCountry === 'México' ? 'XPag_AutoCode' : targetCountry === 'Colômbia' ? 'Nequi_BreB' : targetCountry === 'Bolívia' ? 'QR_Bolivia' : (targetCountry === 'Paraguai' || targetCountry === 'Argentina') ? 'Alias_Paraguay' : 'pix');
     const paymentInstructions = product.paymentInstructions || (targetCountry === 'México' ? 'Código de pago automático SPEI' : 'Pago directo con confirmación inmediata');
-    const voiceAccentId = product.voiceAccentId || (targetCountry === 'México' ? 'es_MX_native_01' : targetCountry === 'Colômbia' ? 'es_CO_native_01' : targetCountry === 'Argentina' ? 'es_AR_native_01' : targetCountry === 'Bolívia' ? 'es_BO_native_01' : 'pt_BR_native_01');
+
+    const locProd = this.localizeProductForPrompt(product, targetLanguage, targetCountry);
 
     const deliverableList = deliverables
-      .map((d) => `- ${d.name} (${d.type.toUpperCase()}) | Tag/Identificador: [${d.tag}] | Descrição: ${d.description}`)
+      .map((d) => {
+        if (isLatAm) {
+          const cleanDesc = (d.description || '')
+            .replace(/atividades/gi, 'actividades')
+            .replace(/crianças/gi, 'niños')
+            .replace(/alfabetização/gi, 'alfabetización')
+            .replace(/inglês/gi, 'inglés');
+          return `- ${d.name} (${d.type.toUpperCase()}) | Tag/Identificador: [${d.tag}] | Descripción: ${cleanDesc}`;
+        }
+        return `- ${d.name} (${d.type.toUpperCase()}) | Tag/Identificador: [${d.tag}] | Descrição: ${d.description}`;
+      })
       .join('\n');
-
-    const objectionsList = (product.objections || [])
-      .map((o) => `- Objeção "${o.trigger}": ${o.response}`)
-      .join('\n');
-
-    const painPointsList = (product.mainPainPoints || []).map((p) => `- ${p}`).join('\n');
-    const benefitsList = (product.mainBenefits || []).map((b) => `- ${b}`).join('\n');
 
     const deliveryStrategy = product.deliveryStrategy || 'require_payment';
     const allDelivTags = deliverables.map(d => `[ENVIAR_ARQUIVO: ${d.tag}]`).join(' ') || '[ENVIAR_ARQUIVO: PRODUTO]';
 
     const fishSettings = settings.fishAudio || {};
-    const autoAudioMode = fishSettings.autoAudioMode || 'hybrid_high_conversion';
     const isAudioActive = fishSettings.enabled !== false;
 
     let audioStrategySection = '';
@@ -69,9 +253,10 @@ class NvidiaNimService {
         audioStrategySection = `ESTRATEGIA DE NOTAS DE VOZ Y FORMATO (LIBERTAD TOTAL DE DECISIÓN Y ORDEN):
 - LA IA DECIDE CON TOTAL AUTONOMÍA CUÁNDO USAR AUDIO Y QUÉ VA PRIMERO:
   * Tienes total libertad para decidir si respondes únicamente en texto, con nota de voz [AUDIO: ...], o combinando ambos. ¡El audio NO es obligatorio en cada mensaje!
+  * SI EL CLIENTE TE PIDE UN AUDIO EXPLÍCITAMENTE (ej: '¿me mandas un audio?', 'porfa mándame audio', etc.): ¡OBLIGATORIAMENTE RESPONDE CON AUDIO [AUDIO: ...] explicándole con calidez y cercanía!
   * EL ORDEN LO DECIDES TÚ: El orden en que coloques las cosas en tu respuesta será exactamente el orden en que se enviará al WhatsApp del cliente:
     - Si hace sentido enviar el texto antes del audio (ej: una introducción o aviso rápido: '¡Hola! Te grabé una nota de voz explicándote con cariño 👇\\n\\n[AUDIO: ...]'), se enviará primero el texto y luego el audio.
-    - Si hace sentido enviar el audio primero y luego el texto (ej: audio de conexión primero y luego resumen, datos de pago o enlace: '[AUDIO: ...]\\n\\nDatos de pago:...'), se enviará primero el audio y después el texto.
+    - Si hace sentido enviar el audio primero y luego el texto (ej: audio de conexión primero y luego resumen o datos de pago: '[AUDIO: ...]\\n\\nInstrucciones:...'), se enviará primero el audio y después el texto.
     - Si el momento pide rapidez o es una consulta puntual, responde directamente en texto sin forzar audio.
     - Si hace sentido enviar solo audio, envía únicamente [AUDIO: ...].
 - NUNCA uses etiquetas de emoción dentro del audio (como [warm], [break], etc.). Escribe el texto hablado limpio y natural.
@@ -81,6 +266,7 @@ class NvidiaNimService {
         audioStrategySection = `3. ESTRATÉGIA DE ÁUDIO E FORMATO (LIBERDADE TOTAL DE DECISÃO E ORDEM):
 - A IA DECIDE AUTONOMAMENTE SE USA ÁUDIO E O QUE VEM PRIMEIRO:
   * Você tem total autonomia para decidir se responde apenas em texto, com nota de voz [AUDIO: ...], ou combinando ambos. O envio de áudio NÃO é obrigatório em todas as mensagens!
+  * SE O CLIENTE PEDIR UM ÁUDIO (ex: 'manda áudio', 'grava um áudio'): OBRIGATORIAMENTE RESPONDA COM ÁUDIO [AUDIO: ...] explicando com carinho!
   * ORDEM TOTALMENTE RESPEITADA: A ordem em que você colocar o conteúdo na sua resposta será rigorosamente a ordem de envio no WhatsApp:
     - Se fizer sentido enviar texto antes do áudio (ex: uma introdução, aviso ou contexto rápido: 'Oi! Te gravei um áudio explicando tudo certinho 👇\\n\\n[AUDIO: ...]'), o WhatsApp enviará primeiro o texto e depois a nota de voz!
     - Se fizer sentido enviar o áudio primeiro e o texto depois (ex: áudio acolhedor primeiro e em seguida resumo, detalhes ou chave PIX: '[AUDIO: ...]\\n\\nChave PIX: ...'), o WhatsApp enviará primeiro o áudio e em seguida a mensagem de texto!
@@ -126,13 +312,29 @@ class NvidiaNimService {
 
     // === LATAM MASTER PROMPT (SPANISH) ===
     if (isLatAm) {
-      return `Eres una especialista en atención y ventas humanas por WhatsApp, cálida, empática, rápida y nativa de ${targetCountry}. Tu objetivo es atender leads con total naturalidad, escuchar sus necesidades, responder todas sus dudas, presentar las opciones de oferta en moneda local (${currencyCode}) y guiarlos hasta la compra sin forzar ni apresurar.
+      const slangGuide = targetCountry === 'México'
+        ? 'Expresiones mexicanas nativas, cálidas y amables (ej: "¡Qué onda! Con todo gusto", "oye", "ahorita te platico", "te paso la info", "está padrísimo", "para orientarte mejor, ¿qué edad tiene tu pequeño o pequeña?", "porfa", "¿tienes alguna duda?")'
+        : targetCountry === 'Colômbia'
+        ? 'Expresiones colombianas amables y respetuosas (ej: "¡Hola parce! Con mucho gusto", "chévere", "de una", "listo", "a la orden", "¿qué edad tiene tu niño?")'
+        : targetCountry === 'Argentina'
+        ? 'Expresiones argentinas cercanas con voseo suave (ej: "¡Hola! Mirá, te cuento", "dale", "posta", "che", "¿cuántos años tiene tu nene o nena?")'
+        : 'Expresiones cálidas, suaves y amables de Latinoamérica';
+
+      return `🚨 REGLA SUPREMA DE IDIOMA E IDENTIDAD CULTURAL (${targetCountry.toUpperCase()} - ESPAÑOL):
+1. IDIOMA 100% EXCLUSIVO: El cliente te está hablando en ESPAÑOL. Debes responder absolutamente el 100% DE TU MENSAJE (cada frase, palabra y nota de voz) EXCLUSIVAMENTE en ESPAÑOL NATIVO de ${targetCountry}.
+2. MODISMOS Y TONO COLOQUIAL: Usa las expresiones naturales y modismos de ${targetCountry}: ${slangGuide}.
+3. PROHIBICIÓN ABSOLUTA DE MEZCLAR IDIOMAS: NUNCA, BAJO NINGUNA CIRCUNSTANCIA, RESPONDAS O MEZCLES FRASES EN PORTUGUÉS.
+   - NUNCA digas: "Nosso material foi pensado para que as crianças aprendam inglês..." -> DI: "Nuestro material está pensado para que los niños aprendan inglés jugando..."
+   - NUNCA digas: "Para eu te ajudar melhor, qual a idade do seu pequeno..." -> DI: "Para orientarte mejor, ¿qué edad tiene tu pequeño o pequeña?"
+   - NUNCA uses: "você", "crianças", "com certeza", "olá", "tá bom". Usa el español coloquial de ${targetCountry}.
+
+Eres una especialista en atención y ventas humanas por WhatsApp, cálida, empática, rápida y nativa de ${targetCountry}. Tu objetivo es atender leads con total naturalidad, escuchar sus necesidades, responder todas sus dudas, presentar las opciones de oferta en moneda local (${currencyCode}) y guiarlos hasta la compra sin forzar ni apresurar.
 
 ---
 
 ### 🌟 LIBERTAD CONVERSACIONAL Y AUTONOMÍA TOTAL (OPERACIÓN GLOBAL / ${targetCountry.toUpperCase()})
 1. **CERO GUIONES FORZADOS NI ROBÓTICOS**: NO eres un bot con respuestas rígidas ni un embudo forzado. Tienes total autonomía para conversar con soltura, escuchar al cliente, entender su situación real y crear un vínculo de confianza antes de hablar de dinero.
-2. **ESCUCHA ACTIVA Y ATENCIÓN PERSONALIZADA**: Responde primero y directamente a lo que el cliente te preguntó o comentó. Nunca ignores su duda para empujar un guion de ventas.
+2. **ESCUCHA ACTIVA Y ATENCIÓN PERSONALIZADA**: Responde primero y directamente a lo que el cliente te preguntó o comentó. Si el cliente pide un audio explicándole, responde con una nota de voz [AUDIO: ...] cercana y natural.
 4. **NATIVIDAD CULTURAL**: Habla con expresiones naturales, suaves y coloquiales del español de ${targetCountry}. Cero lenguaje técnico o traducciones automáticas.
 5. **COMUNICACIÓN NATURAL EN WHATSAPP**: Mensajes de texto dinámicos y humanos (máximo 1 a 2 frases por mensaje). Tienes libertad total para enviar notas de voz [AUDIO: ...] cuando quieras generar mayor cercanía, explicar detalles o presentar la oferta. ¡Tú decides con total autonomía si envías el texto antes del audio, el audio antes del texto, o respondes únicamente en texto!
 6. **PRECISIÓN DE VALORES**: Presenta SIEMPRE los precios en moneda local (${currencySymbol} ${ticketBasic} ${currencyCode} en la opción Básica y ${currencySymbol} ${ticketComplete} ${currencyCode} en la opción Completa/VIP). NUNCA menciones dólares (USD) ni reales (BRL).
@@ -141,21 +343,21 @@ class NvidiaNimService {
 ---
 
 ### 📦 INFORMACIÓN DEL PRODUCTO QUE VENDES
-- Nombre del Producto: ${product.name || 'Programa Digital'}
-- Nicho: ${product.niche || 'Educación y Desarrollo'}
-- Público Objetivo: ${product.targetAudience || 'Interesados'}
+- Nombre del Producto: ${locProd.name}
+- Nicho: ${locProd.niche}
+- Público Objetivo: ${locProd.targetAudience}
 - Opción Básica (Ticket Básico): ${currencySymbol} ${ticketBasic} ${currencyCode}
 - Opción Completa / VIP (Ticket Completo): ${currencySymbol} ${ticketComplete} ${currencyCode}
 - Garantía: ${product.guaranteeDays || 7} días de garantía incondicional
 
 === DOLORES PRINCIPALES DEL CLIENTE ===
-${painPointsList || '- Busca una solución práctica, rápida y efectiva'}
+${locProd.painPoints}
 
 === PRINCIPALES BENEFICIOS DEL PRODUCTO ===
-${benefitsList || '- Acceso inmediato, método validado y acompañamiento'}
+${locProd.benefits}
 
 === TRATAMIENTO DE OBJECIONES ===
-${objectionsList || '- Si el cliente menciona el precio, destaca el valor de la transformación y la accesibilidad del paquete básico.'}
+${locProd.objections}
 
 === ENTREGABLES / MATERIALES DISPONIBLES ===
 ${deliverableList || 'Materiales digitales listos para entrega.'}
@@ -204,12 +406,12 @@ ${deliverableStrategySection}
 === EJEMPLOS DE FORMATO SEGÚN HAGA SENTIDO EN LA CONVERSACIÓN ===
 
 Opción A (Texto antes, audio después):
-¡Hola! Qué alegría saludarte. Te grabé un audio explicándote rapidito con mucho cariño 👇
+¡Qué onda! Con todo gusto te platico. Te grabé una nota de voz explicándote a detalle con mucho cariño 👇
 
-[AUDIO: ¡Hola! ¿Cómo estás?
-Qué gusto saludarte...
-Te cuento que este material está diseñado con todo el amor para que logres los mejores resultados desde la primera semana...
-¿Tienes alguna duda o quieres que te cuente cómo empezar?]
+[AUDIO: ¡Hola! ¿Cómo estás? Qué gusto saludarte...
+Oye, te cuento que este material está diseñado con todo el amor para que los pequeños aprendan inglés jugando...
+Son actividades padrísimas, súper coloridas y fáciles de imprimir para hacer en casa...
+Para orientarte mejor, ¿qué edad tiene tu pequeño o pequeña?]
 
 Opción B (Audio primero, texto después con datos o resumen):
 [AUDIO: ¡Hola! Qué alegría saludarte... Te cuento que preparamos una opción súper accesible para ti hoy...]
@@ -228,7 +430,24 @@ Opción C (Solo texto - respuestas directas y dinámicas):
 5. COHERENCIA TOTAL: Haz que cada mensaje avance la conversación con fluidez humana en WhatsApp.
 
 ${contextDirective ? `\n=== DIRECTIVA DE CONTEXTO ACTUAL ===\n${contextDirective}\n` : ''}
-${settings.ai?.customPromptInstructions ? `\n=== INSTRUCCIONES ADICIONALES ===\n${settings.ai.customPromptInstructions}` : ''}
+
+=== DIRECTRICES METODOLÓGICAS DE VENTA Y CONVERSIÓN CONSULTIVA (ESPAÑOL NATIVO DE ${targetCountry.toUpperCase()}) ===
+1. LIBERTAD CONVERSACIONAL Y RELACIÓN HUMANA:
+   - Tienes total autonomía para dialogar con soltura, escuchar con atención al cliente y entender sus necesidades (edad de los niños, desafíos de aprendizaje, etc.) antes de cobrar.
+   - NUNCA uses respuestas robóticas ni presiones al cliente. Dialoga con cercanía, empatía y calidez humana.
+2. ENTREGA DE MATERIALES:
+   - Tienes total libertad para liberar el paquete completo con todas las actividades usando ${allDelivTags} cuando haga sentido en la conversación (cuando muestre interés o pida ver el material).
+   - NUNCA lo llames "muestra" y NUNCA digas "te liberaré el resto después". ¡Entregamos el paquete completo de una vez!
+3. PITCH CONSULTIVO ADAPTADO:
+   - Conecta el valor simbólico de la inversión (${currencySymbol} ${ticketBasic} ${currencyCode}) a las necesidades reales que el propio cliente compartió durante la plática.
+   - Presenta las dos opciones: Paquete Básico (${currencySymbol} ${ticketBasic} ${currencyCode}) y Paquete Completo (${currencySymbol} ${ticketComplete} ${currencyCode}).
+4. CIERRE AMABLE Y PAGO NATIVO:
+   - Solo proporciona los datos de pago cuando el cliente pregunte cómo pagar o confirme que desea empezar.
+   - Oriéntalo con amabilidad paso a paso usando el método oficial de ${targetCountry}.
+
+=== 🚨 RECORDATORIO FINAL CRÍTICO: IDIOMA Y MODISMOS (${targetCountry.toUpperCase()}) 🚨 ===
+- Responde el 100% de tu mensaje en ESPAÑOL DE ${targetCountry.toUpperCase()} con sus modismos locales.
+- Cero palabras en portugués en tu respuesta. Traduce cualquier concepto al español nativo.
 `;
     }
 
@@ -336,7 +555,7 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
   }
 
   // Anti-Leak & Meta-Commentary Sanitizer: Guarantees zero system instructions, CoT or developer notes leak to WhatsApp
-  sanitizeModelOutput(rawText) {
+  sanitizeModelOutput(rawText, targetLanguage = 'pt', targetCountry = 'Brasil') {
     if (!rawText || typeof rawText !== 'string') return '';
     let content = rawText.trim();
 
@@ -353,21 +572,21 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
       if (messageBlockMatch) {
         content = messageBlockMatch[1].trim();
       } else {
-        const portugueseStartMatch = content.match(/(?:[A-ZÀ-Ú][a-zà-ú]+[\s\S]*?\[AUDIO:[\s\S]*?\]|\[AUDIO:[\s\S]*?\])/i);
-        if (portugueseStartMatch) {
-          content = portugueseStartMatch[0].trim();
+        const langStartMatch = content.match(/(?:[A-ZÀ-Ú¡¿][a-zà-ú]+[\s\S]*?\[AUDIO:[\s\S]*?\]|\[AUDIO:[\s\S]*?\])/i);
+        if (langStartMatch) {
+          content = langStartMatch[0].trim();
         }
       }
     }
 
     // 3. Strip AI assistant meta-commentary (talking to programmer/operator instead of the customer)
-    content = content.replace(/^(?:Entendi(?:\s+perfeitamente)?|Com certeza|Claro que sim|Claro|Perfeito|Certo)[!,.]?\s*(?:Aqui está|Segue|Abaixo está|Veja|vou te mandar|essa é a resposta)[\s\S]*?:(?:\n+|\s+)/i, '').trim();
-    content = content.replace(/^(?:Aqui está a resposta|Aqui está a mensagem|Segue a mensagem|Segue o texto que você deve enviar)[\s\S]*?:(?:\n+|\s+)/i, '').trim();
+    content = content.replace(/^(?:Entendi(?:\s+perfeitamente)?|Com certeza|Claro que sim|Claro|Perfeito|Certo|Entendido)[!,.]?\s*(?:Aqui está|Segue|Abaixo está|Veja|vou te mandar|essa é a resposta|aquí está)[\s\S]*?:(?:\n+|\s+)/i, '').trim();
+    content = content.replace(/^(?:Aqui está a resposta|Aqui está a mensagem|Segue a mensagem|Segue o texto que você deve enviar|Aquí tienes la respuesta|Aquí está el mensaje)[\s\S]*?:(?:\n+|\s+)/i, '').trim();
     content = content.replace(/\n+(?:Essa resposta segue rigorosamente|Espero que ajude|Qualquer dúvida estou à disposição|Se precisar de mais alguma coisa|Como posso te ajudar agora\?|Já tem algum lead aguardando)[\s\S]*?$/i, '').trim();
 
     // 4. Strip any leaked internal prompt headers, tags or rules
-    content = content.replace(/\[\s*(?:DIRETRIZ|FASE|REGRA|INSTRUÇÃO|ATENÇÃO|ESTRUTURA|COMO RESPONDER|CONTEXTO|SITUAÇÃO)[^\]]*\]:?/gi, '').trim();
-    content = content.replace(/^[-•◆*]?\s*(?:DIRETRIZ DE FUNIL|OFERTA INVERTIDA|FECHAMENTO EMOCIONAL|LIBERAÇÃO DE TUDO|CONEXÃO INICIAL|DIRETRIZ MÁXIMA|INSTRUÇÃO DO MOMENTO|SITUAÇÃO ATUAL)[\s\S]*?(?:\n|$)/gmi, '').trim();
+    content = content.replace(/\[\s*(?:DIRETRIZ|FASE|REGRA|INSTRUÇÃO|ATENÇÃO|ESTRUTURA|COMO RESPONDER|CONTEXTO|SITUAÇÃO|DIRECTIVA|REGLA|INSTRUCCIÓN|ATENCIÓN)[^\]]*\]:?/gi, '').trim();
+    content = content.replace(/^[-•◆*]?\s*(?:DIRETRIZ DE FUNIL|OFERTA INVERTIDA|FECHAMENTO EMOCIONAL|LIBERAÇÃO DE TUDO|CONEXÃO INICIAL|DIRETRIZ MÁXIMA|INSTRUÇÃO DO MOMENTO|SITUAÇÃO ATUAL|DIRECTIVA DE CONTEXTO|REGLA SUPREMA)[\s\S]*?(?:\n|$)/gmi, '').trim();
     content = content.replace(/^O cliente JÁ RECEBEU TUDO[^\n]*\n?/gmi, '').trim();
     content = content.replace(/^NUNCA diga ["'“]amostra["'”]?[^\n]*\n?/gmi, '').trim();
     content = content.replace(/^NUNCA diga [*_]?libero o restante[^\n]*\n?/gmi, '').trim();
@@ -377,11 +596,51 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
     content = content.replace(/^ESTRUTURA OBRIGATÓRIA DA SUA RESPOSTA:?[^\n]*\n?/gmi, '').trim();
     content = content.replace(/^Como agir conforme a análise:?[^\n]*\n?/gmi, '').trim();
 
+    // 5. Emergency Language Firewall: If targetLanguage is Spanish ('es'), convert any leaked Portuguese product phrasing to native Spanish
+    if (targetLanguage === 'es') {
+      content = content
+        .replace(/nosso material foi pensado para que as crianças aprendam inglês de forma muito leve, sem aquela pressão de escola tradicional\.?/gi, 'Nuestro material está pensado para que los pequeños aprendan inglés jugando de forma súper divertida, sin la presión de la escuela tradicional.')
+        .replace(/são atividades super interativas e coloridas que você pode imprimir e aplicar em casa mesmo\.?/gi, 'Son actividades súper interactivas y coloridas que puedes imprimir y realizar en casa mismo.')
+        .replace(/a ideia é que elas aprendam brincando e já comecem a falar algumas palavras nas primeiras semanas!?/gi, '¡La idea es que aprendan jugando y ya comiencen a decir sus primeras palabras en inglés desde las primeras semanas!')
+        .replace(/para eu te ajudar melhor, qual a idade do seu pequeno ou da pequena\??/gi, 'Para orientarte mejor, ¿qué edad tiene tu pequeño o pequeña?')
+        .replace(/qual a idade do seu pequeno ou da pequena\??/gi, '¿Qué edad tiene tu pequeño o pequeña?')
+        .replace(/qual a idade do seu pequeno\??/gi, '¿Qué edad tiene tu pequeño?')
+        .replace(/qual a idade da sua pequena\??/gi, '¿Qué edad tiene tu pequeña?')
+        .replace(/\bnosso material\b/gi, 'nuestro material')
+        .replace(/\bnossa proposta\b/gi, 'nuestra propuesta')
+        .replace(/\bnossos materiais\b/gi, 'nuestros materiales')
+        .replace(/\bpara as crianças\b/gi, 'para los niños')
+        .replace(/\bas crianças\b/gi, 'los niños')
+        .replace(/\bcrianças\b/gi, 'niños')
+        .replace(/\bcriança\b/gi, 'niño(a)')
+        .replace(/\bfilhos\b/gi, 'hijos')
+        .replace(/\bfilho\b/gi, 'hijo')
+        .replace(/\bpequenos\b/gi, 'pequeños')
+        .replace(/\bpequeno\b/gi, 'pequeño')
+        .replace(/\bpequena\b/gi, 'pequeña')
+        .replace(/\baprenderem brincando\b/gi, 'aprendan jugando')
+        .replace(/\baprender brincando\b/gi, 'aprender jugando')
+        .replace(/\bcom certeza\b/gi, '¡claro que sí!')
+        .replace(/\bvocê pode\b/gi, 'puedes')
+        .replace(/\bvocê prefere\b/gi, 'prefieres')
+        .replace(/\bvocê quer\b/gi, 'quieres')
+        .replace(/\bvocê\b/gi, 'tú')
+        .replace(/\bvocês\b/gi, 'ustedes')
+        .replace(/\bpra você\b/gi, 'para ti')
+        .replace(/\bpara você\b/gi, 'para ti')
+        .replace(/\bqual o valor\b/gi, 'cuál es el costo')
+        .replace(/\bquanto custa\b/gi, 'cuánto cuesta')
+        .replace(/\btá bom\??/gi, '¿te parece?')
+        .replace(/\btudo bem\??/gi, '¿cómo estás?')
+        .replace(/\bdá uma olhadinha\b/gi, 'échale un vistazo')
+        .replace(/\bum abraço\b/gi, 'un abrazo grande');
+    }
+
     return content.trim();
   }
 
   // Call single NIM model with configurable timeout (default 180s = 3 minutes)
-  async callModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 180000) {
+  async callModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 180000, targetLanguage = 'pt', targetCountry = 'Brasil') {
     if (!apiKey) {
       throw new Error(`API Key não configurada para o modelo ${model}`);
     }
@@ -403,7 +662,7 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
     });
 
     if (response.data && response.data.choices && response.data.choices[0]?.message?.content) {
-      const content = this.sanitizeModelOutput(response.data.choices[0].message.content);
+      const content = this.sanitizeModelOutput(response.data.choices[0].message.content, targetLanguage, targetCountry);
       if (content.length > 0) {
         return content;
       }
@@ -414,7 +673,7 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
   }
 
   // Call OpenRouter tertiary fallback model (e.g. nvidia/nemotron-3.5-lightning:free)
-  async callOpenRouterModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 45000) {
+  async callOpenRouterModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 45000, targetLanguage = 'pt', targetCountry = 'Brasil') {
     if (!apiKey) {
       throw new Error(`OpenRouter API Key não configurada para o modelo ${model}`);
     }
@@ -440,7 +699,7 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
 
     if (response.data && response.data.choices && response.data.choices[0]?.message) {
       const choice = response.data.choices[0];
-      const content = this.sanitizeModelOutput(choice.message.content || '');
+      const content = this.sanitizeModelOutput(choice.message.content || '', targetLanguage, targetCountry);
       if (content.length > 0) {
         return content;
       }
@@ -459,13 +718,18 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
     const deliverables = storage.getDeliverables();
     const deliveryStrategy = product.deliveryStrategy || 'require_payment';
 
-    const detectedCountry = this.detectCountryFromPhone(phone);
-    const targetCountry = detectedCountry || product.targetCountry || 'Brasil';
-    const isLatAm = targetCountry !== 'Brasil';
-    const currencyCode = product.currencyCode || (targetCountry === 'México' ? 'MXN' : targetCountry === 'Colômbia' ? 'COP' : targetCountry === 'Bolívia' ? 'BOB' : targetCountry === 'Paraguai' ? 'PYG' : targetCountry === 'Argentina' ? 'ARS' : 'BRL');
-    const currencySymbol = product.currencySymbol || (currencyCode === 'BRL' ? 'R$' : currencyCode === 'BOB' ? 'Bs' : currencyCode === 'PYG' ? 'Gs' : '$');
-    const ticketBasic = Number(product.ticketBasic ?? product.price ?? 15);
-    const ticketComplete = Number(product.ticketComplete ?? (ticketBasic * 1.6).toFixed(0));
+    const localeInfo = this.detectLanguageAndCountry(userMessage, conversationHistory, phone);
+    const targetCountry = localeInfo.country;
+    const isLatAm = localeInfo.isLatAm;
+    const targetLanguage = localeInfo.language;
+    const slang = localeInfo.slang;
+    const ticketBasic = (Number(product.ticketBasic) > 0 ? Number(product.ticketBasic) : (Number(product.price) > 0 ? Number(product.price) : 15));
+    const ticketComplete = (Number(product.ticketComplete) > 0 ? Number(product.ticketComplete) : Math.round(Number(ticketBasic) * 1.6));
+    let currencyCode = isLatAm ? (targetCountry === 'México' ? 'MXN' : targetCountry === 'Colômbia' ? 'COP' : targetCountry === 'Bolívia' ? 'BOB' : targetCountry === 'Paraguai' ? 'PYG' : targetCountry === 'Argentina' ? 'ARS' : 'USD') : (product.currencyCode || 'BRL');
+    if (isLatAm && product.currencyCode && product.currencyCode !== 'BRL') {
+      currencyCode = product.currencyCode;
+    }
+    const currencySymbol = isLatAm ? (currencyCode === 'BOB' ? 'Bs' : currencyCode === 'PYG' ? 'Gs' : '$') : (product.currencySymbol || 'R$');
 
     const formattedPrice = isLatAm ? `${currencySymbol} ${ticketBasic} ${currencyCode}` : `R$ ${ticketBasic.toFixed(2).replace('.', ',')}`;
     const formattedPriceComplete = isLatAm ? `${currencySymbol} ${ticketComplete} ${currencyCode}` : `R$ ${ticketComplete.toFixed(2).replace('.', ',')}`;
@@ -495,6 +759,9 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
 
     const lowerUserMsg = (userMessage || '').toLowerCase();
 
+    // 0. Explicit request for Voice Note / Audio
+    const isUserAskingForAudio = /(?:mandar?|enviar?|grabar?|puedes mandar|me podr[ií]as mandar|manda|envia)\s+(?:un\s+)?audio|escuchar\s+en\s+audio|audio\s+explicando|manda\s+(?:um\s+)?[aá]udio|grava\s+(?:um\s+)?[aá]udio|pode\s+mandar\s+[aá]udio/i.test(lowerUserMsg);
+
     // 1. Explicit request to pay / ask for payment coordinates
     const isExplicitPaymentRequest = /^(?:qual [eé] (?:o|a)|me (?:passa|manda|envia)|manda|envia|passa|quero|onde|como|pode mandar|favor mandar|p[aá]sa(?:me)?|dame|m[aá]nda(?:me)?|env[ií]a(?:me)?).*(?:pix|chave|link|dados.*pago|datos.*pago|cuenta|c[oó]digo|spei|nequi|alias|qr)/i.test(lowerUserMsg) ||
       /(?:como|onde|quero|posso|donde|c[oó]mo|quiero|puedo).*(?:pagar|transferir|abonar|cancelar|hacer el pago)/i.test(lowerUserMsg) ||
@@ -509,7 +776,19 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
     // 4. Asking if these files are the definitive ones
     const isUserAskingIfTheseAreTheFiles = /achei q eram esses|achei que eram esses|são esses|sao esses|é esse|é essa|são essas|pode mandar|manda pfv|manda por favor|vai mandar|son estos|es este|es esta|son estas|puedes mandar|manda porfa|env[ií]amelos|me los mandas/i.test(lowerUserMsg);
 
-    if (isReceiptAnalysis) {
+    if (isUserAskingForAudio) {
+      if (isLatAm) {
+        contextDirective = `SITUACIÓN: El cliente solicitó explícitamente una nota de voz / audio ("${userMessage}").
+- Responde con un saludo o frase corta y amable, OBLIGATORIAMENTE acompañada de una nota de voz con la etiqueta [AUDIO: ...].
+- En la nota de voz, explícale las actividades y cómo los niños aprenden jugando con tus propias palabras, con tono cálido, humano y entusiasta en español de ${targetCountry}.
+- Pregúntale la edad del pequeño/a o para quién serían las actividades para orientarlo mejor.`;
+      } else {
+        contextDirective = `SITUAÇÃO: O cliente pediu explicitamente que você envie um áudio ("${userMessage}").
+- Responda com muito carinho gravando uma nota de voz com a tag [AUDIO: ...].
+- Explique as atividades e como as crianças aprendem brincando com suas próprias palavras, tom acolhedor e humano.
+- Pergunte a idade do pequeno(a) para orientá-lo melhor.`;
+      }
+    } else if (isReceiptAnalysis) {
       const isApprovedReceipt = userMessage.includes('Status: APROVADO');
       const isAgendadoReceipt = userMessage.includes('Status: AGENDADO');
 
@@ -677,7 +956,7 @@ ${hasPixBeenSent
       }
     }
 
-    const systemPrompt = this.buildSystemPrompt(contextDirective, phone);
+    const systemPrompt = this.buildSystemPrompt(contextDirective, phone, localeInfo);
 
     // Build context message array
     const messages = [
@@ -745,7 +1024,9 @@ ${hasPixBeenSent
           messages,
           settings.temperature ?? 0.7,
           settings.maxTokens || 1500,
-          180000 // 180s (3 min) timeout before falling back to secondary model
+          180000, // 180s (3 min) timeout before falling back to secondary model
+          targetLanguage,
+          targetCountry
         );
         // Primary succeeded - reset cooldown and ensure fallback state is inactive
         this.lastPrimaryFailureTime = 0;
@@ -753,7 +1034,7 @@ ${hasPixBeenSent
           storage.updateSettings({ ai: { isFallbackActive: false, lastFallbackReason: null } });
           storage.addLog('INFO', `Modelo Primário NVIDIA NIM (${modelUsed}) restabelecido com sucesso.`);
         }
-        return { text: responseText, modelUsed, fallbackTriggered: false };
+        return { text: responseText, modelUsed, fallbackTriggered: false, locale: localeInfo };
       }
     } catch (primaryErr) {
       this.lastPrimaryFailureTime = Date.now();
@@ -782,9 +1063,11 @@ ${hasPixBeenSent
           messages,
           settings.temperature ?? 0.7,
           settings.maxTokens || 1500,
-          60000 // 60s fallback timeout
+          60000, // 60s fallback timeout
+          targetLanguage,
+          targetCountry
         );
-        return { text: responseText, modelUsed, fallbackTriggered: true, fallbackTier: 'secondary_nvidia' };
+        return { text: responseText, modelUsed, fallbackTriggered: true, fallbackTier: 'secondary_nvidia', locale: localeInfo };
       }
     } catch (fallbackErr) {
       console.error(`[NVIDIA NIM Fallback Error]: ${fallbackErr.message}`);
@@ -807,13 +1090,15 @@ ${hasPixBeenSent
           messages,
           settings.temperature ?? 0.7,
           settings.maxTokens || 1500,
-          45000 // 45s timeout for OpenRouter
+          45000, // 45s timeout for OpenRouter
+          targetLanguage,
+          targetCountry
         );
         storage.addLog(
           'FALLBACK_TRIGGERED',
           `Modelos NVIDIA NIM indisponíveis. Resposta atendida com sucesso pelo 3º Fallback OpenRouter (${tertiaryModel}).`
         );
-        return { text: responseText, modelUsed, fallbackTriggered: true, fallbackTier: 'tertiary_openrouter' };
+        return { text: responseText, modelUsed, fallbackTriggered: true, fallbackTier: 'tertiary_openrouter', locale: localeInfo };
       }
     } catch (tertiaryErr) {
       console.error(`[OpenRouter Tertiary Fallback Error]: ${tertiaryErr.message}`);
@@ -824,22 +1109,25 @@ ${hasPixBeenSent
     }
 
     // 4. Smart Rule-Based Engine Backup (if all 3 AI models failed or offline)
-    const backupReply = this.generateOfflineSmartReply(userMessage);
+    const backupReply = this.generateOfflineSmartReply(userMessage, localeInfo);
     return {
       text: backupReply,
       modelUsed: 'offline-sales-fallback',
       fallbackTriggered: true,
-      fallbackTier: 'offline_rules'
+      fallbackTier: 'offline_rules',
+      locale: localeInfo
     };
   }
 
   // Backup sales responses when no API keys are provided or offline
-  generateOfflineSmartReply(userMessage = '') {
+  generateOfflineSmartReply(userMessage = '', localeInfo = null) {
     const text = (userMessage || '').toLowerCase();
     const product = storage.getSettings().product || {};
     const deliverables = storage.getDeliverables();
-    const targetCountry = product.targetCountry || 'Brasil';
-    const isLatAm = targetCountry !== 'Brasil';
+    const allTags = deliverables.map(d => `[ENVIAR_ARQUIVO: ${d.tag}]`).join(' ') || '[ENVIAR_ARQUIVO: PRODUTO]';
+    const loc = localeInfo || this.detectLanguageAndCountry(userMessage);
+    const targetCountry = loc.country || product.targetCountry || 'Brasil';
+    const isLatAm = loc.isLatAm;
     const currencyCode = product.currencyCode || (targetCountry === 'México' ? 'MXN' : targetCountry === 'Colômbia' ? 'COP' : targetCountry === 'Bolívia' ? 'BOB' : targetCountry === 'Paraguai' ? 'PYG' : targetCountry === 'Argentina' ? 'ARS' : 'BRL');
     const currencySymbol = product.currencySymbol || (currencyCode === 'BRL' ? 'R$' : currencyCode === 'BOB' ? 'Bs' : currencyCode === 'PYG' ? 'Gs' : '$');
     const ticketBasic = Number(product.ticketBasic ?? product.price ?? 15);
@@ -849,13 +1137,12 @@ ${hasPixBeenSent
     if (isLatAm) {
       if (product.deliveryStrategy === 'deliver_first') {
         if (text.includes('si') || text.includes('quiero') || text.includes('material') || text.includes('pdf') || text.includes('actividades') || text.includes('funciona')) {
-          return `${allTags || '[ENVIAR_ARQUIVO: PRODUTO]'}\n¡Claro que sí! Te acabo de compartir el material completo para que lo puedas revisar y comenzar a disfrutarlo hoy mismo. Échale un vistazo y me cuentas qué tal 👇`;
+          return `${allTags}\n¡Claro que sí! Te acabo de compartir el material completo para que lo puedas revisar y comenzar a disfrutarlo hoy mismo. Échale un vistazo y me cuentas qué tal 👇`;
         }
       }
       if (text.includes('precio') || text.includes('costo') || text.includes('cuanto') || text.includes('pagar')) {
         return `El programa completo está con una oportunidad especial: Paquete Básico por solo ${formattedPrice} o Paquete Completo por ${currencySymbol} ${ticketComplete} ${currencyCode}.\n\n¿Quieres que te comparta cómo acceder ahora mismo?`;
       }
-      return `¡Hola! Qué alegría saludarte. 😊\n\nSoy del equipo de atención de ${product.name || 'nuestro programa'}. Cuéntame, ¿en qué te puedo ayudar hoy?`;
     }
 
     if (product.deliveryStrategy === 'deliver_first') {

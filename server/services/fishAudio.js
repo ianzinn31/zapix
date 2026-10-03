@@ -189,7 +189,8 @@ class FishAudioService {
 
     // 3. Resolve by Lead Phone Number DDI (Country Code)
     const phone = String(context.phone || '').replace(/[^0-9]/g, '');
-    if (phone) {
+    const isLid = phone.length > 13 && (phone.startsWith('1') || phone.startsWith('2'));
+    if (phone && !isLid) {
       const ddiMap = [
         { ddi: '55', key: 'pt-BR' },  // Brasil
         { ddi: '52', key: 'es-MX' },  // México
@@ -271,6 +272,15 @@ class FishAudioService {
           language: regionalVoices[key].language,
           key,
           reason: `País alvo da oferta configurado: ${targetCountry}`
+        };
+      }
+      if (key && key.startsWith('es-') && regionalVoices['es-419']?.voiceId?.trim()) {
+        return {
+          voiceId: regionalVoices['es-419'].voiceId.trim(),
+          country: regionalVoices['es-419'].country,
+          language: regionalVoices['es-419'].language,
+          key: 'es-419',
+          reason: `País alvo hispano (${targetCountry}) -> Fallback para LatAm Geral (es-419)`
         };
       }
     }
