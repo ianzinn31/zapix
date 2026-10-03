@@ -136,10 +136,12 @@ class FishAudioService {
 
   // Generate speech audio from text using OpenRouter (fish-audio/s2.1-pro-free:free)
   async generateSpeech(text, customModel = null, customVoiceId = null) {
-    const config = storage.getSettings().fishAudio;
+    const settings = storage.getSettings();
+    const config = settings.fishAudio || {};
+    const product = settings.product || {};
     const apiKey = config.apiKey || process.env.OPENROUTER_API_KEY || process.env.FISH_AUDIO_API_KEY;
     const model = customModel || config.model || 'fish-audio/s2.1-pro-free:free';
-    const voiceId = customVoiceId || config.voiceId || process.env.FISH_AUDIO_VOICE_ID || '7f92f8afb8ec43bf81429cc1c9199cb1';
+    const voiceId = customVoiceId || product.voiceAccentId || config.voiceId || process.env.FISH_AUDIO_VOICE_ID || '7f92f8afb8ec43bf81429cc1c9199cb1';
 
     if (!text || text.trim().length === 0) {
       throw new Error('Texto para conversão em áudio não fornecido.');

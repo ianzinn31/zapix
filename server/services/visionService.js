@@ -57,9 +57,14 @@ class VisionService {
   async analyzeMedia(buffer, mimetype = 'image/jpeg', meta = {}) {
     const settings = storage.getSettings();
     const product = settings.product || {};
-    const expectedPrice = Number(product.price || 0);
+    const targetCountry = product.targetCountry || 'Brasil';
+    const currencyCode = product.currencyCode || (targetCountry === 'México' ? 'MXN' : targetCountry === 'Colômbia' ? 'COP' : targetCountry === 'Bolívia' ? 'BOB' : targetCountry === 'Paraguai' ? 'PYG' : targetCountry === 'Argentina' ? 'ARS' : 'BRL');
+    const currencySymbol = product.currencySymbol || (currencyCode === 'BRL' ? 'R$' : currencyCode === 'BOB' ? 'Bs' : currencyCode === 'PYG' ? 'Gs' : '$');
+    
+    const ticketBasic = Number(product.ticketBasic ?? product.price ?? 15);
+    const ticketComplete = Number(product.ticketComplete ?? product.price ?? 37);
     const expectedPixKey = product.pixKey || '88994892385';
-    const expectedBeneficiary = product.pixBeneficiary || 'Ian Alves dos Anjos';
+    const expectedBeneficiary = product.pixBeneficiary || product.nequiBeneficiary || product.boliviaBeneficiary || product.aliasBeneficiary || 'Ian Alves dos Anjos';
 
     const now = new Date();
     const brDate = new Intl.DateTimeFormat('pt-BR', {
@@ -82,14 +87,15 @@ class VisionService {
       }
     }
 
-    // Build specialized prompt for Brazilian bank PIX & receipt validation
-    const systemPrompt = `Você é um perito antifraude e validador bancário especializado em pagamentos PIX no Brasil para e-commerce.
+    // Build specialized prompt for bank payment & receipt validation
+    const systemPrompt = `Você é um perito antifraude e validador bancário especializado em pagamentos digitais (${targetCountry} / ${currencyCode}) para e-commerce.
 Seu trabalho é analisar comprovantes enviados por clientes no WhatsApp para identificar se o pagamento foi REALMENTE efetuado ou se é uma tentativa de golpe, agendamento, valor divergente ou documento falso.
 
 === DADOS OFICIAIS DO PRODUTO E CONTA ===
+- País do Funil: ${targetCountry} (${currencyCode})
 - Nome do Produto: ${product.name || 'Produto Digital'}
-- Valor Oficial Esperado: R$ ${expectedPrice.toFixed(2)}
-- Chave PIX Oficial: ${expectedPixKey} (Pode aparecer no comprovante com ou sem código do país +55, ex: +55${expectedPixKey} ou ${expectedPixKey}, ou formatada. Ambas são corretas!)
+- Valores Válidos da Oferta: ${currencySymbol} ${ticketBasic.toFixed(2)} (Ticket Básico) ou ${currencySymbol} ${ticketComplete.toFixed(2)} (Ticket Completo)
+- Chave / Identificador Oficial: ${expectedPixKey || product.nequiNumber || product.aliasKey || 'Oficial'}
 - Titular / Beneficiário Oficial: ${expectedBeneficiary}
 
 === DATA ATUAL DO SISTEMA (HOJE) ===
@@ -100,9 +106,9 @@ Seu trabalho é analisar comprovantes enviados por clientes no WhatsApp para ide
 
 === REGRAS DE ANÁLISE RIGOROSA ===
 1. STATUS POSSÍVEIS:
-   - "APROVADO": Comprovante de transferência/pagamento PIX REAL de banco brasileiro (Banco do Brasil, Nubank, Itaú, Bradesco, Inter, Caixa, Mercado Pago, Santander, Sicredi, etc.) contendo títulos como "Comprovante de Pagamento PIX", "Comprovante de Transferência PIX", "Comprovante PIX", "Transferência Concluída", ou com autenticação bancária, ID da transação (código E...), SISBB ou código de controle, emitido na data de hoje (${brDate}) ou recente, com valor e destinatário compatíveis.
-   - "AGENDADO": DEVE SER USADO EXCLUSIVAMENTE SE o documento contiver explicitamente termos de agendamento NÃO liquidado, como "Comprovante de agendamento", "Transferência agendada", "Agendado para [data posterior a hoje]", "Atenção: este documento é apenas um comprovante de agendamento e não garante a efetivação". Se o documento NÃO contiver esses avisos de agendamento e tiver sido emitido hoje (${brDate}), ele é APROVADO!
-   - "VALOR_INCORRETO": É um comprovante efetivado, mas com valor menor do que o valor do produto (ex: enviou R$ 10 em vez de R$ ${expectedPrice.toFixed(2)}).
+   - "APROVADO": Comprovante de transferência/pagamento REAL de banco (${targetCountry === 'Brasil' ? 'Banco do Brasil, Nubank, Itaú, Bradesco, Inter, Caixa, Mercado Pago, etc.' : 'Bancos locais, Nequi, Bre-B, SPEI, QR Simple, ueno, etc.'}) contendo títulos como "Comprovante de Pagamento", "Transferência Concluída", "Pago", ou autenticação bancária, emitido na data de hoje (${brDate}) ou recente, com valor compatível (${currencySymbol} ${ticketBasic.toFixed(2)} ou ${currencySymbol} ${ticketComplete.toFixed(2)}) e destinatário compatível.
+   - "AGENDADO": DEVE SER USADO EXCLUSIVAMENTE SE o documento contiver explicitamente termos de agendamento NÃO liquidado, como "Comprovante de agendamento", "Transferência agendada", "Agendado para [data posterior a hoje]". Se o documento NÃO contiver esses avisos de agendamento e tiver sido emitido hoje (${brDate}), ele é APROVADO!
+   - "VALOR_INCORRETO": É um comprovante efetivado, mas com valor menor do que o pacote básico (${currencySymbol} ${ticketBasic.toFixed(2)}).
    - "DESTINATARIO_INCORRETO": Comprovante enviado para outra pessoa/chave diferente da oficial.
    - "FALSO_OU_ADULTERADO": Imagem com fontes desalinhadas, rascunho de tela sem confirmação, ou montagem.
    - "NAO_E_COMPROVANTE": Imagem aleatória (foto de produto, selfie, áudio, meme, etc.).
