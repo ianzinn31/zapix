@@ -9,14 +9,33 @@ class NvidiaNimService {
     this.primaryCooldownMs = 0; // Disabled: primary model is always attempted
   }
 
+  detectCountryFromPhone(phone) {
+    if (!phone) return null;
+    const clean = String(phone).replace(/[^0-9]/g, '');
+    if (!clean) return null;
+    if (clean.startsWith('55')) return 'Brasil';
+    if (clean.startsWith('52')) return 'México';
+    if (clean.startsWith('57')) return 'Colômbia';
+    if (clean.startsWith('54')) return 'Argentina';
+    if (clean.startsWith('591')) return 'Bolívia';
+    if (clean.startsWith('595')) return 'Paraguai';
+    if (clean.startsWith('51')) return 'Peru';
+    if (clean.startsWith('56')) return 'Chile';
+    if (clean.startsWith('593')) return 'Equador';
+    if (clean.startsWith('58')) return 'Venezuela';
+    if (clean.startsWith('1')) return 'Estados Unidos';
+    return null;
+  }
+
   // Construct sales-focused prompt with product context, deliverables, and behavioral rules
-  buildSystemPrompt(contextDirective = '') {
+  buildSystemPrompt(contextDirective = '', leadPhone = '') {
     const settings = storage.getSettings();
     const product = settings.product || {};
     const deliverables = storage.getDeliverables();
 
     // 1. Dynamic System Variables (LatAm & Brazil Architecture)
-    const targetCountry = product.targetCountry || 'Brasil';
+    const detectedCountry = this.detectCountryFromPhone(leadPhone);
+    const targetCountry = detectedCountry || product.targetCountry || 'Brasil';
     const isLatAm = targetCountry !== 'Brasil';
     const currencyCode = product.currencyCode || (targetCountry === 'México' ? 'MXN' : targetCountry === 'Colômbia' ? 'COP' : targetCountry === 'Bolívia' ? 'BOB' : targetCountry === 'Paraguai' ? 'PYG' : targetCountry === 'Argentina' ? 'ARS' : 'BRL');
     const currencySymbol = product.currencySymbol || (currencyCode === 'BRL' ? 'R$' : currencyCode === 'BOB' ? 'Bs' : currencyCode === 'PYG' ? 'Gs' : '$');
@@ -413,7 +432,8 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
     const deliverables = storage.getDeliverables();
     const deliveryStrategy = product.deliveryStrategy || 'require_payment';
 
-    const targetCountry = product.targetCountry || 'Brasil';
+    const detectedCountry = this.detectCountryFromPhone(phone);
+    const targetCountry = detectedCountry || product.targetCountry || 'Brasil';
     const isLatAm = targetCountry !== 'Brasil';
     const currencyCode = product.currencyCode || (targetCountry === 'México' ? 'MXN' : targetCountry === 'Colômbia' ? 'COP' : targetCountry === 'Bolívia' ? 'BOB' : targetCountry === 'Paraguai' ? 'PYG' : targetCountry === 'Argentina' ? 'ARS' : 'BRL');
     const currencySymbol = product.currencySymbol || (currencyCode === 'BRL' ? 'R$' : currencyCode === 'BOB' ? 'Bs' : currencyCode === 'PYG' ? 'Gs' : '$');
@@ -630,7 +650,7 @@ ${hasPixBeenSent
       }
     }
 
-    const systemPrompt = this.buildSystemPrompt(contextDirective);
+    const systemPrompt = this.buildSystemPrompt(contextDirective, phone);
 
     // Build context message array
     const messages = [
