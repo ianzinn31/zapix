@@ -239,13 +239,48 @@ class NvidiaNimService {
     const targetCountry = locale.country || product.targetCountry || 'Brasil';
     const isLatAm = locale.isLatAm;
     const targetLanguage = locale.language || (isLatAm ? 'es' : 'pt');
-    const ticketBasic = (Number(product.ticketBasic) > 0 ? Number(product.ticketBasic) : (Number(product.price) > 0 ? Number(product.price) : 15));
-    const ticketComplete = (Number(product.ticketComplete) > 0 ? Number(product.ticketComplete) : Math.round(Number(ticketBasic) * 1.6));
+
+    // 2. Resolve Country-Specific Pricing (Guarantee each country uses its own custom tickets)
+    const countryPrices = product.countryPrices || {};
+    const specificCountryPrice = countryPrices[targetCountry] || storage.getCountryPrice(targetCountry);
+    const localizedOffer = product.localizedOffers?.[targetCountry] || storage.getLocalizedOffer(targetCountry);
+
+    let resolvedTicketBasic = 0;
+    let resolvedTicketComplete = 0;
+
+    if (specificCountryPrice && (specificCountryPrice.ticketBasic > 0 || specificCountryPrice.ticketComplete > 0)) {
+      resolvedTicketBasic = Number(specificCountryPrice.ticketBasic) || 0;
+      resolvedTicketComplete = Number(specificCountryPrice.ticketComplete) || Math.round(resolvedTicketBasic * 1.6);
+    } else if (localizedOffer && (localizedOffer.ticketBasic > 0 || localizedOffer.ticketComplete > 0)) {
+      resolvedTicketBasic = Number(localizedOffer.ticketBasic) || 0;
+      resolvedTicketComplete = Number(localizedOffer.ticketComplete) || Math.round(resolvedTicketBasic * 1.6);
+    } else if (targetCountry === 'Brasil') {
+      resolvedTicketBasic = Number(product.ticketBasic) || Number(product.price) || 15;
+      resolvedTicketComplete = Number(product.ticketComplete) || 37;
+    } else {
+      const presetDefaults = {
+        'México': { basic: 150, complete: 250 },
+        'Colômbia': { basic: 45000, complete: 75000 },
+        'Argentina': { basic: 15000, complete: 25000 },
+        'Bolívia': { basic: 70, complete: 120 },
+        'Paraguai': { basic: 120000, complete: 200000 },
+        'Estados Unidos': { basic: 15, complete: 27 }
+      };
+      const def = presetDefaults[targetCountry] || { basic: 15, complete: 27 };
+      resolvedTicketBasic = def.basic;
+      resolvedTicketComplete = def.complete;
+    }
+
+    const ticketBasic = resolvedTicketBasic;
+    const ticketComplete = resolvedTicketComplete;
+
     let currencyCode = isLatAm ? (targetCountry === 'México' ? 'MXN' : targetCountry === 'Colômbia' ? 'COP' : targetCountry === 'Bolívia' ? 'BOB' : targetCountry === 'Paraguai' ? 'PYG' : targetCountry === 'Argentina' ? 'ARS' : 'USD') : (product.currencyCode || 'BRL');
-    if (isLatAm && product.currencyCode && product.currencyCode !== 'BRL') {
+    if (specificCountryPrice?.currencyCode) {
+      currencyCode = specificCountryPrice.currencyCode;
+    } else if (isLatAm && product.currencyCode && product.currencyCode !== 'BRL') {
       currencyCode = product.currencyCode;
     }
-    const currencySymbol = isLatAm ? (currencyCode === 'BOB' ? 'Bs' : currencyCode === 'PYG' ? 'Gs' : '$') : (product.currencySymbol || 'R$');
+    const currencySymbol = specificCountryPrice?.currencySymbol || (isLatAm ? (currencyCode === 'BOB' ? 'Bs' : currencyCode === 'PYG' ? 'Gs' : '$') : (product.currencySymbol || 'R$'));
     const paymentMethodType = product.paymentMethodType || (targetCountry === 'México' ? 'XPag_AutoCode' : targetCountry === 'Colômbia' ? 'Nequi_BreB' : targetCountry === 'Bolívia' ? 'QR_Bolivia' : (targetCountry === 'Paraguai' || targetCountry === 'Argentina') ? 'Alias_Paraguay' : 'pix');
     const paymentInstructions = product.paymentInstructions || (targetCountry === 'México' ? 'Código de pago automático SPEI' : 'Pago directo con confirmación inmediata');
 

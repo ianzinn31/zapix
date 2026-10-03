@@ -173,6 +173,16 @@ export const LOCALIZATION_COUNTRIES = [
   }
 ];
 
+export const DEFAULT_COUNTRY_PRICES = {
+  'Brasil': { ticketBasic: 15, ticketComplete: 37, currencyCode: 'BRL', currencySymbol: 'R$' },
+  'México': { ticketBasic: 150, ticketComplete: 250, currencyCode: 'MXN', currencySymbol: '$' },
+  'Colômbia': { ticketBasic: 45000, ticketComplete: 75000, currencyCode: 'COP', currencySymbol: '$' },
+  'Argentina': { ticketBasic: 15000, ticketComplete: 25000, currencyCode: 'ARS', currencySymbol: '$' },
+  'Bolívia': { ticketBasic: 70, ticketComplete: 120, currencyCode: 'BOB', currencySymbol: 'Bs' },
+  'Paraguai': { ticketBasic: 120000, ticketComplete: 200000, currencyCode: 'PYG', currencySymbol: 'Gs' },
+  'Estados Unidos': { ticketBasic: 15, ticketComplete: 27, currencyCode: 'USD', currencySymbol: '$' }
+};
+
 export default function ProductSettings({ product, onSave }) {
   const [formData, setFormData] = useState({
     name: product?.name || '',
@@ -219,6 +229,42 @@ export default function ProductSettings({ product, onSave }) {
     mainBenefits: product?.mainBenefits || [],
     objections: product?.objections || [],
     defaultAudioPitchText: product?.defaultAudioPitchText || ''
+  });
+
+  // Country-Specific Pricing State (Persistent map for all 7 countries)
+  const [countryPrices, setCountryPrices] = useState(() => {
+    const initial = { ...DEFAULT_COUNTRY_PRICES };
+    if (product?.countryPrices) {
+      for (const [k, v] of Object.entries(product.countryPrices)) {
+        if (v && (v.ticketBasic > 0 || v.ticketComplete > 0)) {
+          initial[k] = { ...initial[k], ...v };
+        }
+      }
+    }
+    if (product?.localizedOffers) {
+      for (const [k, v] of Object.entries(product.localizedOffers)) {
+        if (v && (v.ticketBasic > 0 || v.ticketComplete > 0)) {
+          initial[k] = {
+            ...(initial[k] || {}),
+            ticketBasic: Number(v.ticketBasic) || initial[k]?.ticketBasic,
+            ticketComplete: Number(v.ticketComplete) || initial[k]?.ticketComplete,
+            currencyCode: v.currencyCode || initial[k]?.currencyCode,
+            currencySymbol: v.currencySymbol || initial[k]?.currencySymbol
+          };
+        }
+      }
+    }
+    const tCountry = product?.targetCountry || 'Brasil';
+    if (product?.ticketBasic > 0 || product?.ticketComplete > 0) {
+      initial[tCountry] = {
+        ...(initial[tCountry] || {}),
+        ticketBasic: Number(product.ticketBasic) || initial[tCountry]?.ticketBasic || 15,
+        ticketComplete: Number(product.ticketComplete) || initial[tCountry]?.ticketComplete || 37,
+        currencyCode: product.currencyCode || initial[tCountry]?.currencyCode || 'BRL',
+        currencySymbol: product.currencySymbol || initial[tCountry]?.currencySymbol || 'R$'
+      };
+    }
+    return initial;
   });
 
   const [newPainPoint, setNewPainPoint] = useState('');
@@ -331,6 +377,13 @@ export default function ProductSettings({ product, onSave }) {
       if (product.localizedOffers) {
         setLocalizedOffers(product.localizedOffers);
       }
+      if (product.countryPrices) {
+        setCountryPrices((prev) => ({
+          ...DEFAULT_COUNTRY_PRICES,
+          ...prev,
+          ...product.countryPrices
+        }));
+      }
     }
 
     // Refresh localized offers from backend cache
@@ -342,9 +395,38 @@ export default function ProductSettings({ product, onSave }) {
         }
       })
       .catch(() => {});
+
+    // Refresh country prices from backend
+    fetch('/api/product/country-prices')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+          setCountryPrices((prev) => ({ ...DEFAULT_COUNTRY_PRICES, ...data, ...prev }));
+        }
+      })
+      .catch(() => {});
   }, [product]);
 
   const handleSelectCountry = (preset) => {
+    // 1. Save current country price in countryPrices before switching so no custom price is lost
+    const currentCountry = formData.targetCountry || 'Brasil';
+    const currentBasic = Number(formData.ticketBasic) || 0;
+    const currentComplete = Number(formData.ticketComplete) || 0;
+
+    const updatedPrices = {
+      ...countryPrices,
+      ...(currentBasic > 0 || currentComplete > 0 ? {
+        [currentCountry]: {
+          ...(countryPrices[currentCountry] || DEFAULT_COUNTRY_PRICES[currentCountry] || {}),
+          ticketBasic: currentBasic > 0 ? currentBasic : (countryPrices[currentCountry]?.ticketBasic || 15),
+          ticketComplete: currentComplete > 0 ? currentComplete : (countryPrices[currentCountry]?.ticketComplete || 37),
+          currencyCode: formData.currencyCode,
+          currencySymbol: formData.currencySymbol
+        }
+      } : {})
+    };
+    setCountryPrices(updatedPrices);
+
     // If coming from Brasil, backup base offer in memory
     if (formData.targetCountry === 'Brasil' && preset.country !== 'Brasil') {
       setBaseOfferBackup({
@@ -361,11 +443,14 @@ export default function ProductSettings({ product, onSave }) {
     }
 
     const existingLocalized = localizedOffers[preset.country];
+    const targetPriceObj = updatedPrices[preset.country] || DEFAULT_COUNTRY_PRICES[preset.country] || {};
+
+    const resolvedBasic = targetPriceObj.ticketBasic ?? existingLocalized?.ticketBasic ?? preset.defaultTicketBasic;
+    const resolvedComplete = targetPriceObj.ticketComplete ?? existingLocalized?.ticketComplete ?? preset.defaultTicketComplete;
+    const resolvedCurrencyCode = targetPriceObj.currencyCode || existingLocalized?.currencyCode || preset.currencyCode;
+    const resolvedCurrencySymbol = targetPriceObj.currencySymbol || existingLocalized?.currencySymbol || preset.currencySymbol;
 
     setFormData((prev) => {
-      const isDefaultPrice = !prev.ticketBasic || prev.ticketBasic === 15 || prev.ticketBasic === 0;
-      const isDefaultComplete = !prev.ticketComplete || prev.ticketComplete === 37 || prev.ticketComplete === 0;
-
       // Returning to Brasil with backup
       if (preset.country === 'Brasil' && baseOfferBackup) {
         return {
@@ -377,22 +462,25 @@ export default function ProductSettings({ product, onSave }) {
           paymentMethodType: 'pix',
           paymentInstructions: 'Enviar o comprovante aqui no WhatsApp para liberação imediata do acesso.',
           voiceAccentId: 'pt_BR_native_01',
-          ...baseOfferBackup
+          ...baseOfferBackup,
+          ticketBasic: resolvedBasic,
+          ticketComplete: resolvedComplete,
+          price: resolvedBasic
         };
       }
 
       return {
         ...prev,
         targetCountry: preset.country,
-        currencyCode: existingLocalized?.currencyCode || preset.currencyCode,
-        currencySymbol: existingLocalized?.currencySymbol || preset.currencySymbol,
-        currency: existingLocalized?.currencyCode || preset.currencyCode,
+        currencyCode: resolvedCurrencyCode,
+        currencySymbol: resolvedCurrencySymbol,
+        currency: resolvedCurrencyCode,
         paymentMethodType: preset.paymentMethodType,
         paymentInstructions: preset.paymentInstructions,
         voiceAccentId: preset.voiceAccentId,
-        ticketBasic: existingLocalized?.ticketBasic ?? (isDefaultPrice ? preset.defaultTicketBasic : prev.ticketBasic),
-        ticketComplete: existingLocalized?.ticketComplete ?? (isDefaultComplete ? preset.defaultTicketComplete : prev.ticketComplete),
-        price: existingLocalized?.ticketBasic ?? (isDefaultPrice ? preset.defaultTicketBasic : prev.price)
+        ticketBasic: resolvedBasic,
+        ticketComplete: resolvedComplete,
+        price: resolvedBasic
       };
     });
   };
@@ -462,6 +550,19 @@ export default function ProductSettings({ product, onSave }) {
         [targetCountry]: data.localized
       };
       setLocalizedOffers(updatedMap);
+
+      const updatedPrices = {
+        ...countryPrices,
+        [targetCountry]: {
+          ...(countryPrices[targetCountry] || DEFAULT_COUNTRY_PRICES[targetCountry] || {}),
+          ticketBasic: Number(data.localized.ticketBasic) || countryPrices[targetCountry]?.ticketBasic || 0,
+          ticketComplete: Number(data.localized.ticketComplete) || countryPrices[targetCountry]?.ticketComplete || 0,
+          currencyCode: data.localized.currencyCode || countryPrices[targetCountry]?.currencyCode,
+          currencySymbol: data.localized.currencySymbol || countryPrices[targetCountry]?.currencySymbol
+        }
+      };
+      setCountryPrices(updatedPrices);
+
       setFormData((prev) => ({
         ...prev,
         localizedOffers: updatedMap
@@ -471,6 +572,7 @@ export default function ProductSettings({ product, onSave }) {
       onSave({
         product: {
           ...formData,
+          countryPrices: updatedPrices,
           localizedOffers: updatedMap
         }
       });
@@ -515,10 +617,24 @@ export default function ProductSettings({ product, onSave }) {
       }
     };
     setLocalizedOffers(updatedMap);
+
+    const updatedPrices = {
+      ...countryPrices,
+      [editingModalCountry]: {
+        ...(countryPrices[editingModalCountry] || DEFAULT_COUNTRY_PRICES[editingModalCountry] || {}),
+        ticketBasic: Number(modalOfferData.ticketBasic) || countryPrices[editingModalCountry]?.ticketBasic || 0,
+        ticketComplete: Number(modalOfferData.ticketComplete) || countryPrices[editingModalCountry]?.ticketComplete || 0,
+        currencyCode: modalOfferData.currencyCode || countryPrices[editingModalCountry]?.currencyCode,
+        currencySymbol: modalOfferData.currencySymbol || countryPrices[editingModalCountry]?.currencySymbol
+      }
+    };
+    setCountryPrices(updatedPrices);
+
     setFormData((prev) => ({ ...prev, localizedOffers: updatedMap }));
     onSave({
       product: {
         ...formData,
+        countryPrices: updatedPrices,
         localizedOffers: updatedMap
       }
     });
@@ -535,16 +651,20 @@ export default function ProductSettings({ product, onSave }) {
     const offer = localizedOffers[countryName];
     if (!offer) return;
     const preset = COUNTRY_PRESETS.find((p) => p.country === countryName);
+    const cPrice = countryPrices[countryName] || DEFAULT_COUNTRY_PRICES[countryName] || {};
+    const bVal = Number(cPrice.ticketBasic) || Number(offer.ticketBasic) || preset?.defaultTicketBasic || 15;
+    const cVal = Number(cPrice.ticketComplete) || Number(offer.ticketComplete) || preset?.defaultTicketComplete || 37;
+
     setFormData((prev) => ({
       ...prev,
       name: offer.name || prev.name,
       niche: offer.niche || prev.niche,
       targetAudience: offer.targetAudience || prev.targetAudience,
-      ticketBasic: offer.ticketBasic || prev.ticketBasic,
-      ticketComplete: offer.ticketComplete || prev.ticketComplete,
-      price: offer.ticketBasic || prev.price,
-      currencyCode: offer.currencyCode || preset?.currencyCode || prev.currencyCode,
-      currencySymbol: offer.currencySymbol || preset?.currencySymbol || prev.currencySymbol,
+      ticketBasic: bVal,
+      ticketComplete: cVal,
+      price: bVal,
+      currencyCode: offer.currencyCode || cPrice.currencyCode || preset?.currencyCode || prev.currencyCode,
+      currencySymbol: offer.currencySymbol || cPrice.currencySymbol || preset?.currencySymbol || prev.currencySymbol,
       targetCountry: countryName,
       mainPainPoints: Array.isArray(offer.mainPainPoints) ? offer.mainPainPoints : prev.mainPainPoints,
       mainBenefits: Array.isArray(offer.mainBenefits) ? offer.mainBenefits : prev.mainBenefits,
@@ -562,6 +682,61 @@ export default function ProductSettings({ product, onSave }) {
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleUpdateTicketBasic = (val) => {
+    const num = parseFloat(val) || 0;
+    handleChange('ticketBasic', val === '' ? '' : num);
+    handleChange('price', val === '' ? '' : num);
+    const country = formData.targetCountry || 'Brasil';
+    setCountryPrices((prev) => ({
+      ...prev,
+      [country]: {
+        ...(prev[country] || DEFAULT_COUNTRY_PRICES[country] || {}),
+        ticketBasic: num,
+        currencyCode: formData.currencyCode,
+        currencySymbol: formData.currencySymbol
+      }
+    }));
+  };
+
+  const handleUpdateTicketComplete = (val) => {
+    const num = parseFloat(val) || 0;
+    handleChange('ticketComplete', val === '' ? '' : num);
+    const country = formData.targetCountry || 'Brasil';
+    setCountryPrices((prev) => ({
+      ...prev,
+      [country]: {
+        ...(prev[country] || DEFAULT_COUNTRY_PRICES[country] || {}),
+        ticketComplete: num,
+        currencyCode: formData.currencyCode,
+        currencySymbol: formData.currencySymbol
+      }
+    }));
+  };
+
+  const handleUpdateSpecificCountryPrice = (countryName, field, value) => {
+    const num = parseFloat(value) || 0;
+    setCountryPrices((prev) => {
+      const updatedCountry = {
+        ...(prev[countryName] || DEFAULT_COUNTRY_PRICES[countryName] || {}),
+        [field]: num
+      };
+      const updated = {
+        ...prev,
+        [countryName]: updatedCountry
+      };
+
+      if (formData.targetCountry === countryName) {
+        setFormData((f) => ({
+          ...f,
+          [field]: num,
+          ...(field === 'ticketBasic' ? { price: num } : {})
+        }));
+      }
+
+      return updated;
+    });
   };
 
   const handleCopyPix = () => {
@@ -623,14 +798,45 @@ export default function ProductSettings({ product, onSave }) {
     }));
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+
+    const activeCountry = formData.targetCountry || 'Brasil';
+    const activeBasic = Number(formData.ticketBasic) || 0;
+    const activeComplete = Number(formData.ticketComplete) || 0;
+
+    const finalCountryPrices = {
+      ...countryPrices,
+      [activeCountry]: {
+        ...(countryPrices[activeCountry] || DEFAULT_COUNTRY_PRICES[activeCountry] || {}),
+        ticketBasic: activeBasic > 0 ? activeBasic : (countryPrices[activeCountry]?.ticketBasic || 15),
+        ticketComplete: activeComplete > 0 ? activeComplete : (countryPrices[activeCountry]?.ticketComplete || 37),
+        currencyCode: formData.currencyCode,
+        currencySymbol: formData.currencySymbol
+      }
+    };
+
+    setCountryPrices(finalCountryPrices);
+
     onSave({
       product: {
         ...formData,
+        ticketBasic: activeBasic > 0 ? activeBasic : 15,
+        ticketComplete: activeComplete > 0 ? activeComplete : 37,
+        price: activeBasic > 0 ? activeBasic : 15,
+        countryPrices: finalCountryPrices,
         localizedOffers
       }
     });
+
+    try {
+      await fetch('/api/product/country-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ countryPrices: finalCountryPrices })
+      });
+    } catch (_) {}
+
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
   };
@@ -1078,11 +1284,7 @@ export default function ProductSettings({ product, onSave }) {
               type="number"
               step="any"
               value={formData.ticketBasic}
-              onChange={(e) => {
-                const val = parseFloat(e.target.value) || 0;
-                handleChange('ticketBasic', val);
-                handleChange('price', val);
-              }}
+              onChange={(e) => handleUpdateTicketBasic(e.target.value)}
               className="input-field"
               placeholder="Ex: 150"
               required
@@ -1097,11 +1299,209 @@ export default function ProductSettings({ product, onSave }) {
               type="number"
               step="any"
               value={formData.ticketComplete}
-              onChange={(e) => handleChange('ticketComplete', parseFloat(e.target.value) || 0)}
+              onChange={(e) => handleUpdateTicketComplete(e.target.value)}
               className="input-field"
               placeholder="Ex: 250"
               required
             />
+          </div>
+        </div>
+
+        {/* TABELA DE PREÇOS PERSONALIZADOS POR PAÍS & MOEDA */}
+        <div style={{
+          background: 'rgba(15, 23, 42, 0.65)',
+          border: '1px solid rgba(16, 185, 129, 0.28)',
+          borderRadius: '14px',
+          padding: '22px',
+          marginBottom: '26px',
+          boxShadow: '0 4px 24px -1px rgba(0, 0, 0, 0.35)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{
+                padding: '9px',
+                background: 'rgba(16, 185, 129, 0.15)',
+                borderRadius: '10px',
+                color: '#10b981',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Coins size={22} />
+              </div>
+              <div>
+                <h4 style={{ fontSize: '1.02rem', fontWeight: 700, color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>Tabela de Preços Personalizados por País & Moeda</span>
+                  <span style={{
+                    fontSize: '0.68rem',
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    background: 'rgba(16, 185, 129, 0.18)',
+                    color: '#34d399',
+                    border: '1px solid rgba(16, 185, 129, 0.3)'
+                  }}>
+                    7 Países Zapix
+                  </span>
+                </h4>
+                <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '3px 0 0 0' }}>
+                  Preencha os valores para cada país e clique em "Salvar Alterações". Cada mercado mantém seu preço individual permanentemente salvo.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                className="btn-primary"
+                style={{ fontSize: '0.78rem', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                {savedSuccess ? <CheckCircle2 size={15} /> : <Save size={15} />}
+                <span>{savedSuccess ? 'Preços Salvos!' : 'Salvar Todos os Preços'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Grid of Country Cards */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '12px'
+          }}>
+            {COUNTRY_PRESETS.map((preset) => {
+              const isActive = formData.targetCountry === preset.country;
+              const pData = countryPrices[preset.country] || DEFAULT_COUNTRY_PRICES[preset.country] || {
+                ticketBasic: preset.defaultTicketBasic,
+                ticketComplete: preset.defaultTicketComplete
+              };
+              const currSymbol = pData.currencySymbol || preset.currencySymbol;
+              const currCode = pData.currencyCode || preset.currencyCode;
+              const bVal = pData.ticketBasic ?? preset.defaultTicketBasic;
+              const cVal = pData.ticketComplete ?? preset.defaultTicketComplete;
+
+              return (
+                <div
+                  key={preset.country}
+                  style={{
+                    background: isActive ? 'rgba(16, 185, 129, 0.08)' : 'rgba(255, 255, 255, 0.02)',
+                    border: isActive ? '1px solid rgba(16, 185, 129, 0.45)' : '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '10px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    transition: 'all 0.2s ease',
+                    boxShadow: isActive ? '0 0 16px rgba(16, 185, 129, 0.15)' : 'none'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '1.4rem' }}>{preset.flag}</span>
+                      <div>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#f8fafc' }}>
+                          {preset.country}
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+                          {preset.tag}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                      <span style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        background: 'rgba(99, 102, 241, 0.15)',
+                        color: '#a5b4fc',
+                        border: '1px solid rgba(99, 102, 241, 0.3)'
+                      }}>
+                        {currCode} ({currSymbol})
+                      </span>
+                      {isActive && (
+                        <span style={{ fontSize: '0.65rem', color: '#34d399', fontWeight: 600 }}>
+                          ⭐ Ativo no form
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', color: '#cbd5e1', fontWeight: 600, marginBottom: '4px' }}>
+                        Ticket Básico ({currCode})
+                      </label>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <span style={{
+                          position: 'absolute',
+                          left: '10px',
+                          fontSize: '0.75rem',
+                          color: '#94a3b8',
+                          pointerEvents: 'none'
+                        }}>
+                          {currSymbol}
+                        </span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={bVal}
+                          onChange={(e) => handleUpdateSpecificCountryPrice(preset.country, 'ticketBasic', e.target.value)}
+                          className="input-field"
+                          style={{ paddingLeft: '28px', fontSize: '0.84rem' }}
+                          placeholder={String(preset.defaultTicketBasic)}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', color: '#cbd5e1', fontWeight: 600, marginBottom: '4px' }}>
+                        Ticket VIP / Completo
+                      </label>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <span style={{
+                          position: 'absolute',
+                          left: '10px',
+                          fontSize: '0.75rem',
+                          color: '#94a3b8',
+                          pointerEvents: 'none'
+                        }}>
+                          {currSymbol}
+                        </span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={cVal}
+                          onChange={(e) => handleUpdateSpecificCountryPrice(preset.country, 'ticketComplete', e.target.value)}
+                          className="input-field"
+                          style={{ paddingLeft: '28px', fontSize: '0.84rem' }}
+                          placeholder={String(preset.defaultTicketComplete)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {!isActive && (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectCountry(preset)}
+                      className="btn-secondary"
+                      style={{
+                        fontSize: '0.72rem',
+                        padding: '4px 8px',
+                        width: '100%',
+                        textAlign: 'center',
+                        justifyContent: 'center',
+                        marginTop: '2px',
+                        borderColor: 'rgba(255, 255, 255, 0.1)'
+                      }}
+                    >
+                      ✏️ Editar {preset.country} no Formulário Principal
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 

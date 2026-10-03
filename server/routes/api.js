@@ -95,6 +95,34 @@ router.get('/product/localized-offers', (req, res) => {
   res.json(settings.product?.localizedOffers || {});
 });
 
+// === Country-Specific Ticket Pricing ===
+router.get('/product/country-prices', (req, res) => {
+  const settings = storage.getSettings();
+  res.json(settings.product?.countryPrices || {});
+});
+
+router.post('/product/country-prices', (req, res) => {
+  try {
+    const { countryPrices, country, ticketBasic, ticketComplete, currencyCode, currencySymbol } = req.body || {};
+    if (country && (ticketBasic !== undefined || ticketComplete !== undefined)) {
+      const saved = storage.saveCountryPrice(country, ticketBasic, ticketComplete, currencyCode, currencySymbol);
+      return res.json({ success: true, countryPrice: saved });
+    }
+    if (countryPrices && typeof countryPrices === 'object') {
+      for (const [cName, pData] of Object.entries(countryPrices)) {
+        if (pData && (pData.ticketBasic !== undefined || pData.ticketComplete !== undefined)) {
+          storage.saveCountryPrice(cName, pData.ticketBasic, pData.ticketComplete, pData.currencyCode, pData.currencySymbol);
+        }
+      }
+      const settings = storage.getSettings();
+      return res.json({ success: true, countryPrices: settings.product?.countryPrices || {} });
+    }
+    res.status(400).json({ error: 'Dados de preços inválidos' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // === Leads ===
 router.get('/leads', (req, res) => {
   res.json(storage.getLeads());

@@ -245,6 +245,15 @@ const DEFAULT_STATE = {
       objections: [],
       defaultAudioPitchText: '',
       localizedOffers: {}, // Country-specific localized offers { "México": { ... }, "Colômbia": { ... } }
+      countryPrices: {
+        'Brasil': { ticketBasic: 15, ticketComplete: 37, currencyCode: 'BRL', currencySymbol: 'R$' },
+        'México': { ticketBasic: 150, ticketComplete: 250, currencyCode: 'MXN', currencySymbol: '$' },
+        'Colômbia': { ticketBasic: 45000, ticketComplete: 75000, currencyCode: 'COP', currencySymbol: '$' },
+        'Argentina': { ticketBasic: 15000, ticketComplete: 25000, currencyCode: 'ARS', currencySymbol: '$' },
+        'Bolívia': { ticketBasic: 70, ticketComplete: 120, currencyCode: 'BOB', currencySymbol: 'Bs' },
+        'Paraguai': { ticketBasic: 120000, ticketComplete: 200000, currencyCode: 'PYG', currencySymbol: 'Gs' },
+        'Estados Unidos': { ticketBasic: 15, ticketComplete: 27, currencyCode: 'USD', currencySymbol: '$' }
+      },
       sendPixButton: true
     },
     remarketing: {
@@ -419,7 +428,18 @@ class StorageService {
             antiBan: { ...DEFAULT_STATE.settings.antiBan, ...(parsed.settings?.antiBan || {}) },
             metaAds: { ...DEFAULT_STATE.settings.metaAds, ...(parsed.settings?.metaAds || {}) },
             vision: { ...DEFAULT_STATE.settings.vision, ...(parsed.settings?.vision || {}) },
-            product: { ...DEFAULT_STATE.settings.product, ...(parsed.settings?.product || {}) },
+            product: {
+              ...DEFAULT_STATE.settings.product,
+              ...(parsed.settings?.product || {}),
+              countryPrices: {
+                ...DEFAULT_STATE.settings.product.countryPrices,
+                ...(parsed.settings?.product?.countryPrices || {})
+              },
+              localizedOffers: {
+                ...DEFAULT_STATE.settings.product.localizedOffers,
+                ...(parsed.settings?.product?.localizedOffers || {})
+              }
+            },
             remarketing: { ...DEFAULT_STATE.settings.remarketing, ...(parsed.settings?.remarketing || {}) }
           },
           leads: parsed.leads || DEFAULT_STATE.leads,
@@ -453,6 +473,13 @@ class StorageService {
         if (loaded.settings.ai.isFallbackActive && loaded.settings.ai.primaryModel === 'z-ai/glm-5.3') {
           loaded.settings.ai.isFallbackActive = false;
           loaded.settings.ai.lastFallbackReason = null;
+        }
+
+        if (!loaded.settings.product.ticketBasic || Number(loaded.settings.product.ticketBasic) === 0) {
+          loaded.settings.product.ticketBasic = Number(loaded.settings.product.price) || 15;
+        }
+        if (!loaded.settings.product.ticketComplete || Number(loaded.settings.product.ticketComplete) === 0) {
+          loaded.settings.product.ticketComplete = 37;
         }
 
         return loaded;
@@ -506,7 +533,38 @@ class StorageService {
       this.data.settings.vision = { ...this.data.settings.vision, ...partialSettings.vision };
     }
     if (partialSettings.product) {
-      this.data.settings.product = { ...this.data.settings.product, ...partialSettings.product };
+      const existingCountryPrices = this.data.settings.product?.countryPrices || DEFAULT_STATE.settings.product.countryPrices || {};
+      const updatedCountryPrices = {
+        ...existingCountryPrices,
+        ...(partialSettings.product.countryPrices || {})
+      };
+      
+      const existingLocalizedOffers = this.data.settings.product?.localizedOffers || {};
+      const updatedLocalizedOffers = {
+        ...existingLocalizedOffers,
+        ...(partialSettings.product.localizedOffers || {})
+      };
+
+      this.data.settings.product = {
+        ...this.data.settings.product,
+        ...partialSettings.product,
+        countryPrices: updatedCountryPrices,
+        localizedOffers: updatedLocalizedOffers
+      };
+
+      // Always ensure the active targetCountry's tickets are safely registered in countryPrices
+      const activeCountry = this.data.settings.product.targetCountry || 'Brasil';
+      const bTicket = Number(this.data.settings.product.ticketBasic);
+      const cTicket = Number(this.data.settings.product.ticketComplete);
+      if (bTicket > 0 || cTicket > 0) {
+        this.data.settings.product.countryPrices[activeCountry] = {
+          ...(this.data.settings.product.countryPrices[activeCountry] || {}),
+          ...(bTicket > 0 ? { ticketBasic: bTicket } : {}),
+          ...(cTicket > 0 ? { ticketComplete: cTicket } : {}),
+          currencyCode: this.data.settings.product.currencyCode || this.data.settings.product.countryPrices[activeCountry]?.currencyCode || 'BRL',
+          currencySymbol: this.data.settings.product.currencySymbol || this.data.settings.product.countryPrices[activeCountry]?.currencySymbol || 'R$'
+        };
+      }
     }
     if (partialSettings.remarketing) {
       this.data.settings.remarketing = { ...this.data.settings.remarketing, ...partialSettings.remarketing };
@@ -914,10 +972,23 @@ class StorageService {
   saveLocalizedOffer(targetCountry, localizedData) {
     if (!this.data.settings.product) this.data.settings.product = {};
     if (!this.data.settings.product.localizedOffers) this.data.settings.product.localizedOffers = {};
+    if (!this.data.settings.product.countryPrices) this.data.settings.product.countryPrices = {};
+    
     this.data.settings.product.localizedOffers[targetCountry] = {
       ...localizedData,
       updatedAt: Date.now()
     };
+
+    if (localizedData.ticketBasic > 0 || localizedData.ticketComplete > 0) {
+      this.data.settings.product.countryPrices[targetCountry] = {
+        ...(this.data.settings.product.countryPrices[targetCountry] || {}),
+        ticketBasic: Number(localizedData.ticketBasic) || 0,
+        ticketComplete: Number(localizedData.ticketComplete) || 0,
+        currencyCode: localizedData.currencyCode || localizedData.currency || 'USD',
+        currencySymbol: localizedData.currencySymbol || '$'
+      };
+    }
+
     this.save();
     supabaseService.saveSettings(this.data.settings);
     this.addLog('SUCCESS', `Oferta localizada com sucesso para ${targetCountry} e salva no sistema.`);
@@ -926,6 +997,37 @@ class StorageService {
 
   getLocalizedOffer(targetCountry) {
     return this.data.settings?.product?.localizedOffers?.[targetCountry] || null;
+  }
+
+  saveCountryPrice(country, ticketBasic, ticketComplete, currencyCode = '', currencySymbol = '') {
+    if (!this.data.settings.product) this.data.settings.product = {};
+    if (!this.data.settings.product.countryPrices) this.data.settings.product.countryPrices = {};
+    this.data.settings.product.countryPrices[country] = {
+      ...(this.data.settings.product.countryPrices[country] || {}),
+      ticketBasic: Number(ticketBasic) || 0,
+      ticketComplete: Number(ticketComplete) || 0,
+      ...(currencyCode ? { currencyCode } : {}),
+      ...(currencySymbol ? { currencySymbol } : {})
+    };
+    if (this.data.settings.product.localizedOffers?.[country]) {
+      this.data.settings.product.localizedOffers[country].ticketBasic = Number(ticketBasic) || 0;
+      this.data.settings.product.localizedOffers[country].ticketComplete = Number(ticketComplete) || 0;
+    }
+    this.save();
+    supabaseService.saveSettings(this.data.settings);
+    return this.data.settings.product.countryPrices[country];
+  }
+
+  getCountryPrice(country) {
+    const cp = this.data.settings?.product?.countryPrices?.[country];
+    if (cp && (cp.ticketBasic > 0 || cp.ticketComplete > 0)) {
+      return cp;
+    }
+    const loc = this.data.settings?.product?.localizedOffers?.[country];
+    if (loc && (loc.ticketBasic > 0 || loc.ticketComplete > 0)) {
+      return { ticketBasic: loc.ticketBasic, ticketComplete: loc.ticketComplete, currencyCode: loc.currencyCode, currencySymbol: loc.currencySymbol };
+    }
+    return null;
   }
 
   // Logs
