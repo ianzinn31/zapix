@@ -1857,18 +1857,42 @@ export default function ProductSettings({ product, onSave }) {
           </div>
         </div>
 
-        {/* Script de Áudio de Pitch Fish Audio */}
-        <div style={{ marginBottom: '24px' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', fontWeight: 600, color: '#22d3ee', marginBottom: '6px' }}>
-            <Mic size={15} />
-            <span>Roteiro do Áudio de Pitch (Gerado com voz humana via Fish Audio)</span>
-          </label>
+        {/* Instruções & Diretrizes de Abordagem / Áudio (Sem Roteiro Fixo - 100% Sob Medida) */}
+        <div style={{
+          background: 'rgba(6, 182, 212, 0.04)',
+          border: '1px solid rgba(6, 182, 212, 0.25)',
+          borderRadius: '12px',
+          padding: '18px',
+          marginBottom: '24px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: 700, color: '#22d3ee', margin: 0 }}>
+              <Mic size={18} />
+              <span>Instruções & Diretrizes de Abordagem / Áudio para a IA</span>
+            </label>
+            <span style={{
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              padding: '2px 8px',
+              borderRadius: '10px',
+              background: 'rgba(34, 211, 238, 0.15)',
+              color: '#38bdf8',
+              border: '1px solid rgba(34, 211, 238, 0.3)'
+            }}>
+              Zero Roteiro Engessado • 100% Adaptado ao Lead
+            </span>
+          </div>
+
+          <p style={{ fontSize: '0.76rem', color: '#94a3b8', marginBottom: '10px', lineHeight: 1.4 }}>
+            Monte aqui as instruções do que você quer que a IA transmita na abordagem. A IA <strong>NÃO</strong> vai repetir um script engessado: ela vai ouvir a história do cliente, identificar a dor DELE e gerar mensagens e áudios sob medida na hora para convencer o lead de que ela está 100% focada em resolver o caso particular dele.
+          </p>
+
           <textarea
             value={formData.defaultAudioPitchText}
             onChange={(e) => handleChange('defaultAudioPitchText', e.target.value)}
             className="input-field"
-            rows={3}
-            placeholder="Ex: Opa! Tudo bem? Vi que você tem interesse no método. Gravei esse áudio pra te explicar rapidinho como funciona..."
+            rows={4}
+            placeholder="Ex: Acolha o cliente com muito carinho e entusiasmo. Pergunte a idade do pequeno se ainda não souber. Conecte com a dificuldade que a mãe mencionou sobre telas ou desânimo escolar. Destaque que as atividades são ilustradas e fáceis de aplicar em 15 minutos por dia, gerando resultados desde as primeiras semanas. Quando fizer sentido, proponha começar hoje mesmo."
           />
         </div>
 
@@ -2232,11 +2256,25 @@ export default function ProductSettings({ product, onSave }) {
               </div>
 
               {/* Localized Audio Pitch Script */}
-              <div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', fontWeight: 600, color: '#22d3ee', marginBottom: '6px' }}>
-                  <Mic size={15} />
-                  <span>Roteiro de Áudio em Voz Alta (Com gírias e sotaque nativo para Fish Audio)</span>
-                </label>
+              {/* Diretrizes de Abordagem e Áudio Localizadas */}
+              <div style={{
+                background: 'rgba(6, 182, 212, 0.05)',
+                border: '1px solid rgba(6, 182, 212, 0.2)',
+                borderRadius: '10px',
+                padding: '14px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', flexWrap: 'wrap', gap: '6px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.84rem', fontWeight: 700, color: '#22d3ee', margin: 0 }}>
+                    <Mic size={15} />
+                    <span>Diretrizes de Abordagem & Áudio para {editingModalCountry} (Com Gírias Nativas)</span>
+                  </label>
+                  <span style={{ fontSize: '0.68rem', color: '#38bdf8' }}>
+                    Áudios gerados sob medida ao caso do lead
+                  </span>
+                </div>
+                <p style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: '8px', lineHeight: 1.3 }}>
+                  Orientações culturais para a IA usar como guia. A IA formula áudios e mensagens únicos para cada cliente na gíria local de {editingModalCountry}, sem roteiros pré-fabricados.
+                </p>
                 <textarea
                   rows={3}
                   value={modalOfferData.defaultAudioPitchText || ''}
