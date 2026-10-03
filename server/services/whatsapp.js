@@ -825,23 +825,32 @@ class WhatsAppService {
           const isTriggeredByTag = tagMatches.length > 0 || deliverablesToSend.length > 0;
           const lowerReply = (replyText || '').toLowerCase();
           const userIncomingMsgs = sentMsgs.filter((m) => !m.fromMe);
-          const hasChildDetails = /\b\d+\s*(?:anos?|aninhos|meses)\b|prezinho|escola|começando|creche|maternal|fundamental|alfabetiz/i.test(lowerUser);
           const isExplicitDeliveryAgreement =
-            (lowerUser.includes('manda') || lowerUser.includes('envia') || lowerUser.includes('quero ver') || lowerUser.includes('pode mandar') || lowerUser.includes('quero') || lowerUser.includes('sim')) &&
-            (lowerReply.includes('enviando') || lowerReply.includes('entregando') || lowerReply.includes('liberando') || lowerReply.includes('preparei') || lowerReply.includes('separei') || lowerReply.includes('abaixo'));
+            (lowerUser.includes('manda') || lowerUser.includes('envia') || lowerUser.includes('quero ver') || lowerUser.includes('pode mandar') || lowerUser.includes('quiero') || lowerUser.includes('me los mandas')) &&
+            (lowerReply.includes('enviando') || lowerReply.includes('entregando') || lowerReply.includes('liberando') || lowerReply.includes('comparto') || lowerReply.includes('preparei') || lowerReply.includes('separei') || lowerReply.includes('abaixo'));
 
-          const isAskingAudio = /(?:mandar?|enviar?|grabar?|puedes mandar|me podr[ií]as mandar|manda|envia)\s+(?:un\s+)?audio|escuchar\s+en\s+audio|audio\s+explicando|manda\s+(?:um\s+)?[aá]udio|grava\s+(?:um\s+)?[aá]udio|pode\s+mandar\s+[aá]udio/i.test(lowerUser);
-          const isTurn2OrEngaged = (!isAskingAudio && userIncomingMsgs.length >= 2) || hasChildDetails || isTriggeredByTag || isExplicitDeliveryAgreement;
+          const isAiExpressingDelivery =
+            isTriggeredByTag ||
+            lowerReply.includes('enviando') ||
+            lowerReply.includes('entregando') ||
+            lowerReply.includes('liberando') ||
+            lowerReply.includes('te comparto el material') ||
+            lowerReply.includes('te comparto las actividades') ||
+            lowerReply.includes('te acabo de compartir') ||
+            lowerReply.includes('te dejo las actividades') ||
+            lowerReply.includes('te mando el material');
 
           // If the customer explicitly asked for the payment coordinates and already received materials: don't resend materials!
           if (userExplicitlyWantsPayment && hasReceivedAny) {
             deliverablesToSend.length = 0;
-          } else if (!hasReceivedAny && isTurn2OrEngaged && !userExplicitlyWantsPayment) {
-            // Deliver ALL registered deliverables together upfront as the complete package (all 3 files)!
+          } else if (!hasReceivedAny && (isAiExpressingDelivery || isExplicitDeliveryAgreement) && !userExplicitlyWantsPayment) {
+            // Deliver all registered deliverables together when AI or user confirms delivery!
             deliverablesToSend.length = 0;
             deliverablesToSend.push(...allDeliverables);
+          } else if (isTriggeredByTag) {
+            // Keep deliverables explicitly tagged
           } else {
-            // Do NOT send deliverables on initial greeting or casual conversation
+            // Do NOT send deliverables prematurely behind the AI's back
             deliverablesToSend.length = 0;
           }
         } else {
@@ -967,26 +976,36 @@ class WhatsAppService {
           /\[(?:ENVIAR_)?(?:PAGAMENTO|PAGO|COBRANCA|SPEI|PIX|DATOS_PAGO|CHAVE_PIX)\]/i.test(rawAiText) ||
           /(?:te paso los datos para que puedas transferir|te comparto los datos de la transferencia|puedes realizar la transferencia a la siguiente|aquí te dejo los datos para el pago|aquí tienes los datos oficiales para|segue abaixo a chave pix|vou te passar a chave pix|pode fazer a transferência para a chave)/i.test(lowerAi);
 
-        // Discovery question safeguard: if the AI response ends with a question, it is conversational discovery!
+        // Discovery question safeguard: check if message has ANY questions or is asking the client to choose an option
         const replyTextToCheck = (textAfter || textBefore || '').trim();
-        const endsWithQuestion = /\?\s*$/.test(replyTextToCheck);
-        const isDiscoveryDialogue = endsWithQuestion && !userExplicitlyWantsPayment;
+        const hasQuestion = /\?|¿/.test(replyTextToCheck);
+        const isAskingToChooseOption =
+          /(?:cu[aá]l\s+(?:opci[oó]n|paquete)|qu[eé]\s+(?:opci[oó]n|paquete)|b[aá]sica\s+o\s+completa|qual\s+op[çc][aã]o|b[aá]sico\s+ou\s+completo|qual\s+dos\s+dois|150\s+o\s+270|15\s+ou\s+37)/i.test(replyTextToCheck);
 
-        // In deliver_first: only close if materials were ALREADY delivered in message history AND we are not asking a discovery question
+        const isDiscoveryDialogue = (hasQuestion || isAskingToChooseOption) && !userExplicitlyWantsPayment;
+
+        // In deliver_first: only close if materials were ALREADY delivered in message history AND customer or AI explicitly triggered payment
         const isFirstTimePhase2Closing = deliveryStrategy === 'deliver_first' &&
           hasSentDeliverablesInHistory &&
           deliverablesToSend.length === 0 &&
           !hasAlreadySentPixInHistory &&
-          (aiExplicitlySendsPayment || userExplicitlyWantsPayment || (sentMsgsForPixCheck.filter(m => !m.fromMe).length >= 2 && !endsWithQuestion));
+          (aiExplicitlySendsPayment || userExplicitlyWantsPayment);
 
         const shouldAppendPayment = (userExplicitlyWantsPayment || aiExplicitlySendsPayment || isFirstTimePhase2Closing) &&
           !isDiscoveryDialogue &&
           !hasAlreadySentPixInHistory;
 
+        // Detect if customer selected Complete/VIP or Basic package
+        const lowerUserMsg = (userText || '').toLowerCase();
+        const wantsComplete = /(?:completa|completo|vip|270|75000|25000|120|200000|37)/i.test(lowerUserMsg);
+        const resolvedAmount = wantsComplete
+          ? (Number(product.ticketComplete) || Math.round((Number(product.ticketBasic) || 150) * 1.6))
+          : (Number(product.ticketBasic) || Number(product.price) || 150);
+
         let activeSpeiCharge = null;
 
         if (!isLatAmLead && product.pixKey && shouldAppendPayment) {
-          const pixPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
+          const pixPrice = Number(resolvedAmount).toFixed(2).replace('.', ',');
           const pixBlock = `Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${pixPrice}\n\nAssim que você fizer, me envia o comprovante aqui tá bom? ❤️`;
           const emotionalAppeal = `Eu confiei em você de olhos fechados e já te entreguei todo o material completo antes mesmo de você pagar! Fiz isso de coração aberto porque sei o quanto você se preocupa e quer o melhor para o seu pequeno... ❤️\n\nAgora estou aqui de coração te pedindo pra fazer a sua parte com essa contribuição simbólica de apenas R$ ${pixPrice}, que é o que mantém nosso trabalho vivo e de pé!`;
 
@@ -1014,15 +1033,15 @@ class WhatsAppService {
           if (xpagService.isConfigured()) {
             try {
               let existingCharge = storage.getXpagCharge(phone);
-              if (existingCharge && Date.now() - (existingCharge.createdAt || 0) < 24 * 3600 * 1000) {
+              if (existingCharge && Date.now() - (existingCharge.createdAt || 0) < 24 * 3600 * 1000 && existingCharge.amount === resolvedAmount) {
                 activeSpeiCharge = existingCharge;
               } else {
                 activeSpeiCharge = await xpagService.createCashIn({
                   currency: 'MXN',
-                  amount: product.ticketBasic || 150,
+                  amount: resolvedAmount,
                   externalId: phone,
                   name: leadObj?.name || 'Cliente',
-                  description: `Acceso ${product.name || 'Infoproducto'}`
+                  description: `Acceso ${product.name || 'Infoproducto'} (${wantsComplete ? 'Completo' : 'Básico'})`
                 });
               }
 
