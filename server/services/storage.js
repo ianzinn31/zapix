@@ -215,6 +215,10 @@ const DEFAULT_STATE = {
       voiceAccentId: 'pt_BR_native_01',
       // Regional gateways
       xpagApiKey: '',
+      xpagClientId: '',
+      xpagClientSecret: '',
+      xpagEnvironment: 'production', // 'production' | 'sandbox'
+      xpagAutoCharge: true,
       xpagInstructions: 'Código de pago automático SPEI',
       nequiNumber: '',
       nequiBeneficiary: '',
@@ -288,6 +292,7 @@ const DEFAULT_STATE = {
   messages: [],
   deliverables: [],
   sales: [],
+  xpagCharges: {},
   systemLogs: []
 };
 
@@ -883,6 +888,25 @@ class StorageService {
     this.save();
     supabaseService.addSale(newSale);
     return newSale;
+  }
+
+  // XPag Charges
+  saveXpagCharge(key, chargeData) {
+    if (!this.data.xpagCharges) this.data.xpagCharges = {};
+    this.data.xpagCharges[key] = chargeData;
+    if (chargeData.transactionId) {
+      this.data.xpagCharges[chargeData.transactionId] = chargeData;
+    }
+    if (chargeData.externalId && chargeData.externalId !== key) {
+      this.data.xpagCharges[chargeData.externalId] = chargeData;
+    }
+    this.save();
+    return chargeData;
+  }
+
+  getXpagCharge(key) {
+    if (!this.data.xpagCharges) return null;
+    return this.data.xpagCharges[key] || null;
   }
 
   // Logs

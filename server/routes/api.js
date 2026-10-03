@@ -9,6 +9,7 @@ import { salesMetrics } from '../services/salesMetrics.js';
 import { fishAudio } from '../services/fishAudio.js';
 import { nvidiaNim } from '../services/nvidiaNim.js';
 import { remarketingService } from '../services/remarketingService.js';
+import { xpagService } from '../services/xpag.js';
 
 const router = Router();
 
@@ -537,6 +538,117 @@ router.get('/ai/models/openrouter', async (req, res) => {
     res.status(status).json({
       error: `Erro ao buscar modelos no OpenRouter: ${msg}`
     });
+  }
+});
+
+// === XPag Payment Gateway Endpoints ===
+
+// 1. Get XPag integration status
+router.get('/xpag/status', (req, res) => {
+  const config = xpagService.getConfig();
+  res.json({
+    enabled: config.enabled,
+    isConfigured: xpagService.isConfigured(),
+    environment: config.environment,
+    isSandbox: config.isSandbox,
+    hasClientId: Boolean(config.clientId),
+    hasClientSecret: Boolean(config.clientSecret),
+    webhookUrl: config.webhookUrl
+  });
+});
+
+// 2. Test XPag Connection
+router.post('/xpag/test-connection', async (req, res) => {
+  try {
+    const { clientId, clientSecret, environment } = req.body || {};
+    const customConfig = (clientId && clientSecret) ? {
+      clientId,
+      clientSecret,
+      environment: environment || 'production'
+    } : null;
+
+    const result = await xpagService.testConnection(customConfig);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 3. Get Real-time Wallet Balances (BRL, MXN, USDT)
+router.get('/xpag/balance', async (req, res) => {
+  try {
+    const result = await xpagService.getBalance();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. Create Dynamic Cash-in Charge (SPEI, PIX, OXXO, USDT)
+router.post('/xpag/create-charge', async (req, res) => {
+  try {
+    const {
+      phone,
+      amount,
+      currency = 'MXN',
+      name,
+      document,
+      description,
+      method
+    } = req.body || {};
+
+    const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
+    const settings = storage.getSettings();
+    const product = settings.product || {};
+
+    const finalAmount = amount || (currency === 'MXN' ? (product.ticketBasic || 150) : (product.price || 15));
+    const lead = cleanPhone ? storage.getLead(cleanPhone) : null;
+    const customerName = name || lead?.name || 'Cliente Zapix';
+
+    const origin = req.protocol + '://' + req.get('host');
+    const webhookUrl = `${origin}/webhooks/xpag`;
+
+    const charge = await xpagService.createCashIn({
+      currency,
+      amount: finalAmount,
+      externalId: cleanPhone || `charge_${Date.now()}`,
+      name: customerName,
+      document: document || '',
+      description: description || `Acesso ${product.name || 'Infoproduto'}`,
+      method,
+      webhookUrl
+    });
+
+    res.json({ success: true, charge });
+  } catch (err) {
+    console.error('[API /xpag/create-charge Error]:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. Consult Transaction
+router.get('/xpag/transaction/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const query = id.startsWith('pr_') ? { transactionId: id } : { externalId: id };
+    const result = await xpagService.consultTransaction(query);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6. Sandbox Payment Simulation
+router.post('/xpag/simulate-sandbox', async (req, res) => {
+  try {
+    const { transactionId, outcome = 'paid' } = req.body;
+    if (!transactionId) {
+      return res.status(400).json({ error: 'transactionId obrigatório' });
+    }
+    const result = await xpagService.simulateSandboxPayment(transactionId, outcome);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

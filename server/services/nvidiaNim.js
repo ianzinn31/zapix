@@ -842,7 +842,11 @@ Mensagem do cliente: "${userMessage}".
       if (isLatAm) {
         let paymentMethodInstructionsText = '';
         if (targetCountry === 'México') {
-          paymentMethodInstructionsText = `- Explica que se generará el código SPEI único y automático en pantalla (${product.xpagInstructions || 'Código de pago automático SPEI'}).
+          const existingCharge = storage.getXpagCharge(phone);
+          const clabeInfo = existingCharge?.clabe
+            ? `CLABE interbancaria única ya generada: ${existingCharge.clabe} (Banco: ${existingCharge.bankName || 'STP'})`
+            : `${product.xpagInstructions || 'Código de pago automático SPEI'}`;
+          paymentMethodInstructionsText = `- Explica que se generará el código SPEI único y automático en pantalla (${clabeInfo}).
 - No solicites comprobante manual, pues la activación es 100% automática al pagar.`;
         } else if (targetCountry === 'Colômbia') {
           paymentMethodInstructionsText = `- Envía el número Nequi / Bre-B: ${product.nequiNumber || 'Por definir'} (Titular: ${product.nequiBeneficiary || 'Oficial'}).

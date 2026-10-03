@@ -19,7 +19,10 @@ import {
   Gift,
   Layers,
   Globe,
-  Coins
+  Coins,
+  RefreshCw,
+  AlertCircle,
+  ExternalLink
 } from 'lucide-react';
 
 export const COUNTRY_PRESETS = [
@@ -121,6 +124,9 @@ export default function ProductSettings({ product, onSave }) {
     voiceAccentId: product?.voiceAccentId || 'pt_BR_native_01',
     // Regional gateway credentials
     xpagApiKey: product?.xpagApiKey || '',
+    xpagClientId: product?.xpagClientId || product?.xpagApiKey || '',
+    xpagClientSecret: product?.xpagClientSecret || '',
+    xpagEnvironment: product?.xpagEnvironment || 'production',
     xpagInstructions: product?.xpagInstructions || 'Código de pago automático SPEI',
     nequiNumber: product?.nequiNumber || '',
     nequiBeneficiary: product?.nequiBeneficiary || '',
@@ -155,6 +161,50 @@ export default function ProductSettings({ product, onSave }) {
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [copiedPix, setCopiedPix] = useState(false);
 
+  // XPag Live Testing & Balance States
+  const [testingXpag, setTestingXpag] = useState(false);
+  const [xpagTestResult, setXpagTestResult] = useState(null);
+  const [xpagBalances, setXpagBalances] = useState(null);
+  const [loadingBalances, setLoadingBalances] = useState(false);
+  const [copiedXpagWebhook, setCopiedXpagWebhook] = useState(false);
+
+  const handleTestXpagConnection = async () => {
+    setTestingXpag(true);
+    setXpagTestResult(null);
+    try {
+      const res = await fetch('/api/xpag/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: formData.xpagClientId || formData.xpagApiKey,
+          clientSecret: formData.xpagClientSecret,
+          environment: formData.xpagEnvironment
+        })
+      });
+      const data = await res.json();
+      setXpagTestResult(data);
+      if (data.balances) {
+        setXpagBalances(data.balances);
+      }
+    } catch (err) {
+      setXpagTestResult({ success: false, message: err.message });
+    } finally {
+      setTestingXpag(false);
+    }
+  };
+
+  const handleFetchXpagBalances = async () => {
+    setLoadingBalances(true);
+    try {
+      const res = await fetch('/api/xpag/balance');
+      const data = await res.json();
+      if (data.balances) {
+        setXpagBalances(data.balances);
+      }
+    } catch (_) {}
+    setLoadingBalances(false);
+  };
+
   useEffect(() => {
     if (product) {
       setFormData({
@@ -173,6 +223,9 @@ export default function ProductSettings({ product, onSave }) {
         paymentInstructions: product.paymentInstructions || '',
         voiceAccentId: product.voiceAccentId || 'pt_BR_native_01',
         xpagApiKey: product.xpagApiKey || '',
+        xpagClientId: product.xpagClientId || product.xpagApiKey || '',
+        xpagClientSecret: product.xpagClientSecret || '',
+        xpagEnvironment: product.xpagEnvironment || 'production',
         xpagInstructions: product.xpagInstructions || 'Código de pago automático SPEI',
         nequiNumber: product.nequiNumber || '',
         nequiBeneficiary: product.nequiBeneficiary || '',
@@ -554,51 +607,231 @@ export default function ProductSettings({ product, onSave }) {
               padding: '16px',
               marginBottom: formData.paymentMethod === 'both' ? '16px' : '0'
             }}>
-              {/* MÉXICO - XPAG / SPEI */}
+              {/* MÉXICO & GLOBAL - XPAG / SPEI */}
               {formData.targetCountry === 'México' && (
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                    <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#34d399', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Zap size={16} />
-                      🇲🇽 Configuração XPag / SPEI (México)
+                    <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#34d399', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Zap size={17} />
+                      🇲🇽 XPag Global - Gateway Nativo (SPEI / PIX / USDT)
                     </span>
-                    <span style={{ fontSize: '0.7rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.15)', padding: '2px 8px', borderRadius: '4px' }}>
-                      Aprovação Automática
+                    <span style={{ fontSize: '0.7rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.15)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                      ⚡ Aprovação Automática em Tempo Real
                     </span>
                   </div>
 
-                  <div style={{ padding: '10px 12px', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.2)', marginBottom: '14px', fontSize: '0.75rem', color: '#a7f3d0', lineHeight: 1.4 }}>
-                    ⚡ <strong>Fluxo Nativo XPag / SPEI:</strong> O cliente recebe o código SPEI único na conversa. A confirmação de aprovação é recebida automaticamente via Webhook, liberando os materiais sem a necessidade de foto manual de comprovante.
+                  <div style={{ padding: '12px 14px', background: 'rgba(16, 185, 129, 0.08)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.2)', marginBottom: '14px', fontSize: '0.78rem', color: '#a7f3d0', lineHeight: 1.5 }}>
+                    🌐 <strong>Como funciona a integração oficial da XPag:</strong> O Zapix gera dinamicamente uma CLABE interbancária exclusiva (SPEI) para cada cliente no México (ou código PIX no Brasil). O cliente transfere em qualquer aplicativo bancário (STP, BBVA, Santander, etc.) e o Webhook da XPag aprova e dispara os arquivos automaticamente no WhatsApp, sem exigir comprovante manual!
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '12px' }}>
+                  {/* Ambiente XPag: Produção vs Sandbox */}
+                  <div style={{ marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1' }}>Ambiente da API:</span>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="xpagEnvironment"
+                        value="production"
+                        checked={formData.xpagEnvironment !== 'sandbox'}
+                        onChange={() => handleChange('xpagEnvironment', 'production')}
+                      />
+                      <span style={{ color: '#34d399', fontWeight: 600 }}>🟢 Produção (api.xpag.global)</span>
+                    </label>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#e2e8f0', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="xpagEnvironment"
+                        value="sandbox"
+                        checked={formData.xpagEnvironment === 'sandbox'}
+                        onChange={() => handleChange('xpagEnvironment', 'sandbox')}
+                      />
+                      <span style={{ color: '#fbbf24', fontWeight: 600 }}>🟡 Sandbox (Testes)</span>
+                    </label>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', marginBottom: '14px' }}>
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                        Token / API Key da XPag
+                        X-Client-Id da XPag
                       </label>
                       <input
                         type="text"
-                        value={formData.xpagApiKey}
-                        onChange={(e) => handleChange('xpagApiKey', e.target.value)}
+                        value={formData.xpagClientId || formData.xpagApiKey || ''}
+                        onChange={(e) => {
+                          handleChange('xpagClientId', e.target.value);
+                          handleChange('xpagApiKey', e.target.value);
+                        }}
                         className="input-field"
-                        placeholder="Insira sua API Key ou Token da XPag"
-                        style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
+                        placeholder={formData.xpagEnvironment === 'sandbox' ? 'xpagsandbox_00000000' : 'xpag_client_...'}
+                        style={{ fontFamily: 'monospace', fontSize: '0.84rem' }}
                       />
                     </div>
 
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                        Instruções de Pagamento SPEI (Exibido pela IA)
+                        X-Client-Secret da XPag
                       </label>
                       <input
-                        type="text"
-                        value={formData.xpagInstructions}
-                        onChange={(e) => handleChange('xpagInstructions', e.target.value)}
+                        type="password"
+                        value={formData.xpagClientSecret || ''}
+                        onChange={(e) => handleChange('xpagClientSecret', e.target.value)}
                         className="input-field"
-                        placeholder="Ex: Código de pago automático SPEI"
-                        style={{ fontSize: '0.85rem' }}
+                        placeholder="••••••••••••••••••••••••"
+                        style={{ fontFamily: 'monospace', fontSize: '0.84rem' }}
                       />
                     </div>
+                  </div>
+
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
+                      Instruções de Pagamento SPEI (Exibido pela IA nos fechamentos)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.xpagInstructions}
+                      onChange={(e) => handleChange('xpagInstructions', e.target.value)}
+                      className="input-field"
+                      placeholder="Ex: Código de pago automático SPEI"
+                      style={{ fontSize: '0.85rem' }}
+                    />
+                  </div>
+
+                  {/* Ações de Teste e Balanço */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '14px' }}>
+                    <button
+                      type="button"
+                      onClick={handleTestXpagConnection}
+                      disabled={testingXpag}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '6px',
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        border: '1px solid rgba(16, 185, 129, 0.4)',
+                        color: '#34d399',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <RefreshCw size={13} className={testingXpag ? 'animate-spin' : ''} />
+                      <span>{testingXpag ? 'Testando Conexão...' : 'Testar Conexão com a XPag'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleFetchXpagBalances}
+                      disabled={loadingBalances}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '6px',
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        background: 'rgba(6, 182, 212, 0.15)',
+                        border: '1px solid rgba(6, 182, 212, 0.4)',
+                        color: '#22d3ee',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <Coins size={13} className={loadingBalances ? 'animate-spin' : ''} />
+                      <span>{loadingBalances ? 'Consultando...' : 'Consultar Saldo XPag'}</span>
+                    </button>
+                  </div>
+
+                  {/* Resultado do Teste */}
+                  {xpagTestResult && (
+                    <div style={{
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      marginBottom: '14px',
+                      fontSize: '0.78rem',
+                      background: xpagTestResult.success ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                      border: xpagTestResult.success ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+                      color: xpagTestResult.success ? '#34d399' : '#f87171',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      {xpagTestResult.success ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                      <span>{xpagTestResult.message}</span>
+                    </div>
+                  )}
+
+                  {/* Saldos da Carteira */}
+                  {xpagBalances && (
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                      gap: '10px',
+                      marginBottom: '14px',
+                      padding: '12px',
+                      background: 'rgba(0, 0, 0, 0.25)',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255, 255, 255, 0.05)'
+                    }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <span style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block' }}>🇲🇽 Saldo MXN</span>
+                        <strong style={{ fontSize: '1rem', color: '#34d399' }}>
+                          $ {Number(xpagBalances.MXN?.available || 0).toFixed(2)}
+                        </strong>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <span style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block' }}>🇧🇷 Saldo BRL</span>
+                        <strong style={{ fontSize: '1rem', color: '#22d3ee' }}>
+                          R$ {Number(xpagBalances.BRL?.available || 0).toFixed(2)}
+                        </strong>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <span style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block' }}>💵 Saldo USDT</span>
+                        <strong style={{ fontSize: '1rem', color: '#a78bfa' }}>
+                          $ {Number(xpagBalances.USDT?.available || 0).toFixed(2)}
+                        </strong>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Webhook URL com Copiar */}
+                  <div style={{ padding: '12px', background: 'rgba(0, 0, 0, 0.3)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#cbd5e1' }}>
+                        Webhook Oficial de Notificação da XPag:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}/webhooks/xpag`);
+                          setCopiedXpagWebhook(true);
+                          setTimeout(() => setCopiedXpagWebhook(false), 2000);
+                        }}
+                        style={{
+                          fontSize: '0.72rem',
+                          background: copiedXpagWebhook ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                          border: 'none',
+                          color: copiedXpagWebhook ? '#34d399' : '#cbd5e1',
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        {copiedXpagWebhook ? <Check size={12} /> : <Copy size={12} />}
+                        <span>{copiedXpagWebhook ? 'Copiado!' : 'Copiar URL'}</span>
+                      </button>
+                    </div>
+                    <code style={{ fontSize: '0.75rem', color: '#60a5fa', wordBreak: 'break-all' }}>
+                      {`${window.location.origin}/webhooks/xpag`}
+                    </code>
+                    <p style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '6px' }}>
+                      Cole esta URL no painel da XPag em <em>Configurações / Webhooks</em>. Todas as aprovações SPEI e PIX confirmam automaticamente o lead e liberam o acesso no WhatsApp!
+                    </p>
                   </div>
                 </div>
               )}

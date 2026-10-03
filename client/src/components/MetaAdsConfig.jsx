@@ -24,6 +24,7 @@ export default function MetaAdsConfig({ metaSettings, onSave, onSyncMeta, isSync
 
   const origin = window.location.origin;
   const webhooks = [
+    { platform: 'XPag Global (SPEI / PIX / USDT)', url: `${origin}/webhooks/xpag`, hint: 'Cole na XPag em Webhooks > URL de Notificação para aprovação instantânea automática' },
     { platform: 'Kiwify', url: `${origin}/webhooks/kiwify`, hint: 'Cole na aba Webhooks do produto na Kiwify com evento "Pedido Pago"' },
     { platform: 'Hotmart', url: `${origin}/webhooks/hotmart`, hint: 'Cole nas Configurações de Webhook da Hotmart com evento "Compra Aprovada"' },
     { platform: 'PerfectPay', url: `${origin}/webhooks/perfectpay`, hint: 'Cole nas Notificações da PerfectPay com status "Aprovado"' },

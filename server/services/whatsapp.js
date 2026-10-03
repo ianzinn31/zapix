@@ -15,6 +15,7 @@ import { nvidiaNim } from './nvidiaNim.js';
 import { fishAudio } from './fishAudio.js';
 import { audioTranscriber } from './audioTranscriber.js';
 import { visionService } from './visionService.js';
+import { xpagService } from './xpag.js';
 
 const AUTH_DIR = path.join(DATA_DIR, 'auth_info_baileys');
 
@@ -941,6 +942,8 @@ class WhatsAppService {
           !hasAlreadySentPixInHistory &&
           leadObj?.stage !== 'PIX_ENVIADO';
 
+        let activeSpeiCharge = null;
+
         if (!isLatAmLead && product.pixKey && (isFirstTimePhase2Pix || userWantsPix)) {
           const pixPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
           const pixBlock = `Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${pixPrice}\n\nAssim que você fizer, me envia o comprovante aqui tá bom? ❤️`;
@@ -965,6 +968,49 @@ class WhatsAppService {
           }
 
           storage.upsertLead(phone, { stage: 'PIX_ENVIADO', deliverableSent: true });
+        } else if (isLatAmLead && (aiResult.locale?.country === 'México' || product.targetCountry === 'México') && (isFirstTimePhase2Pix || userWantsPix)) {
+          // México XPag / SPEI Flow
+          if (xpagService.isConfigured()) {
+            try {
+              let existingCharge = storage.getXpagCharge(phone);
+              if (existingCharge && Date.now() - (existingCharge.createdAt || 0) < 24 * 3600 * 1000) {
+                activeSpeiCharge = existingCharge;
+              } else {
+                activeSpeiCharge = await xpagService.createCashIn({
+                  currency: 'MXN',
+                  amount: product.ticketBasic || 150,
+                  externalId: phone,
+                  name: leadObj?.name || 'Cliente',
+                  description: `Acceso ${product.name || 'Infoproducto'}`
+                });
+              }
+
+              if (activeSpeiCharge?.clabe) {
+                const speiBlock = `🏦 DATOS OFICIALES PARA TRANSFERENCIA SPEI (MÉXICO):
+- Banco: ${activeSpeiCharge.bankName || 'STP (Sistema de Transferencia y Pagos)'}
+- CLABE: ${activeSpeiCharge.clabe}
+- Beneficiario: ${activeSpeiCharge.beneficiary || 'Oficial'}
+- Monto: $ ${Number(activeSpeiCharge.amount || 150).toFixed(2)} MXN
+
+La acreditación se confirma automáticamente sin necesidad de enviar comprobante.`;
+
+                if (textAfter.length > 0) {
+                  if (!textAfter.includes(activeSpeiCharge.clabe)) {
+                    textAfter += `\n\n${speiBlock}`;
+                  }
+                } else if (textBefore.length > 0 && !hasAudioTag) {
+                  if (!textBefore.includes(activeSpeiCharge.clabe)) {
+                    textBefore += `\n\n${speiBlock}`;
+                  }
+                } else {
+                  textAfter = speiBlock;
+                }
+                storage.upsertLead(phone, { stage: 'PIX_ENVIADO', deliverableSent: true });
+              }
+            } catch (speiErr) {
+              console.warn('[WhatsApp] Erro ao gerar SPEI via XPag:', speiErr.message);
+            }
+          }
         }
 
         // 7. Dispatch Helpers for Text Bubbles & Audio Voice Notes
@@ -1123,8 +1169,9 @@ class WhatsAppService {
           await sendTextBubbles(textAfter);
         }
 
-        // 8.5. Send native 1-click PIX Copy Button (if applicable)
+        // 8.5. Send native 1-click PIX or SPEI Copy Button (if applicable)
         const shouldSendPixButton =
+          !isLatAmLead &&
           product.pixKey &&
           product.sendPixButton !== false &&
           !signal.aborted &&
@@ -1134,6 +1181,18 @@ class WhatsAppService {
           await antiBan.sleep(1200, signal);
           if (!signal.aborted && this.status === 'connected' && this.sock) {
             await this.sendPixCopyButton(jid, product.pixKey, product.price, product.pixBeneficiary);
+          }
+        } else if (isLatAmLead && activeSpeiCharge?.clabe && !signal.aborted) {
+          await antiBan.sleep(1200, signal);
+          if (!signal.aborted && this.status === 'connected' && this.sock) {
+            await this.sendCopyButton(
+              jid,
+              '📋 Copiar CLABE SPEI',
+              activeSpeiCharge.clabe,
+              'Pago Oficial SPEI',
+              `Toca el botón abajo para copiar la CLABE interbancaria directamente a tu app del banco 👇\n\n*Banco:* ${activeSpeiCharge.bankName || 'STP'}\n*Monto:* $ ${Number(activeSpeiCharge.amount || 150).toFixed(2)} MXN`,
+              `CLABE: ${activeSpeiCharge.clabe}`
+            );
           }
         }
 
@@ -1336,8 +1395,30 @@ class WhatsAppService {
 
       if (signal.aborted || this.status !== 'connected' || !this.sock) return;
 
-      // 3. Botão Interativo Copiar Chave PIX
-      if (product.pixKey && product.sendPixButton !== false) {
+      // 3. Botão Interativo Copiar Chave PIX ou SPEI
+      if (product.targetCountry === 'México' && xpagService.isConfigured()) {
+        try {
+          const speiCharge = await xpagService.createCashIn({
+            currency: 'MXN',
+            amount: product.ticketBasic || 150,
+            externalId: phone,
+            name: storage.getLead(phone)?.name || 'Cliente'
+          });
+          if (speiCharge?.clabe) {
+            await antiBan.sleep(1200, signal);
+            if (!signal.aborted && this.status === 'connected' && this.sock) {
+              await this.sendCopyButton(
+                targetJid,
+                '📋 Copiar CLABE SPEI',
+                speiCharge.clabe,
+                'Pago Oficial SPEI',
+                `Puedes tocar el botón abajo para copiar la CLABE interbancaria directo a tu app del banco 👇\n\n*Banco:* ${speiCharge.bankName || 'STP'}\n*Monto:* $ ${Number(speiCharge.amount).toFixed(2)} MXN`,
+                `CLABE: ${speiCharge.clabe}`
+              );
+            }
+          }
+        } catch (_) {}
+      } else if (product.pixKey && product.sendPixButton !== false) {
         await antiBan.sleep(1200, signal);
         if (!signal.aborted && this.status === 'connected' && this.sock) {
           await this.sendPixCopyButton(targetJid, product.pixKey, product.price, product.pixBeneficiary);
@@ -1369,23 +1450,20 @@ class WhatsAppService {
     this.emit('lead:updated', storage.getLead(phone));
   }
 
-  // Send native WhatsApp Interactive Button for 1-click PIX key copying
-  async sendPixCopyButton(jid, pixKey, amount, beneficiary) {
-    if (!this.sock || !pixKey) return false;
+  // Send native WhatsApp Interactive Button for 1-click copying (PIX, SPEI CLABE, etc.)
+  async sendCopyButton(jid, displayText, copyCode, title = 'Pagamento Oficial', bodyText = '', footerText = '') {
+    if (!this.sock || !copyCode) return false;
     const phone = jid.split('@')[0];
     try {
-      const formattedAmount = Number(amount || 15).toFixed(2).replace('.', ',');
-
-      // 1. Build interactiveMessage with nativeFlow cta_copy button
       const interactiveMessage = proto.Message.InteractiveMessage.create({
         body: proto.Message.InteractiveMessage.Body.create({
-          text: `Você também pode tocar no botão abaixo para copiar a chave PIX direto para o seu celular 👇\n\n*Valor:* R$ ${formattedAmount}\n*Nome:* ${beneficiary || 'ian alves dos anjos'}`
+          text: bodyText || `Toque no botão abaixo para copiar diretamente 👇`
         }),
         footer: proto.Message.InteractiveMessage.Footer.create({
-          text: `Chave PIX: ${pixKey}`
+          text: footerText || copyCode
         }),
         header: proto.Message.InteractiveMessage.Header.create({
-          title: 'Pagamento Oficial PIX',
+          title: title || 'Pagamento Oficial',
           hasMediaAttachment: false
         }),
         nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
@@ -1393,9 +1471,9 @@ class WhatsAppService {
             {
               name: 'cta_copy',
               buttonParamsJson: JSON.stringify({
-                display_text: '📋 Copiar Chave PIX',
-                id: 'pix_key_copy',
-                copy_code: pixKey
+                display_text: displayText || '📋 Copiar Código',
+                id: 'copy_btn_' + Date.now(),
+                copy_code: copyCode
               })
             }
           ]
@@ -1420,7 +1498,6 @@ class WhatsAppService {
         timestamp: new Date()
       });
 
-      // Inject binary nodes required by WhatsApp to render native flow buttons in private chats
       const isPrivate = !jid.endsWith('@g.us');
       const additionalNodes = [
         {
@@ -1457,28 +1534,40 @@ class WhatsAppService {
       const sentMsg = storage.addMessage({
         phone,
         fromMe: true,
-        text: `🔘 [Botão Interativo]: Copiar Chave PIX (${pixKey})`,
+        text: `🔘 [Botão Interativo]: ${displayText} (${copyCode})`,
         type: 'text'
       });
       this.emit('chat:message', sentMsg);
-      storage.addLog('SUCCESS', `Botão nativo de copiar Chave PIX enviado com sucesso para ${phone}`);
+      storage.addLog('SUCCESS', `Botão nativo [${displayText}] enviado com sucesso para ${phone}`);
 
       return true;
     } catch (btnErr) {
-      console.warn('[WhatsApp] Erro ao enviar botão interativo de PIX:', btnErr.message);
-      storage.addLog('WARNING', `Tentativa de envio de botão interativo: ${btnErr.message}. Enviando chave limpa.`);
+      console.warn('[WhatsApp] Erro ao enviar botão interativo de cópia:', btnErr.message);
       try {
-        await this.sock.sendMessage(jid, { text: pixKey });
+        await this.sock.sendMessage(jid, { text: copyCode });
         const keyMsg = storage.addMessage({
           phone,
           fromMe: true,
-          text: pixKey,
+          text: copyCode,
           type: 'text'
         });
         this.emit('chat:message', keyMsg);
       } catch (_) {}
       return false;
     }
+  }
+
+  // Send native WhatsApp Interactive Button for 1-click PIX key copying
+  async sendPixCopyButton(jid, pixKey, amount, beneficiary) {
+    const formattedAmount = Number(amount || 15).toFixed(2).replace('.', ',');
+    return this.sendCopyButton(
+      jid,
+      '📋 Copiar Chave PIX',
+      pixKey,
+      'Pagamento Oficial PIX',
+      `Você também pode tocar no botão abaixo para copiar a chave PIX direto para o seu celular 👇\n\n*Valor:* R$ ${formattedAmount}\n*Nome:* ${beneficiary || 'ian alves dos anjos'}`,
+      `Chave PIX: ${pixKey}`
+    );
   }
 
   // Send manual message from Dashboard

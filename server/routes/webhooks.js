@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { storage } from '../services/storage.js';
+import { whatsapp } from '../services/whatsapp.js';
 
 const router = Router();
 
@@ -111,6 +112,90 @@ router.post('/generic', (req, res) => {
     return res.status(200).json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });
+  }
+});
+
+// XPag Global Webhook (SPEI, PIX, OXXO, USDT)
+router.post('/xpag', async (req, res) => {
+  try {
+    const body = req.body || {};
+    storage.addLog(
+      'INFO',
+      `Webhook XPag recebido: Tipo=${body.type || 'cashin'} | Status=${body.status} | ID=${body.transaction_id || body.request_number || 'N/A'}`,
+      body
+    );
+
+    const status = String(body.status || '').toLowerCase();
+    const type = String(body.type || 'cashin').toLowerCase();
+
+    // Respond HTTP 200 immediately to meet XPag SLA (< 5s)
+    res.status(200).json({ received: true });
+
+    // Handle Cash-In Approval (paid/confirmed/completed)
+    if ((type === 'cashin' || !body.type) && (status === 'confirmed' || status === 'completed' || status === 'paid')) {
+      const rawExternal = String(body.external_id || '');
+      let phone = rawExternal.replace(/[^0-9]/g, '');
+
+      // Check if externalId was mapped to an existing XPag charge
+      let chargeData = storage.getXpagCharge(body.transaction_id) || storage.getXpagCharge(body.request_number) || storage.getXpagCharge(rawExternal);
+      if (!phone && chargeData?.externalId) {
+        phone = String(chargeData.externalId).replace(/[^0-9]/g, '');
+      }
+
+      const currency = String(body.currency || chargeData?.currency || 'MXN').toUpperCase();
+      const amount = parseFloat(body.amount || chargeData?.amount || 0);
+      const lead = phone ? storage.getLead(phone) : null;
+      const customerName = lead?.name || body.payer?.name || chargeData?.raw?.name || 'Cliente XPag';
+
+      // 1. Add Sale
+      const newSale = storage.addSale({
+        phone: phone || '',
+        customerName,
+        amount: isNaN(amount) || amount <= 0 ? 150.00 : amount,
+        platform: `XPag (${currency})`,
+        status: 'approved'
+      });
+
+      storage.addLog('SUCCESS', `🎉 Venda XPag APROVADA! ${currency} ${newSale.amount.toFixed(2)} - ${customerName} (${phone || 'Sem fone'})`);
+
+      // 2. Mark lead as APROVADO
+      if (phone) {
+        storage.upsertLead(phone, {
+          stage: 'APROVADO',
+          lastReceiptStatus: 'APROVADO',
+          lastReceiptAmount: amount,
+          lastReceiptBank: body.bank_name || 'XPag Gateway',
+          lastReceiptDate: Date.now()
+        });
+        whatsapp.emit('lead:updated', storage.getLead(phone));
+
+        // 3. Auto-deliver products via WhatsApp if connected!
+        if (whatsapp.status === 'connected') {
+          const isSpanish = currency === 'MXN' || currency === 'COP' || lead?.phone?.startsWith('52') || lead?.phone?.startsWith('57');
+          const congratsText = isSpanish
+            ? `¡Muchísimas gracias por tu pago! ❤️ Tu acceso ha sido confirmado con éxito.\n\nAquí tienes todo tu material completo para que lo descargues y lo disfrutes. ¡Cualquier duda que tengas, aquí sigo a la orden!`
+            : `Pagamento confirmado com sucesso! ❤️ Muito obrigado pelo carinho e pela confiança!\n\nSegue o seu material completo para download. Qualquer dúvida estou à disposição!`;
+
+          setTimeout(async () => {
+            try {
+              await whatsapp.sendManualMessage(phone, congratsText, 'text');
+              const deliverables = storage.getDeliverables();
+              for (const deliv of deliverables) {
+                await whatsapp.sendManualMessage(phone, `[ENVIAR_ARQUIVO: ${deliv.tag}]`, 'deliverable');
+                await new Promise(r => setTimeout(r, 1500));
+              }
+            } catch (deliverErr) {
+              console.error('[XPag Webhook Auto-Deliver Error]:', deliverErr);
+            }
+          }, 1000);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error in XPag webhook:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ error: err.message });
+    }
   }
 });
 

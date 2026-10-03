@@ -1033,6 +1033,60 @@ export default function LiveChatInbox({
                 </button>
               )}
 
+              {/* XPag SPEI / PIX Shortcut */}
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const cleanPhone = (selectedLeadPhone || '').replace(/[^0-9]/g, '');
+                    const isMexico = product?.targetCountry === 'México' || cleanPhone.startsWith('52');
+                    const currency = isMexico ? 'MXN' : 'BRL';
+                    const amount = isMexico ? (product?.ticketBasic || 150) : (product?.price || 15);
+                    const res = await fetch('/api/xpag/create-charge', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        phone: cleanPhone,
+                        currency,
+                        amount,
+                        name: selectedLead?.name || 'Cliente'
+                      })
+                    });
+                    const data = await res.json();
+                    if (data.charge) {
+                      const c = data.charge;
+                      if (c.clabe) {
+                        setInputMessage(`🏦 DATOS OFICIALES PARA TRANSFERENCIA SPEI (MÉXICO):\n- Banco: ${c.bankName || 'STP'}\n- CLABE: ${c.clabe}\n- Beneficiario: ${c.beneficiary || 'Oficial'}\n- Monto: $ ${Number(c.amount).toFixed(2)} MXN\n\nTu acceso se activa automáticamente al pagar sin necesidad de enviar comprobante.`);
+                      } else if (c.pixCopyPaste) {
+                        setInputMessage(`🔑 Código PIX Copia e Cola (XPag):\n\n${c.pixCopyPaste}\n\nValor: R$ ${Number(c.amount).toFixed(2)}\n\nAssim que pagar, seu acesso é liberado automaticamente!`);
+                      }
+                    } else {
+                      setInputMessage(isMexico
+                        ? `🏦 Datos para SPEI:\n${product?.xpagInstructions || 'Código de pago automático SPEI'}`
+                        : `🔑 Chave PIX: ${product?.pixKey}`
+                      );
+                    }
+                  } catch (err) {
+                    console.error('Erro ao gerar cobrança XPag:', err);
+                  }
+                }}
+                style={{
+                  fontSize: '0.72rem',
+                  padding: '4px 10px',
+                  borderRadius: '14px',
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  color: '#fbbf24',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title="Gerar código SPEI ou PIX dinâmico da XPag para este lead"
+              >
+                <span>⚡ Cobrança XPag</span>
+              </button>
+
               {deliverables && deliverables.length > 0 && deliverables.slice(0, 2).map((d) => (
                 <button
                   key={d.id}
