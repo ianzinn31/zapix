@@ -139,6 +139,30 @@ class NvidiaNimService {
 
   // Localize common Portuguese product descriptors to Spanish for the prompt context
   localizeProductForPrompt(product, targetLanguage = 'es', targetCountry = 'México') {
+    // 1. Direct use of dedicated localized offer if previously generated/saved for this country
+    const savedLocalized = product.localizedOffers?.[targetCountry] || storage.getLocalizedOffer(targetCountry);
+    if (savedLocalized && savedLocalized.name) {
+      const painPoints = (savedLocalized.mainPainPoints || [])
+        .map(p => `- ${p.trim()}`)
+        .join('\n');
+      const benefits = (savedLocalized.mainBenefits || [])
+        .map(b => `- ${b.trim()}`)
+        .join('\n');
+      const objections = (savedLocalized.objections || [])
+        .map(o => `- Objeción "${o.trigger}": ${o.response}`)
+        .join('\n');
+
+      return {
+        name: savedLocalized.name,
+        niche: savedLocalized.niche || product.niche || '',
+        targetAudience: savedLocalized.targetAudience || product.targetAudience || '',
+        painPoints: painPoints || '- Busca una solución interactiva y lúdica para sus hijos',
+        benefits: benefits || '- Actividades didácticas de alta calidad listas para imprimir',
+        objections: objections || '- Si menciona el precio, destaca el valor simbólico de la inversión.',
+        defaultAudioPitchText: savedLocalized.defaultAudioPitchText || ''
+      };
+    }
+
     if (targetLanguage !== 'es') {
       return {
         name: product.name || '',
@@ -1185,6 +1209,175 @@ ${hasPixBeenSent
     }
 
     return `Olá! Que bom falar com você! 😊\n\nSou do time de atendimento do ${product.name}. Vi que você se interessou pelo nosso material.\n\nComo posso te ajudar hoje?`;
+  }
+
+  // AI-Powered One-Click Cultural Offer Localizer for Global Operations
+  async localizeOfferWithAi(targetCountry, customBaseProduct = null) {
+    const settings = storage.getSettings();
+    const product = customBaseProduct || settings.product || {};
+    const aiConfig = settings.ai || {};
+
+    const countryPres = {
+      'México': {
+        currency: 'MXN',
+        symbol: '$',
+        defaultBasic: 150,
+        defaultComplete: 250,
+        slangTone: 'Español nativo de México, cálido, familiar y cercano. Usa modismos mexicanos sutiles y acogedores como "papás y mamás", "peques/chiquitines", "padrísimo", "chido", "oye", "qué onda", "a detalle", "pantallas y celulares".'
+      },
+      'Colômbia': {
+        currency: 'COP',
+        symbol: '$',
+        defaultBasic: 45000,
+        defaultComplete: 75000,
+        slangTone: 'Español nativo de Colombia, respetuoso, dulce y cercano. Usa expresiones colombianas como "parce", "chévere", "de una", "a la orden", "niños y niñas", "aprender jugando".'
+      },
+      'Argentina': {
+        currency: 'ARS',
+        symbol: '$',
+        defaultBasic: 15000,
+        defaultComplete: 25000,
+        slangTone: 'Español rioplatense de Argentina con voseo suave y natural. Usa modismos como "los nenes y nenas", "mirá", "posta", "dale", "re lindo", "re fácil".'
+      },
+      'Bolívia': {
+        currency: 'BOB',
+        symbol: 'Bs',
+        defaultBasic: 70,
+        defaultComplete: 120,
+        slangTone: 'Español cálido y amable de Bolivia. Tono empático, directo y familiar.'
+      },
+      'Paraguai': {
+        currency: 'PYG',
+        symbol: 'Gs',
+        defaultBasic: 120000,
+        defaultComplete: 200000,
+        slangTone: 'Español de Paraguay, cercano, cálido y sencillo.'
+      },
+      'Chile': {
+        currency: 'CLP',
+        symbol: '$',
+        defaultBasic: 9900,
+        defaultComplete: 16900,
+        slangTone: 'Español de Chile, ágil, amable y cercano.'
+      },
+      'Peru': {
+        currency: 'PEN',
+        symbol: 'S/',
+        defaultBasic: 35,
+        defaultComplete: 59,
+        slangTone: 'Español de Perú, muy educado, cordial y acogedor.'
+      },
+      'Estados Unidos': {
+        currency: 'USD',
+        symbol: '$',
+        defaultBasic: 15,
+        defaultComplete: 27,
+        slangTone: 'Native American English. Warm, encouraging, persuasive, parent-friendly tone. Use expressions like "kiddos", "screen time", "print-and-go", "fun learning".'
+      }
+    };
+
+    const targetInfo = countryPres[targetCountry] || {
+      currency: 'USD',
+      symbol: '$',
+      defaultBasic: 15,
+      defaultComplete: 27,
+      slangTone: `Español nativo y coloquial de ${targetCountry}.`
+    };
+
+    const isEnglish = targetCountry === 'Estados Unidos' || String(targetCountry).toLowerCase().includes('english');
+
+    const systemPrompt = `Você é o maior especialista mundial em Copywriting Internacional, Psicologia de Vendas e Localização Cultural para WhatsApp.
+Sua missão é pegar uma oferta de infoproduto escrita em Português do Brasil e traduzi-la/adaptá-la culturalmente para o país de destino: ${targetCountry}.
+
+CRITÉRIOS OBRIGATÓRIOS:
+1. NÃO faça tradução robótica literal! Adapte as dores, os desejos e as expressões para a realidade cultural e os modismos locais de ${targetCountry}.
+2. Tom e gírias locais: ${targetInfo.slangTone}
+3. Moeda e Valores: Moeda oficial ${targetInfo.currency} (${targetInfo.symbol}). Sugira Ticket Básico (${targetInfo.defaultBasic}) e Ticket Completo (${targetInfo.defaultComplete}).
+4. Responda ESTRITAMENTE com um objeto JSON válido, sem texto antes ou depois, sem markdown, apenas o JSON puro, com a seguinte estrutura exata:
+{
+  "name": "Nome do produto adaptado",
+  "niche": "Nicho adaptado",
+  "targetAudience": "Público-alvo com vocabulário local",
+  "mainPainPoints": ["Dor 1 adaptada", "Dor 2 adaptada", "Dor 3 adaptada"],
+  "mainBenefits": ["Benefício 1 adaptado", "Benefício 2 adaptado", "Benefício 3 adaptado"],
+  "objections": [
+    {
+      "trigger": "Objeção comum do cliente na gíria local",
+      "response": "Resposta altamente persuasiva com modismos locais quebrando a objeção"
+    }
+  ],
+  "defaultAudioPitchText": "Roteiro caloroso e persuasivo de áudio para ser enviado como nota de voz no WhatsApp com gírias e acolhimento de ${targetCountry}",
+  "ticketBasic": ${targetInfo.defaultBasic},
+  "ticketComplete": ${targetInfo.defaultComplete},
+  "currency": "${targetInfo.currency}",
+  "currencyCode": "${targetInfo.currency}",
+  "currencySymbol": "${targetInfo.symbol}"
+}`;
+
+    const userContent = `Aqui está a oferta base em Português para você localizar para ${targetCountry}:
+- Nome do Produto: ${product.name || 'Atividades Infantis'}
+- Nicho: ${product.niche || 'Educação Infantil'}
+- Público Alvo: ${product.targetAudience || 'Mães e pais de crianças'}
+- Dores Principais: ${(product.mainPainPoints || []).join(' | ') || 'Criança no celular, falta de foco'}
+- Benefícios Principais: ${(product.mainBenefits || []).join(' | ') || 'Aprende brincando, atividades para imprimir'}
+- Quebra de Objeções: ${(product.objections || []).map(o => `${o.trigger} => ${o.response}`).join(' | ') || 'Preço e segurança'}
+- Roteiro de Áudio Base: ${product.defaultAudioPitchText || 'Oi! Preparei com muito carinho o material para o seu pequeno...'}
+- Preço Base: R$ ${product.price || product.ticketBasic || 15}
+
+Gere o JSON localizado para ${targetCountry}.`;
+
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userContent }
+    ];
+
+    let rawReply = '';
+    const primaryKey = aiConfig.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
+    if (primaryKey) {
+      try {
+        rawReply = await this.callModel(
+          aiConfig.primaryModel || 'z-ai/glm-5.3',
+          primaryKey,
+          messages,
+          0.4,
+          2200,
+          90000,
+          isEnglish ? 'en' : 'es',
+          targetCountry
+        );
+      } catch (err) {
+        console.warn(`[Localize Primary Model Error]: ${err.message}. Tentando fallback...`);
+      }
+    }
+
+    if (!rawReply) {
+      const openRouterKey = aiConfig.tertiaryApiKey || process.env.OPENROUTER_API_KEY || settings.fishAudio?.apiKey || settings.vision?.apiKey;
+      rawReply = await this.callOpenRouterModel(
+        aiConfig.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free',
+        openRouterKey,
+        messages,
+        0.4,
+        2200,
+        60000,
+        isEnglish ? 'en' : 'es',
+        targetCountry
+      );
+    }
+
+    let cleanJsonStr = rawReply.trim();
+    if (cleanJsonStr.startsWith('```')) {
+      cleanJsonStr = cleanJsonStr.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
+    }
+
+    const firstBrace = cleanJsonStr.indexOf('{');
+    const lastBrace = cleanJsonStr.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      cleanJsonStr = cleanJsonStr.slice(firstBrace, lastBrace + 1);
+    }
+
+    const parsedData = JSON.parse(cleanJsonStr);
+    const saved = storage.saveLocalizedOffer(targetCountry, parsedData);
+    return saved;
   }
 
   // Generate spoken remarketing script tailored dynamically to the lead's exact conversation history

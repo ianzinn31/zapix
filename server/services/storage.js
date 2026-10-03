@@ -244,6 +244,7 @@ const DEFAULT_STATE = {
       mainBenefits: [],
       objections: [],
       defaultAudioPitchText: '',
+      localizedOffers: {}, // Country-specific localized offers { "México": { ... }, "Colômbia": { ... } }
       sendPixButton: true
     },
     remarketing: {
@@ -907,6 +908,24 @@ class StorageService {
   getXpagCharge(key) {
     if (!this.data.xpagCharges) return null;
     return this.data.xpagCharges[key] || null;
+  }
+
+  // Country-specific localized offers
+  saveLocalizedOffer(targetCountry, localizedData) {
+    if (!this.data.settings.product) this.data.settings.product = {};
+    if (!this.data.settings.product.localizedOffers) this.data.settings.product.localizedOffers = {};
+    this.data.settings.product.localizedOffers[targetCountry] = {
+      ...localizedData,
+      updatedAt: Date.now()
+    };
+    this.save();
+    supabaseService.saveSettings(this.data.settings);
+    this.addLog('SUCCESS', `Oferta localizada com sucesso para ${targetCountry} e salva no sistema.`);
+    return this.data.settings.product.localizedOffers[targetCountry];
+  }
+
+  getLocalizedOffer(targetCountry) {
+    return this.data.settings?.product?.localizedOffers?.[targetCountry] || null;
   }
 
   // Logs

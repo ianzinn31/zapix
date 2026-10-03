@@ -72,6 +72,29 @@ router.post('/settings', (req, res) => {
   res.json(updated);
 });
 
+// === Global Offer Localization with AI ===
+router.post('/product/localize-offer', async (req, res) => {
+  try {
+    const { targetCountry, baseProduct } = req.body || {};
+    if (!targetCountry) {
+      return res.status(400).json({ error: 'targetCountry é obrigatório (ex: México, Colômbia)' });
+    }
+
+    storage.addLog('INFO', `Iniciando localização da oferta com IA para ${targetCountry}...`);
+    const localized = await nvidiaNim.localizeOfferWithAi(targetCountry, baseProduct);
+    res.json({ success: true, targetCountry, localized });
+  } catch (err) {
+    console.error(`[API /product/localize-offer Error (${req.body?.targetCountry})]:`, err.message);
+    storage.addLog('ERROR', `Falha ao localizar oferta para ${req.body?.targetCountry}: ${err.message}`);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/product/localized-offers', (req, res) => {
+  const settings = storage.getSettings();
+  res.json(settings.product?.localizedOffers || {});
+});
+
 // === Leads ===
 router.get('/leads', (req, res) => {
   res.json(storage.getLeads());
