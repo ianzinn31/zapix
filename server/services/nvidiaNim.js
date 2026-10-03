@@ -6,7 +6,7 @@ class NvidiaNimService {
     this.endpoint = 'https://integrate.api.nvidia.com/v1/chat/completions';
     this.openRouterEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
     this.lastPrimaryFailureTime = 0;
-    this.primaryCooldownMs = 600000; // 10 minutes circuit breaker cooldown
+    this.primaryCooldownMs = 0; // Disabled: primary model is always attempted
   }
 
   // Construct sales-focused prompt with product context, deliverables, and behavioral rules
@@ -58,25 +58,24 @@ class NvidiaNimService {
     if (deliveryStrategy === 'deliver_first') {
       const allDelivTags = deliverables.map(d => `[ENVIAR_ARQUIVO: ${d.tag}]`).join(' ');
       const formattedPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
-      deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: ENTREGAR TUDO ANTES E COBRAR DEPOIS (OFERTA INVERTIDA)
-   - NESTA OPERAÇÃO A ORDEM É 100% INVERTIDA: NÓS ENTREGAMOS TUDO, TUDO MESMO DE UMA VEZ SÓ!
-   - REGRA SUPREMA: NUNCA DIGA "amostra" E NUNCA DIGA "vou te entregar o resto depois de pagar" OU "libero o restante após o pagamento"!
-   - Não existe "resto para depois". Você já entrega o pacote completo com TODOS os materiais, atividades e PDFs de uma vez só!
-   - REGRA 1 - LIBERAÇÃO DE TUDO IMEDIATAMENTE:
-     * Assim que o lead mandar mensagem, responder ou demonstrar interesse/dúvida/dor, entregue TODOS os materiais agora mesmo com as tags:
+      deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: ENTREGAR ANTES E CONVERSÃO CONSULTIVA (LIBERDADE E AUTONOMIA TOTAL)
+   - VOCÊ TEM TOTAL AUTONOMIA PARA DIALOGAR, OUVIR E ENTENDER O CLIENTE:
+     * Não aja como um robô que segue um roteiro fixo ou que força a venda a qualquer custo. Converse de verdade com o lead!
+     * Ouça com atenção o que ele disser (idade da criança, dores, dificuldades, rotina) e responda com genuíno interesse, empatia e carinho.
+   - ENTREGA GENEROSA DOS MATERIAIS COMPLETOS:
+     * Você pode liberar o pacote completo com todas as atividades e PDFs logo que fizer sentido na conversa (quando ele demonstrar interesse, perguntar sobre o material, contar sobre a criança ou pedir para ver), usando as tags:
        ${allDelivTags || '[ENVIAR_ARQUIVO: PRODUTO]'}
-     * Diga com entusiasmo e carinho: "Olha, para te ajudar de verdade e você ver o quanto esse material é maravilhoso, eu já estou te entregando TUDO aqui agora! O pacote completo com todas as atividades e PDFs para o seu filho começar! Dá uma olhadinha 👇"
-   - REGRA 2 - FECHAMENTO EMOCIONAL COM PIX DIRETO (SEM PEDIR PERMISSÃO):
-     * Assim que os materiais forem entregues (ou quando o lead reagir/elogiar/agradecer):
-     * NUNCA pergunte se ele quer a chave PIX! NUNCA peça autorização!
-     * FAÇA O JOGO EMOCIONAL DE CONFIANÇA TOTAL:
-       "Eu confiei em você de olhos fechados e já te entreguei TUDO de uma vez só antes mesmo de você pagar! Fiz isso de coração aberto porque vi o quanto você se preocupa e quer o melhor para o seu filho... ❤️
-       Agora estou aqui de coração te pedindo pra fazer a sua parte e me ajudar com esse valor simbólico de apenas R$ ${formattedPrice}, que é o que mantém nosso projeto vivo. Segue a chave PIX para você fazer com calma no app do seu banco 👇"
-     * Envie a chave PIX destacada e limpa para cópia:
+     * Diga com entusiasmo e carinho que já separou e está entregando tudo para ele já poder olhar e aplicar com a criança hoje mesmo.
+     * NUNCA chame de "amostra" e NUNCA diga "vou liberar o resto depois". Entregamos o pacote completo de uma vez só!
+   - PITCH ADAPTADO E FECHAMENTO HUMANIZADO:
+     * NUNCA faça chantagem emocional, não force a barra e não use frases apelativas de culpa. Respeite o lead como um ser humano inteligente!
+     * Crie um pitch personalizado e adaptado para a situação que o cliente te contou (ex: adaptado à idade do filho dele, à dificuldade escolar que ele mencionou, aos objetivos que ele tem).
+     * Explique que para cobrir os custos e manter vivo esse projeto de criação contínua de atividades, pedimos uma contribuição simbólica de apenas R$ ${formattedPrice}.
+     * Quando for a hora oportuna do fechamento, apresente a chave PIX de forma clara e limpa no texto:
        Chave PIX (${product.pixKeyType || 'Chave'}): ${product.pixKey || '88994892385'}
        Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
        Valor: R$ ${formattedPrice}
-     * Coloque no final da mensagem um áudio [AUDIO: ...] afetuoso, humano e pausado com reticências (...) e quebras de linha naturais (sem nenhuma tag entre colchetes) reforçando a confiança e pedindo a contribuição.`;
+     * Use áudios de voz [AUDIO: ...] com tom afetuoso, humano e pausado para se conectar com o lead e fazer o convite à contribuição.`;
     } else if (deliveryStrategy === 'per_deliverable') {
       deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: LIBERAÇÃO HÍBRIDA POR ENTREGÁVEL
    - Entregáveis de Amostra/Isca Gratuita (sem exigência de pagamento): Você pode e DEVE enviar antes do pagamento para gerar encantamento:
@@ -160,6 +159,11 @@ ${deliverables.filter(d => d.requirePayment !== false).map(d => `     * [ENVIAR_
     return `Você é um consultor especialista em vendas e atendimento humanizado via WhatsApp da empresa Zapix.
 Seu objetivo principal é atender o lead com extrema empatia, entender as necessidades dele, tirar dúvidas, contornar objeções e conduzi-lo para a compra do infoproduto.
 
+=== LIBERDADE CONVERSACIONAL E AUTONOMIA TOTAL ===
+- Você NÃO é um robô de respostas pré-programadas e NÃO deve seguir roteiros rígidos.
+- Tenha autonomia total para desenrolar o diálogo, entender o momento do lead, responder às perguntas reais que ele fizer e criar um relacionamento genuíno.
+- Cada cliente é único: adapte suas respostas e seu pitch de acordo com o que o cliente compartilhar com você!
+
 === INFORMAÇÕES DO PRODUTO QUE VOCÊ VENDE ===
 - Nome do Produto: ${product.name}
 - Nicho: ${product.niche}
@@ -186,35 +190,40 @@ ${deliverableList || 'Nenhum entregável cadastrado no momento.'}
    - Suas mensagens de texto devem ser SEMPRE curtas, naturais e diretas (máximo 1 a 2 frases curtas por resposta).
    - Ninguém lê blocos longos de texto no WhatsApp! É terminantemente proibido enviar listas com 4, 5 ou 6 parágrafos explicativos em texto.
    - SE FOR EXPLICAR ALGO LONGO OU DETALHADO, FAÇA EM ÁUDIO [AUDIO: ...]! O áudio gera 10x mais conexão, autoridade e conversão.
-2. DIÁLOGO DINÂMICO (NUNCA MONÓLOGO):
-   - Não tente falar tudo de uma vez. Nunca cuspa explicação + preço + chave PIX + arquivo na mesma mensagem se o cliente apenas pediu uma explicação!
-   - Se o cliente perguntou "como funciona" ou "pode me explicar", explique no áudio [AUDIO: ...], mande 1 frase em texto e termine perguntando algo sobre ele (ex: "Você mesmo que vai fazer as receitas ou é pra alguém da sua família?").
-   - Espere o cliente interagir para então fazer o pitch e enviar o PIX!
-=== EXEMPLOS DO FORMATO EXATO ESPERADO (ÁUDIO COMPLETO + TEXTO CURTO) ===
+2. DIÁLOGO DINÂMICO E CONSULTIVO:
+   - Responda primeiro ao que o cliente perguntou ou comentou. Nunca ignore a dúvida dele para empurrar um roteiro!
+   - Se o cliente perguntou "como funciona" ou "pode me explicar", responda e explique (em áudio [AUDIO: ...] se for mais longo), mande 1 frase em texto e faça uma pergunta de interesse para conhecê-lo melhor.
+   - Quando for o momento certo, entregue os materiais e faça o pitch adaptado à realidade dele!
+
+=== EXEMPLOS DO FORMATO ESPERADO (ÁUDIO COMPLETO + TEXTO CURTO) ===
 
 Exemplo 1 (Primeiro contato do lead querendo saber mais):
 Olá! Que alegria falar com você! Te gravei um áudio explicando rapidinho com muito carinho 👇
 
 [AUDIO: Oi! Tudo bem?
 Que bom falar com você!
-Então... nosso material foi feito com todo carinho para as crianças aprenderem inglês brincando...
+Nosso material foi feito com todo carinho para as crianças aprenderem inglês brincando...
 São atividades bem ilustradas e práticas, que o pequeno nem percebe que está estudando!
 Qual a idade do seu pequeno(a)?]
 
 Qual a idade do seu pequeno(a)? 😊
 
-Exemplo 2 (Fechamento Emocional com PIX após envio de TODOS os materiais):
-Eu confiei em você de olhos fechados e já te entreguei todo o material completo antes mesmo de você pagar! Fiz isso de coração porque sei o quanto isso é importante pro futuro do seu filho... ❤️ Agora estou aqui de coração aberto te pedindo pra fazer a sua parte com essa contribuição simbólica de apenas R$ ${Number(product.price || 15).toFixed(2).replace('.', ',')}, que é o que mantém nosso trabalho de pé!
+Exemplo 2 (Apresentação dos materiais e Pitch Adaptado com PIX):
+Olha, já separei e te mandei o pacote completo aqui em cima para você ver como é lindo! Dá uma olhadinha 👇
+
+[ENVIAR_ARQUIVO: ATIVIDADES_INGLES]
+
+Para ajudar a manter esse projeto de pé e continuarmos criando novos materiais, a gente pede uma contribuição simbólica de apenas R$ ${Number(product.price || 15).toFixed(2).replace('.', ',')}. Vou deixar a chave PIX aqui:
 
 Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
 Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
 Valor: R$ ${Number(product.price || 15).toFixed(2).replace('.', ',')}
 
-[AUDIO: Olha...
-eu fiz questão de te liberar todo o material antes...
-porque confiei de verdade em você...
-agora tô aqui de coração aberto te pedindo essa ajuda pra manter o projeto...
-Pode fazer com calma no app do seu banco e me manda o comprovante aqui, tá bom?]
+[AUDIO: Oi! Tudo bem?
+Olha, já te mandei todo o material aqui em cima com muito carinho...
+Dá uma olhadinha com calma nas atividades...
+Tenho certeza que o seu pequeno vai se divertir muito aprendendo!
+Se puder nos ajudar com essa contribuição simbólica, agradeço de coração!]
 
 ${audioStrategySection}
 ${deliverableStrategySection}
@@ -275,8 +284,8 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
     return content.trim();
   }
 
-  // Call single NIM model with configurable timeout (default 60s)
-  async callModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 60000) {
+  // Call single NIM model with configurable timeout (default 180s = 3 minutes)
+  async callModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 180000) {
     if (!apiKey) {
       throw new Error(`API Key não configurada para o modelo ${model}`);
     }
@@ -309,7 +318,7 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
   }
 
   // Call OpenRouter tertiary fallback model (e.g. nvidia/nemotron-3.5-lightning:free)
-  async callOpenRouterModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 18000) {
+  async callOpenRouterModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 45000) {
     if (!apiKey) {
       throw new Error(`OpenRouter API Key não configurada para o modelo ${model}`);
     }
@@ -366,8 +375,8 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
       const messagesHistory = conversationHistory || [];
       const userIncomingMsgs = messagesHistory.filter(m => !m.fromMe);
       const hasSentBefore = messagesHistory.some(m => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
-      const isUserAskingPix = /pix|pagar|pago|chave|valor|conta|manda.*pix|envia.*pix|passa.*pix|manda.*chave/i.test(userMessage || '');
-      const hasSentDeliverable = leadObj?.deliverableSent === true || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || hasSentBefore || isUserAskingPix;
+      const isUserAskingPix = /pix|pagar|pago|chave|valor|quanto custa|conta|manda.*pix|envia.*pix|passa.*pix|manda.*chave/i.test(userMessage || '');
+      const hasSentDeliverable = leadObj?.deliverableSent === true || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || hasSentBefore;
       const isPaid = leadObj?.stage === 'APROVADO' || leadObj?.lastReceiptStatus === 'APROVADO';
 
       const hasAlreadySentPixInHistory = messagesHistory.some((m) => m.fromMe && m.text && (
@@ -378,10 +387,6 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
       const hasPixBeenSent = hasAlreadySentPixInHistory || leadObj?.stage === 'PIX_ENVIADO';
 
       const lowerUserMsg = (userMessage || '').toLowerCase();
-      const isExplicitDeliveryRequest = /pode mandar|manda|envia|quero ver|me passa|mostra|como são|quero|sim|pode ser/i.test(lowerUserMsg);
-      const hasChildDetails = /\b\d+\s*(?:anos?|aninhos|meses)\b|prezinho|escola|começando|creche|maternal|fundamental|alfabetiz/i.test(lowerUserMsg);
-      const hasEngagedConversation = userIncomingMsgs.length >= 2 || isExplicitDeliveryRequest || hasChildDetails;
-
       const isUserClaimingPaid = /já fiz|ja fiz|já paguei|ja paguei|fiz aqui|acabei de fazer|já transferi|ja transferi|mandei o pix|mandei o comprovante|pago|paguei|ta pago|tá pago|transferi/i.test(lowerUserMsg);
       const isUserAskingIfTheseAreTheFiles = /achei q eram esses|achei que eram esses|são esses|sao esses|é esse|é essa|são essas|pode mandar|manda pfv|manda por favor|vai mandar/i.test(lowerUserMsg);
 
@@ -391,16 +396,13 @@ ${settings.ai.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USUÁ
 
         if (isApprovedReceipt) {
           contextDirective = `SITUAÇÃO: O cliente enviou o comprovante de pagamento e o PIX foi 100% APROVADO e confirmado!
-ATENÇÃO MÁXIMA DE OFERTA INVERTIDA:
-- O cliente JÁ RECEBEU todos os materiais, apostilas e PDFs anteriormente no início da conversa!
-- É TERMINANTEMENTE PROIBIDO dizer que vai liberar o material, que vai mandar arquivos ou que ele deve aguardar o acesso! Ele já está com tudo em mãos!
-- Agradeça com imensa gratidão, carinho e entusiasmo pela contribuição simbólica de R$ ${formattedPrice}, que é o que mantém o projeto vivo!
-- Diga que você está muito feliz e deseje momentos maravilhosos aplicando as atividades com o pequeno!
-- Coloque um [AUDIO: ...] doce e carinhoso agradecendo de coração pela ajuda e desejando tudo de bom pra família!`;
+- Agradeça com imensa gratidão, carinho e entusiasmo pela contribuição de R$ ${formattedPrice}!
+- Se o cliente já recebeu os arquivos, confirme com alegria que ele já está com tudo em mãos para aproveitar com o pequeno.
+- Coloque um [AUDIO: ...] doce e carinhoso agradecendo de coração pela ajuda e desejando momentos maravilhosos para a família!`;
         } else if (isAgendadoReceipt) {
-          contextDirective = `SITUAÇÃO: O cliente enviou um comprovante, mas ele foi identificado como AGENDAMENTO (o dinheiro ainda não foi transferido).
-- Explique com muita delicadeza, carinho e gentileza que no app do banco a operação ficou programada como um agendamento futuro (o valor ainda não foi debitado).
-- Peça com simpatia para ele entrar no aplicativo do banco, cancelar o agendamento e fazer a transferência imediata na hora para que a contribuição de R$ ${formattedPrice} possa ser concluída.
+          contextDirective = `SITUAÇÃO: O cliente enviou um comprovante, mas ele foi identificado como AGENDAMENTO (o valor ainda não foi debitado).
+- Explique com muita delicadeza, carinho e gentileza que no app do banco a operação ficou programada como um agendamento futuro.
+- Peça com simpatia para ele entrar no aplicativo do banco, cancelar o agendamento e fazer a transferência imediata na hora para concluir a contribuição de R$ ${formattedPrice}.
 - Envie a Chave PIX oficial limpa (${product.pixKeyType || 'telefone'}: ${product.pixKey || '88994892385'} - ${product.pixBeneficiary || 'ian alves dos anjos'} - R$ ${formattedPrice}).
 - Coloque um [AUDIO: ...] acolhedor e calmo explicando o agendamento sem constranger o cliente.`;
         } else {
@@ -411,78 +413,46 @@ ${userMessage}
       } else if (isPaid) {
         contextDirective = `SITUAÇÃO: O cliente já realizou a contribuição e o pagamento está 100% CONFIRMADO e APROVADO!
 Mensagem do cliente: "${userMessage}".
-DIRETRIZES DE ATENDIMENTO PÓS-PAGAMENTO:
-- O cliente JÁ RECEBEU todas as apostilas e atividades em PDF no início da conversa! NUNCA diga que vai liberar ou enviar materiais, pois ele já tem tudo!
-- Se o cliente perguntou se os arquivos enviados eram aqueles ("Achei q eram esses", "São esses?"): Confirme na hora com muita alegria e segurança: "Sim, são exatamente aqueles materiais completos que te mandei aqui em cima! Você já está com tudo em mãos, é só abrir e aproveitar com o seu pequeno hoje mesmo! 🥰"
-- Se ele estiver agradecendo ("Muito obrigada", "obrigado", "valeu"): Retribua com muito amor e carinho, desejando muito sucesso e reforçando que está sempre à disposição!
-- Coloque um [AUDIO: ...] curto e caloroso se for pertinente.`;
-      } else if (isUserAskingIfTheseAreTheFiles) {
-        contextDirective = `SITUAÇÃO: O cliente está em dúvida se os materiais enviados anteriormente lá em cima são os definitivos ("${userMessage}").
-- Esclareça com total carinho, clareza e segurança: Sim! São exatamente aqueles arquivos e apostilas em PDF que você já enviou lá em cima!
-- Explique que todo o material completo já foi entregue para ele, não precisa esperar nada e já pode abrir, baixar e aplicar com a criança hoje mesmo!
-- NUNCA diga que vai "liberar o restante" ou "mandar o acesso". Ele já tem tudo!
-- Finalize desejando um momento muito especial com o pequeno.`;
-      } else if (isUserClaimingPaid) {
-        contextDirective = `SITUAÇÃO: O cliente avisou que já realizou o pagamento ou PIX ("${userMessage}").
-- Agradeça imensamente o carinho e a contribuição!
-- Peça com simpatia para ele enviar o comprovante aqui na conversa só para você confirmar no sistema.
-- ATENÇÃO SUPREMA: NUNCA diga que "vai liberar o material", pois ele JÁ RECEBEU o material completo lá em cima! Diga que enquanto confirma o comprovante, ele já pode ir aproveitando as atividades que você já enviou!`;
+- O cliente já é um apoiador confirmado. Responda com carinho e atenção às dúvidas ou agradecimentos dele.
+- Se ele perguntar dos materiais, confirme que são aqueles que você já enviou lá em cima e que ele já pode baixar e usar.
+- Mantenha tom prestativo e amigável.`;
       } else if (isUserAskingPix) {
-        contextDirective = `SITUAÇÃO: O cliente pediu o PIX diretamente ("${userMessage}").
-- Agradeça a confiança e envie a Chave PIX oficial limpa no texto:
+        contextDirective = `SITUAÇÃO: O cliente pediu o PIX diretamente ou perguntou como pagar ("${userMessage}").
+- Agradeça a gentileza e confiança!
+- Envie a Chave PIX oficial limpa no texto:
   Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
   Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
   Valor: R$ ${formattedPrice}
 - Peça para enviar o comprovante após a transferência.
-- Finalize com [AUDIO: ...] curto agradecendo a ajuda e a confiança.`;
-      } else if (!hasSentDeliverable && !hasEngagedConversation) {
-        contextDirective = `SITUAÇÃO: Primeiro contato do lead ("${userMessage}").
-- Dê as boas-vindas com carinho de consultora educacional apaixonada pelo desenvolvimento infantil.
-- Faça um gancho rápido de 1 frase destacando como o aprendizado lúdico e longe das telas transforma a rotina dos pequenos.
-- Pergunte de forma direta e acolhedora: "Qual a idade do seu pequeno(a) ou para quem seriam as atividades? 💕"
-- É TERMINANTEMENTE PROIBIDO fazer perguntas de permissão como "quer saber mais sobre o que?", "posso te mandar um áudio?" ou "quer dar uma olhada?".
-- NÃO envie arquivos nem mencione Chave PIX agora.
-- Coloque um [AUDIO: ...] curto e acolhedor (15 a 20 segundos) fazendo essa perguntinha com voz doce.`;
-      } else if (!hasSentDeliverable && hasEngagedConversation) {
-        contextDirective = `SITUAÇÃO: O cliente interagiu, respondeu ou passou a idade da criança ("${userMessage}").
-- Valide com carinho e entusiasmo a resposta/idade da criança (ex: dizendo o quanto essa fase é incrível para o aprendizado lúdico).
-- Anuncie que já separou e está liberando todo o material completo agora mesmo para ele conhecer e aplicar em casa.
-- ATENÇÃO OBRIGATÓRIA: Você DEVE incluir todas as tags de entregáveis abaixo na sua resposta:
-  ${allDelivTags}
-- Diga para ele dar uma olhadinha com calma nos materiais que você acabou de mandar.
-- É TERMINANTEMENTE PROIBIDO pedir permissão (NUNCA pergunte "quer dar uma olhada?", "posso te mandar?"). Os materiais já estão sendo enviados AGORA!
-- NÃO cobre e NÃO mencione Chave PIX neste momento (os materiais estão sendo entregues agora para ele olhar).
-- Coloque um [AUDIO: ...] animado e carinhoso dizendo que já separou tudo para ele e desejando um momento especial com a criança.`;
-      } else if (!isPaid) {
-        if (!hasPixBeenSent) {
-          // FASE 2: FECHAMENTO EMOCIONAL E ENVIO DO PIX (APENAS NA 1ª VEZ APÓS A ENTREGA DOS MATERIAIS)
-          contextDirective = `SITUAÇÃO: O cliente já recebeu todos os materiais e PDFs anteriormente e esta é a PRIMEIRA vez que vamos pedir a contribuição e enviar o PIX.
-- Faça o fechamento emocional com gratidão sincera (lembrando que você confiou nele e entregou todo o material antes mesmo de ele pagar).
-- Peça a contribuição simbólica de R$ ${formattedPrice} e envie a Chave PIX oficial destacada no texto:
-  Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}
-  Nome: ${product.pixBeneficiary || 'ian alves dos anjos'}
-  Valor: R$ ${formattedPrice}
-- Peça para ele mandar o comprovante quando fizer.
-- Finalize com [AUDIO: ...] carinhoso e pausado reforçando a confiança e o pedido.`;
-        } else {
-          // FASE 3: ACOMPANHAMENTO NATURAL E FLUÍDO PÓS-PIX (O PIX JÁ FOI ENVIADO ANTERIORMENTE)
-          contextDirective = `SITUAÇÃO: O material completo E a Chave PIX JÁ FORAM ENVIADOS anteriormente nesta conversa! O cliente está respondendo após já ter os dados do PIX.
-Mensagem atual do cliente: "${userMessage}".
+- Coloque um [AUDIO: ...] curto agradecendo a ajuda e a confiança.`;
+      } else if (isUserClaimingPaid) {
+        contextDirective = `SITUAÇÃO: O cliente avisou que já realizou o pagamento ou PIX ("${userMessage}").
+- Agradeça com muito carinho a contribuição!
+- Peça com gentileza para ele enviar o comprovante aqui na conversa para você confirmar no sistema.`;
+      } else if (isUserAskingIfTheseAreTheFiles) {
+        contextDirective = `SITUAÇÃO: O cliente está em dúvida se os materiais enviados anteriormente lá em cima são os definitivos ("${userMessage}").
+- Esclareça com total carinho, clareza e segurança: Sim! São exatamente aqueles arquivos e apostilas em PDF que você já enviou!
+- Explique que todo o material já foi entregue para ele, já pode abrir, baixar e aplicar hoje mesmo.`;
+      } else {
+        // FLUXO CONVERSACIONAL COM LIBERDADE E AUTONOMIA TOTAL
+        contextDirective = `SITUAÇÃO ATUAL DO ATENDIMENTO:
+Mensagem do cliente: "${userMessage}".
 
-DIRETRIZES FUNDAMENTAIS PARA NÃO SUFOCAR O CLIENTE (MÁXIMA PRIORIDADE):
-1. É TERMINANTEMENTE PROIBIDO repetir o texto de apelo emocional ("Eu confiei em você de olhos fechados..."). Você JÁ enviou essa mensagem antes! Repeti-la soa robótico, sufoca o cliente e causa bloqueios!
-2. É TERMINANTEMENTE PROIBIDO reenviar a Chave PIX, valores ou dados bancários, A MENOS que o cliente pergunte explicitamente pela chave!
-3. SE O CLIENTE APENAS AGRADECER ("Muito obrigada", "obrigado", "valeu"):
-   - Responda com carinho e gentileza (Ex: "Por nada, meu bem! Eu que agradeço! Qualquer dúvida estou sempre por aqui! ❤️").
-   - NÃO mande mensagens automáticas dizendo para "fazer quando chegar em casa" se o cliente não falou nada sobre casa!
-4. SE O CLIENTE DISSER QUE VAI FAZER MAIS TARDE, DEPOIS, AMANHÃ OU QUANDO CHEGAR EM CASA:
-   - Seja extremamente acolhedora, doce, compreensiva e tranquila.
-   - Responda com ZERO pressão e muita leveza em 1 ou 2 frases curtas (Ex: "Sem problemas, fica em paz! Faz com calma quando der, tá bom? Qualquer dúvida estou por aqui! ❤️").
-   - NÃO mande áudios cobrando.
-5. SE O CLIENTE TIVER DÚVIDAS SOBRE O MATERIAL OU PRECISAR DE AJUDA:
-   - Responda como uma educadora amorosa e atenciosa, sanando a dúvida dele.
-6. APENAS se o cliente pedir expressamente a chave ("manda a chave de novo", "qual a chave?"), forneça a chave PIX de forma prestativa.`;
-        }
+STATUS DO FUNIL:
+- Materiais enviados anteriormente? ${hasSentDeliverable ? 'SIM (já entregues)' : 'NÃO (ainda não foram enviados)'}
+- Chave PIX enviada anteriormente? ${hasPixBeenSent ? 'SIM (já enviada)' : 'NÃO (ainda não enviada)'}
+
+DIRETRIZES DE AUTONOMIA E CONVERSÃO:
+1. RESPONDA PRIMEIRO AO CLIENTE: Não ignore o que o cliente disse! Se ele fez uma pergunta, tirou uma dúvida ou compartilhou algo sobre o filho/rotina, responda com atenção e carinho genuíno.
+2. ENTREGA DE MATERIAIS (${hasSentDeliverable ? 'JÁ FEITA' : 'DISPONÍVEL'}):
+${hasSentDeliverable 
+  ? '   - Os materiais já foram enviados anteriormente. Não precisa enviar as tags de arquivo de novo, a não ser que o cliente peça.' 
+  : `   - Você tem autonomia para liberar todos os materiais agora usando as tags: ${allDelivTags}. Se o cliente demonstrou interesse, pediu para ver, ou se o momento da conversa pede para mostrar valor prático, entregue os arquivos com entusiasmo!`}
+3. PITCH E FECHAMENTO (${hasPixBeenSent ? 'PIX JÁ ENVIADO' : 'MOMENTO DO PITCH'}):
+${hasPixBeenSent 
+  ? '   - A chave PIX já foi enviada anteriormente. NÃO force a barra nem fique cobrando repetidamente. Dê espaço, responda eventuais dúvidas com gentileza e só reenvie a chave PIX se o cliente pedir.' 
+  : `   - Quando você sentir que o momento é oportuno (ex: após entregar os materiais, responder as dúvidas dele ou quando ele elogiar/demonstrar encanto), faça o pitch adaptado à realidade que ele te contou e convide-o a apoiar o projeto com a contribuição simbólica de R$ ${formattedPrice} via PIX (Chave ${product.pixKeyType || 'telefone'}: ${product.pixKey || '88994892385'}).`}
+4. TOM HUMANO: Fale como uma pessoa real no WhatsApp — acolhedora, espontânea, simpática e persuasiva, usando [AUDIO: ...] nos momentos de explicação, empatia ou pitch.`;
       }
     } else {
       // ESTRATÉGIA PADRÃO: require_payment / per_deliverable
@@ -528,45 +498,39 @@ Como agir conforme a análise:
     let responseText = null;
     let modelUsed = settings.primaryModel || 'z-ai/glm-5.3-flash';
 
-    const isPrimaryInCooldown = (Date.now() - this.lastPrimaryFailureTime) < this.primaryCooldownMs;
-
-    // 1. Try Primary NVIDIA NIM Model (if not in circuit breaker cooldown)
-    if (!isPrimaryInCooldown) {
-      try {
-        const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
-        if (primaryKey) {
-          responseText = await this.callModel(
-            settings.primaryModel || 'z-ai/glm-5.3-flash',
-            primaryKey,
-            messages,
-            settings.temperature ?? 0.7,
-            settings.maxTokens || 1500,
-            60000 // 60s (1 min) primary timeout before switching to fallback
-          );
-          // Primary succeeded - reset cooldown and ensure fallback state is inactive
-          this.lastPrimaryFailureTime = 0;
-          if (settings.isFallbackActive) {
-            storage.updateSettings({ ai: { isFallbackActive: false, lastFallbackReason: null } });
-            storage.addLog('INFO', `Modelo Primário NVIDIA NIM (${modelUsed}) restabelecido com sucesso.`);
-          }
-          return { text: responseText, modelUsed, fallbackTriggered: false };
-        }
-      } catch (primaryErr) {
-        this.lastPrimaryFailureTime = Date.now();
-        console.warn(`[NVIDIA NIM Primary Error]: ${primaryErr.message}`);
-        storage.addLog(
-          'FALLBACK_TRIGGERED',
-          `NVIDIA NIM Primário (${settings.primaryModel || 'z-ai/glm-5.3-flash'}) não respondeu em 1 min (${primaryErr.message}). Ativando fallback (${settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it'}).`
+    // 1. Try Primary NVIDIA NIM Model (timeout: 180s = 3 min)
+    try {
+      const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
+      if (primaryKey) {
+        responseText = await this.callModel(
+          settings.primaryModel || 'z-ai/glm-5.3-flash',
+          primaryKey,
+          messages,
+          settings.temperature ?? 0.7,
+          settings.maxTokens || 1500,
+          180000 // 180s (3 min) timeout before falling back to secondary model
         );
-        storage.updateSettings({
-          ai: {
-            isFallbackActive: true,
-            lastFallbackReason: primaryErr.message
-          }
-        });
+        // Primary succeeded - reset cooldown and ensure fallback state is inactive
+        this.lastPrimaryFailureTime = 0;
+        if (settings.isFallbackActive) {
+          storage.updateSettings({ ai: { isFallbackActive: false, lastFallbackReason: null } });
+          storage.addLog('INFO', `Modelo Primário NVIDIA NIM (${modelUsed}) restabelecido com sucesso.`);
+        }
+        return { text: responseText, modelUsed, fallbackTriggered: false };
       }
-    } else {
-      console.log(`[NVIDIA NIM Circuit Breaker] Primário em cooldown temporário. Roteando direto para fallback rápido.`);
+    } catch (primaryErr) {
+      this.lastPrimaryFailureTime = Date.now();
+      console.warn(`[NVIDIA NIM Primary Error]: ${primaryErr.message}`);
+      storage.addLog(
+        'FALLBACK_TRIGGERED',
+        `NVIDIA NIM Primário (${settings.primaryModel || 'z-ai/glm-5.3-flash'}) não respondeu em 3 min (${primaryErr.message}). Ativando fallback secundário (${settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it'}).`
+      );
+      storage.updateSettings({
+        ai: {
+          isFallbackActive: true,
+          lastFallbackReason: primaryErr.message
+        }
+      });
     }
 
     // 2. Try Fallback NVIDIA NIM Model (google/diffusiongemma-26b-a4b-it)
@@ -581,7 +545,7 @@ Como agir conforme a análise:
           messages,
           settings.temperature ?? 0.7,
           settings.maxTokens || 1500,
-          15000 // 15s fallback timeout
+          60000 // 60s fallback timeout
         );
         return { text: responseText, modelUsed, fallbackTriggered: true, fallbackTier: 'secondary_nvidia' };
       }
@@ -606,7 +570,7 @@ Como agir conforme a análise:
           messages,
           settings.temperature ?? 0.7,
           settings.maxTokens || 1500,
-          18000 // 18s timeout for OpenRouter
+          45000 // 45s timeout for OpenRouter
         );
         storage.addLog(
           'FALLBACK_TRIGGERED',
@@ -659,7 +623,7 @@ Como agir conforme a análise:
         text.includes('adorei') ||
         text.includes('que lindo')
       ) {
-        return `Fico muito feliz que tenha gostado! ❤️ Eu confiei em você de olhos fechados e já te entreguei tudo antes mesmo de você pagar, porque sei o quanto isso é importante para o futuro do seu filho...\n\nAgora estou aqui de coração te pedindo pra fazer a sua parte e me ajudar com essa contribuição simbólica de apenas R$ ${formattedPrice}, que é o que mantém nosso trabalho de pé!\n\nChave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${formattedPrice}\n\n[AUDIO: Oi!... Fiz questão de te mandar todo o material antes... porque confiei de olhos fechados em você... Dá uma olhadinha na chave PIX que te mandei e assim que você fizer me envia o comprovante aqui tá bom? Um abraço grande!]`;
+        return `Fico muito feliz que tenha gostado! ❤️ Fiz questão de te mandar o material completo para você já ver o quanto vai ajudar no desenvolvimento dele!\n\nPara manter nosso projeto vivo e continuarmos criando novos materiais, a gente pede uma contribuição simbólica de apenas R$ ${formattedPrice}.\n\nChave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${formattedPrice}\n\n[AUDIO: Oi!... Te mandei as atividades completas com muito carinho... Dá uma olhadinha na chave PIX e quando fizer me manda o comprovante aqui tá bom? Um abraço grande!]`;
       }
     }
 

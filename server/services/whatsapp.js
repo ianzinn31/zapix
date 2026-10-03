@@ -761,10 +761,7 @@ class WhatsAppService {
             }
           }
           storage.upsertLead(phone, { stage: 'ENTREGUE', deliverableSent: true, deliverableSentAt: Date.now() });
-          // Temporizador pós-entrega de 90s (1m30s): se o lead não responder após receber os arquivos, fecha e envia o PIX automaticamente
-          if (deliveryStrategy === 'deliver_first') {
-            this.schedulePostDeliveryClosing(phone, jid, 90000);
-          }
+          // Fluxo 100% autônomo da IA: a IA conduz a conversa e faz o pitch no momento ideal, sem forçar temporizadores robóticos
         }
 
         // ========================================================
@@ -944,25 +941,10 @@ class WhatsAppService {
     }
   }
 
-  // Schedule automated Phase 2 emotional closing and PIX request if customer stays silent after receiving files (default: 90s)
+  // Schedule automated Phase 2 closing and PIX request (disabled to ensure natural conversational flow)
   schedulePostDeliveryClosing(phone, jid, delayMs = 90000) {
-    if (!phone) return;
-    this.cancelPostDeliveryClosing(phone);
-
-    console.log(`[Zapix Timer] Agendando fechamento pós-entrega para ${phone} em ${delayMs / 1000}s...`);
-    storage.addLog('INFO', `Temporizador pós-entrega ativado para ${phone}: fechamento emocional e PIX serão enviados em ${Math.round(delayMs / 1000)}s caso o cliente não interaja.`);
-
-    const timer = setTimeout(async () => {
-      this.pendingDeliveryClosingTimers.delete(phone);
-      try {
-        await this.executePostDeliveryClosing(phone, jid);
-      } catch (err) {
-        console.error(`[Zapix Timer] Erro ao executar fechamento pós-entrega para ${phone}:`, err);
-        storage.addLog('ERROR', `Erro no temporizador pós-entrega para ${phone}: ${err.message}`);
-      }
-    }, delayMs);
-
-    this.pendingDeliveryClosingTimers.set(phone, { timer, jid, scheduledAt: Date.now() });
+    // Desativado: Funil 100% autônomo com IA conduzindo a conversa de acordo com as necessidades do lead
+    return;
   }
 
   // Cancel pending closing timer (lead interacted or funnel was reset)
