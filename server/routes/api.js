@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import axios from 'axios';
 import { storage, UPLOADS_DIR } from '../services/storage.js';
 import { whatsapp } from '../services/whatsapp.js';
 import { salesMetrics } from '../services/salesMetrics.js';
@@ -423,9 +424,100 @@ router.post('/remarketing/trigger-now', async (req, res) => {
   }
 });
 
-// === System Logs ===
-router.get('/logs', (req, res) => {
-  res.json(storage.getLogs(60));
+// === Dynamic AI Models Fetching ===
+router.get('/ai/models/nim', async (req, res) => {
+  const { apiKey } = req.query;
+  const effectiveKey = (apiKey || storage.getSettings().ai?.primaryApiKey || storage.getSettings().ai?.fallbackApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY || '').trim();
+
+  if (!effectiveKey) {
+    return res.status(400).json({ error: 'Nenhuma chave de API da NVIDIA NIM informada.' });
+  }
+
+  try {
+    const response = await axios.get('https://integrate.api.nvidia.com/v1/models', {
+      headers: {
+        Authorization: `Bearer ${effectiveKey}`
+      },
+      timeout: 15000
+    });
+
+    const rawModels = response.data?.data || [];
+    const models = rawModels.map((m) => {
+      const parts = (m.id || '').split('/');
+      const org = parts[0] || m.owned_by || 'nvidia';
+      const cleanName = parts[1] || m.id;
+      return {
+        id: m.id,
+        name: m.id,
+        shortName: cleanName,
+        org,
+        created: m.created
+      };
+    }).sort((a, b) => a.id.localeCompare(b.id));
+
+    res.json({
+      success: true,
+      count: models.length,
+      models
+    });
+  } catch (err) {
+    console.error('[API /ai/models/nim Error]:', err.response?.status, err.message);
+    const status = err.response?.status || 500;
+    const msg = err.response?.data?.message || err.response?.data?.error?.message || err.message;
+    res.status(status).json({
+      error: `Erro ao buscar modelos na NVIDIA NIM: ${msg}`
+    });
+  }
+});
+
+router.get('/ai/models/openrouter', async (req, res) => {
+  const { apiKey } = req.query;
+  const effectiveKey = (apiKey || storage.getSettings().ai?.tertiaryApiKey || process.env.OPENROUTER_API_KEY || '').trim();
+
+  try {
+    const headers = {
+      'HTTP-Referer': 'https://zapix.ai',
+      'X-Title': 'Zapix AI'
+    };
+    if (effectiveKey) {
+      headers['Authorization'] = `Bearer ${effectiveKey}`;
+    }
+
+    const response = await axios.get('https://openrouter.ai/api/v1/models', {
+      headers,
+      timeout: 15000
+    });
+
+    const rawModels = response.data?.data || [];
+    const models = rawModels.map((m) => {
+      const isFree = m.id.endsWith(':free') || m.pricing?.prompt === '0' || m.pricing?.prompt === 0;
+      return {
+        id: m.id,
+        name: m.name || m.id,
+        isFree,
+        contextLength: m.context_length,
+        description: m.description || ''
+      };
+    }).sort((a, b) => {
+      if (a.isFree && !b.isFree) return -1;
+      if (!a.isFree && b.isFree) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    res.json({
+      success: true,
+      count: models.length,
+      freeCount: models.filter((m) => m.isFree).length,
+      models
+    });
+  } catch (err) {
+    console.error('[API /ai/models/openrouter Error]:', err.response?.status, err.message);
+    const status = err.response?.status || 500;
+    const msg = err.response?.data?.message || err.response?.data?.error?.message || err.message;
+    res.status(status).json({
+      error: `Erro ao buscar modelos no OpenRouter: ${msg}`
+    });
+  }
 });
 
 export default router;

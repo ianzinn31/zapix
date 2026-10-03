@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Cpu, 
   ShieldCheck, 
@@ -11,7 +11,12 @@ import {
   EyeOff,
   Zap,
   RefreshCw,
-  Globe
+  Globe,
+  Search,
+  Filter,
+  Sparkles,
+  Edit3,
+  List
 } from 'lucide-react';
 
 export default function AiConfig({ aiSettings, onSave }) {
@@ -32,16 +37,95 @@ export default function AiConfig({ aiSettings, onSave }) {
   const [showTertiaryKey, setShowTertiaryKey] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
-  const nimModels = [
-    { id: 'z-ai/glm-5.3-flash', name: 'GLM 5.3 Flash (Recomendado Principal - Raciocínio & Alta Inteligência)', tag: 'Raciocínio & Persuasão' },
-    { id: 'google/diffusiongemma-26b-a4b-it', name: 'Google DiffusionGemma 26B (Recomendado Fallback - Sub-segundo)', tag: 'Google 26B & Rápido' },
-    { id: 'meta/llama-3.2-11b-vision-instruct', name: 'Meta Llama 3.2 11B Vision Instruct', tag: 'Meta 11B' }
+  // Dynamic models state
+  const defaultNimModels = [
+    { id: 'z-ai/glm-5.3-flash', name: 'z-ai/glm-5.3-flash', org: 'z-ai' },
+    { id: 'meta/llama-3.2-11b-vision-instruct', name: 'meta/llama-3.2-11b-vision-instruct', org: 'meta' },
+    { id: 'google/diffusiongemma-26b-a4b-it', name: 'google/diffusiongemma-26b-a4b-it', org: 'google' },
+    { id: 'deepseek-ai/deepseek-v4.1-flash', name: 'deepseek-ai/deepseek-v4.1-flash', org: 'deepseek-ai' }
   ];
 
-  const openRouterModels = [
-    { id: 'nvidia/nemotron-3.5-lightning:free', name: 'NVIDIA Nemotron 3.5 Lightning (Gratuito - Recomendado Fallback 3)', tag: 'NVIDIA Free' },
-    { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Meta Llama 3.3 70B Instruct (Gratuito)', tag: 'Meta Free' }
+  const defaultOpenRouterModels = [
+    { id: 'nvidia/nemotron-3.5-lightning:free', name: 'NVIDIA: Nemotron 3.5 Lightning (free)', isFree: true },
+    { id: 'qwen/qwen3.8-27b:free', name: 'Qwen: Qwen3.8 27B (free)', isFree: true },
+    { id: 'google/gemma-4-31b-it:free', name: 'Google: Gemma 4 31B (free)', isFree: true },
+    { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Meta Llama 3.3 70B Instruct (free)', isFree: true }
   ];
+
+  const [nimModels, setNimModels] = useState(defaultNimModels);
+  const [openRouterModels, setOpenRouterModels] = useState(defaultOpenRouterModels);
+  const [loadingNim, setLoadingNim] = useState(false);
+  const [loadingOpenRouter, setLoadingOpenRouter] = useState(false);
+  const [nimError, setNimError] = useState(null);
+  const [openRouterError, setOpenRouterError] = useState(null);
+
+  // Search and manual toggles
+  const [primarySearch, setPrimarySearch] = useState('');
+  const [primaryManualMode, setPrimaryManualMode] = useState(false);
+
+  const [fallbackSearch, setFallbackSearch] = useState('');
+  const [fallbackManualMode, setFallbackManualMode] = useState(false);
+
+  const [tertiarySearch, setTertiarySearch] = useState('');
+  const [tertiaryOnlyFree, setTertiaryOnlyFree] = useState(true);
+  const [tertiaryManualMode, setTertiaryManualMode] = useState(false);
+
+  // Fetch NVIDIA NIM models from backend
+  const fetchNimModels = async (keyOverride = null) => {
+    setLoadingNim(true);
+    setNimError(null);
+    try {
+      const key = (keyOverride || formData.primaryApiKey || formData.fallbackApiKey || '').trim();
+      const url = key ? `/api/ai/models/nim?apiKey=${encodeURIComponent(key)}` : '/api/ai/models/nim';
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao carregar modelos da NVIDIA NIM');
+      }
+      if (data.models && data.models.length > 0) {
+        setNimModels(data.models);
+      }
+    } catch (err) {
+      console.warn('Erro ao buscar modelos NIM:', err.message);
+      setNimError(err.message);
+    } finally {
+      setLoadingNim(false);
+    }
+  };
+
+  // Fetch OpenRouter models from backend
+  const fetchOpenRouterModels = async (keyOverride = null) => {
+    setLoadingOpenRouter(true);
+    setOpenRouterError(null);
+    try {
+      const key = (keyOverride || formData.tertiaryApiKey || '').trim();
+      const url = key ? `/api/ai/models/openrouter?apiKey=${encodeURIComponent(key)}` : '/api/ai/models/openrouter';
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao carregar modelos do OpenRouter');
+      }
+      if (data.models && data.models.length > 0) {
+        setOpenRouterModels(data.models);
+      }
+    } catch (err) {
+      console.warn('Erro ao buscar modelos OpenRouter:', err.message);
+      setOpenRouterError(err.message);
+    } finally {
+      setLoadingOpenRouter(false);
+    }
+  };
+
+  // Sync on mount
+  useEffect(() => {
+    fetchNimModels();
+    fetchOpenRouterModels();
+  }, []);
+
+  const handleSyncAll = () => {
+    fetchNimModels();
+    fetchOpenRouterModels();
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -50,29 +134,65 @@ export default function AiConfig({ aiSettings, onSave }) {
     setTimeout(() => setSavedSuccess(false), 3000);
   };
 
+  // Filtered lists
+  const filteredPrimaryNim = nimModels.filter((m) => {
+    if (!primarySearch.trim()) return true;
+    const q = primarySearch.toLowerCase();
+    return (m.id || '').toLowerCase().includes(q) || (m.name || '').toLowerCase().includes(q);
+  });
+
+  const filteredFallbackNim = nimModels.filter((m) => {
+    if (!fallbackSearch.trim()) return true;
+    const q = fallbackSearch.toLowerCase();
+    return (m.id || '').toLowerCase().includes(q) || (m.name || '').toLowerCase().includes(q);
+  });
+
+  const filteredOpenRouter = openRouterModels.filter((m) => {
+    if (tertiaryOnlyFree && !m.isFree) return false;
+    if (!tertiarySearch.trim()) return true;
+    const q = tertiarySearch.toLowerCase();
+    return (m.id || '').toLowerCase().includes(q) || (m.name || '').toLowerCase().includes(q);
+  });
+
+  const freeCount = openRouterModels.filter((m) => m.isFree).length;
+
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div className="glass-card" style={{ padding: '24px' }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
           <div className="flex items-center gap-3">
             <div style={{ padding: '10px', background: 'rgba(139, 92, 246, 0.15)', borderRadius: '10px', color: '#c084fc' }}>
               <Cpu size={22} />
             </div>
             <div>
               <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#f8fafc' }}>
-                Cérebro de IA: NVIDIA NIM + OpenRouter Triplo Fallback
+                Cérebro de IA: NVIDIA NIM + OpenRouter
               </h3>
               <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                Alta disponibilidade com 3 níveis de contingência: Primário (GLM 5.3), Secundário (DiffusionGemma 26B) e Terciário Gratuito via OpenRouter (Nemotron 3.5 Lightning).
+                Selecione os modelos diretamente da lista oficial oferecida pelas APIs em tempo real.
               </p>
             </div>
           </div>
 
-          <button type="submit" className="btn-primary">
-            {savedSuccess ? <CheckCircle2 size={16} /> : <Save size={16} />}
-            <span>{savedSuccess ? 'Salvo!' : 'Salvar Modelos'}</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={handleSyncAll}
+              disabled={loadingNim || loadingOpenRouter}
+              className="btn-secondary"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '8px 14px' }}
+              title="Buscar lista atualizada de modelos diretamente das APIs da NVIDIA e OpenRouter"
+            >
+              <RefreshCw size={15} className={loadingNim || loadingOpenRouter ? 'animate-spin' : ''} />
+              <span>{loadingNim || loadingOpenRouter ? 'Puxando Modelos...' : 'Puxar da API'}</span>
+            </button>
+
+            <button type="submit" className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {savedSuccess ? <CheckCircle2 size={16} /> : <Save size={16} />}
+              <span>{savedSuccess ? 'Salvo!' : 'Salvar Modelos'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Status Callout */}
@@ -84,7 +204,9 @@ export default function AiConfig({ aiSettings, onSave }) {
           marginBottom: '24px',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between'
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '10px'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {aiSettings?.isFallbackActive ? (
@@ -100,8 +222,8 @@ export default function AiConfig({ aiSettings, onSave }) {
               </div>
               <p style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>
                 {aiSettings?.isFallbackActive
-                  ? `Motivo: ${aiSettings.lastFallbackReason || 'Erro temporário na rota primária'}`
-                  : 'Cascata de segurança ativa: se o Primário falhar, o Secundário assume; se ambos oscilarem, o 3º Fallback OpenRouter atende automaticamente.'}
+                  ? `Motivo: ${aiSettings.lastFallbackReason || 'Limite de tempo ou instabilidade na rota primária'}`
+                  : 'Cascata de segurança ativa: se o Primário demorar mais de 3 min, o Secundário assume; se ambos falharem, o 3º Fallback OpenRouter atende.'}
               </p>
             </div>
           </div>
@@ -119,8 +241,9 @@ export default function AiConfig({ aiSettings, onSave }) {
         </div>
 
         {/* 3-Column Cascade Grid: Primary, Fallback 2, Fallback 3 */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '24px' }}>
-          {/* Primary Model Card */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+          
+          {/* 1. Primary Model Card */}
           <div style={{
             background: 'rgba(255, 255, 255, 0.02)',
             padding: '20px',
@@ -137,25 +260,92 @@ export default function AiConfig({ aiSettings, onSave }) {
                   1. Primário (NVIDIA NIM)
                 </h4>
               </div>
-              <span className="badge badge-conversa">Rota Principal</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span className="badge badge-conversa">Principal</span>
+                <button
+                  type="button"
+                  onClick={() => fetchNimModels(formData.primaryApiKey)}
+                  disabled={loadingNim}
+                  title="Atualizar modelos disponíveis para esta chave"
+                  style={{ background: 'none', border: 'none', color: '#c084fc', cursor: 'pointer', padding: '2px' }}
+                >
+                  <RefreshCw size={14} className={loadingNim ? 'animate-spin' : ''} />
+                </button>
+              </div>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                Modelo Primário
-              </label>
-              <select
-                value={formData.primaryModel}
-                onChange={(e) => setFormData({ ...formData, primaryModel: e.target.value })}
-                className="input-field"
-                style={{ fontSize: '0.84rem' }}
-              >
-                {nimModels.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1' }}>
+                  Modelo Primário ({nimModels.length} na API)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setPrimaryManualMode(!primaryManualMode)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    fontSize: '0.72rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  {primaryManualMode ? <List size={12} /> : <Edit3 size={12} />}
+                  <span>{primaryManualMode ? 'Lista da API' : 'Digitar ID'}</span>
+                </button>
+              </div>
+
+              {primaryManualMode ? (
+                <input
+                  type="text"
+                  value={formData.primaryModel}
+                  onChange={(e) => setFormData({ ...formData, primaryModel: e.target.value })}
+                  placeholder="Ex: meta/llama-3.2-11b-vision-instruct"
+                  className="input-field"
+                  style={{ fontSize: '0.84rem' }}
+                />
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ position: 'relative' }}>
+                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: '#64748b' }} />
+                    <input
+                      type="text"
+                      value={primarySearch}
+                      onChange={(e) => setPrimarySearch(e.target.value)}
+                      placeholder="Filtrar (ex: llama, glm, deepseek, gemma)..."
+                      className="input-field"
+                      style={{ paddingLeft: '32px', fontSize: '0.78rem', height: '34px', background: 'rgba(0,0,0,0.2)' }}
+                    />
+                  </div>
+
+                  <select
+                    value={formData.primaryModel}
+                    onChange={(e) => setFormData({ ...formData, primaryModel: e.target.value })}
+                    className="input-field"
+                    style={{ fontSize: '0.84rem' }}
+                  >
+                    {!nimModels.some((m) => m.id === formData.primaryModel) && (
+                      <option value={formData.primaryModel}>
+                        📌 {formData.primaryModel} (Atual)
+                      </option>
+                    )}
+                    {filteredPrimaryNim.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {nimError && (
+                <p style={{ fontSize: '0.72rem', color: '#f87171', marginTop: '4px' }}>
+                  ⚠️ {nimError}
+                </p>
+              )}
             </div>
 
             <div>
@@ -185,7 +375,7 @@ export default function AiConfig({ aiSettings, onSave }) {
             </div>
           </div>
 
-          {/* Secondary / Fallback Model Card */}
+          {/* 2. Secondary / Fallback Model Card */}
           <div style={{
             background: 'rgba(255, 255, 255, 0.02)',
             padding: '20px',
@@ -202,25 +392,86 @@ export default function AiConfig({ aiSettings, onSave }) {
                   2. Fallback 2 (NVIDIA NIM)
                 </h4>
               </div>
-              <span className="badge badge-pitch">Contingência 1</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span className="badge badge-pitch">Contingência 1</span>
+                <button
+                  type="button"
+                  onClick={() => fetchNimModels(formData.fallbackApiKey || formData.primaryApiKey)}
+                  disabled={loadingNim}
+                  title="Atualizar modelos disponíveis para esta chave"
+                  style={{ background: 'none', border: 'none', color: '#fbbf24', cursor: 'pointer', padding: '2px' }}
+                >
+                  <RefreshCw size={14} className={loadingNim ? 'animate-spin' : ''} />
+                </button>
+              </div>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                Modelo Fallback 2
-              </label>
-              <select
-                value={formData.fallbackModel}
-                onChange={(e) => setFormData({ ...formData, fallbackModel: e.target.value })}
-                className="input-field"
-                style={{ fontSize: '0.84rem' }}
-              >
-                {nimModels.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1' }}>
+                  Modelo Fallback 2 ({nimModels.length} na API)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setFallbackManualMode(!fallbackManualMode)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    fontSize: '0.72rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  {fallbackManualMode ? <List size={12} /> : <Edit3 size={12} />}
+                  <span>{fallbackManualMode ? 'Lista da API' : 'Digitar ID'}</span>
+                </button>
+              </div>
+
+              {fallbackManualMode ? (
+                <input
+                  type="text"
+                  value={formData.fallbackModel}
+                  onChange={(e) => setFormData({ ...formData, fallbackModel: e.target.value })}
+                  placeholder="Ex: google/diffusiongemma-26b-a4b-it"
+                  className="input-field"
+                  style={{ fontSize: '0.84rem' }}
+                />
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ position: 'relative' }}>
+                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: '#64748b' }} />
+                    <input
+                      type="text"
+                      value={fallbackSearch}
+                      onChange={(e) => setFallbackSearch(e.target.value)}
+                      placeholder="Filtrar (ex: gemma, llama, mistral)..."
+                      className="input-field"
+                      style={{ paddingLeft: '32px', fontSize: '0.78rem', height: '34px', background: 'rgba(0,0,0,0.2)' }}
+                    />
+                  </div>
+
+                  <select
+                    value={formData.fallbackModel}
+                    onChange={(e) => setFormData({ ...formData, fallbackModel: e.target.value })}
+                    className="input-field"
+                    style={{ fontSize: '0.84rem' }}
+                  >
+                    {!nimModels.some((m) => m.id === formData.fallbackModel) && (
+                      <option value={formData.fallbackModel}>
+                        📌 {formData.fallbackModel} (Atual)
+                      </option>
+                    )}
+                    {filteredFallbackNim.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             <div>
@@ -245,12 +496,12 @@ export default function AiConfig({ aiSettings, onSave }) {
                 </button>
               </div>
               <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
-                Outra conta NVIDIA ou chave reserva.
+                Chave reserva ou de outra conta NVIDIA.
               </p>
             </div>
           </div>
 
-          {/* Tertiary / OpenRouter Fallback Model Card */}
+          {/* 3. Tertiary / OpenRouter Fallback Model Card */}
           <div style={{
             background: 'rgba(255, 255, 255, 0.02)',
             padding: '20px',
@@ -267,25 +518,114 @@ export default function AiConfig({ aiSettings, onSave }) {
                   3. Fallback 3 (OpenRouter)
                 </h4>
               </div>
-              <span className="badge badge-meta">Contingência 2</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span className="badge badge-meta">Contingência 2</span>
+                <button
+                  type="button"
+                  onClick={() => fetchOpenRouterModels(formData.tertiaryApiKey)}
+                  disabled={loadingOpenRouter}
+                  title="Atualizar modelos do OpenRouter"
+                  style={{ background: 'none', border: 'none', color: '#34d399', cursor: 'pointer', padding: '2px' }}
+                >
+                  <RefreshCw size={14} className={loadingOpenRouter ? 'animate-spin' : ''} />
+                </button>
+              </div>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                Modelo Fallback 3 (OpenRouter)
-              </label>
-              <select
-                value={formData.tertiaryModel}
-                onChange={(e) => setFormData({ ...formData, tertiaryModel: e.target.value })}
-                className="input-field"
-                style={{ fontSize: '0.84rem' }}
-              >
-                {openRouterModels.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1' }}>
+                  Modelo OpenRouter ({openRouterModels.length} disponíveis)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setTertiaryManualMode(!tertiaryManualMode)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    fontSize: '0.72rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  {tertiaryManualMode ? <List size={12} /> : <Edit3 size={12} />}
+                  <span>{tertiaryManualMode ? 'Lista da API' : 'Digitar ID'}</span>
+                </button>
+              </div>
+
+              {tertiaryManualMode ? (
+                <input
+                  type="text"
+                  value={formData.tertiaryModel}
+                  onChange={(e) => setFormData({ ...formData, tertiaryModel: e.target.value })}
+                  placeholder="Ex: nvidia/nemotron-3.5-lightning:free"
+                  className="input-field"
+                  style={{ fontSize: '0.84rem' }}
+                />
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <Search size={14} style={{ position: 'absolute', left: '10px', top: '10px', color: '#64748b' }} />
+                      <input
+                        type="text"
+                        value={tertiarySearch}
+                        onChange={(e) => setTertiarySearch(e.target.value)}
+                        placeholder="Filtrar (ex: nemotron, llama, gemma)..."
+                        className="input-field"
+                        style={{ paddingLeft: '32px', fontSize: '0.78rem', height: '34px', background: 'rgba(0,0,0,0.2)' }}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setTertiaryOnlyFree(!tertiaryOnlyFree)}
+                      style={{
+                        padding: '0 10px',
+                        borderRadius: '8px',
+                        border: '1px solid',
+                        borderColor: tertiaryOnlyFree ? '#10b981' : 'rgba(255,255,255,0.15)',
+                        background: tertiaryOnlyFree ? 'rgba(16, 185, 129, 0.2)' : 'rgba(0,0,0,0.2)',
+                        color: tertiaryOnlyFree ? '#34d399' : '#94a3b8',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
+                      }}
+                      title="Alternar entre ver apenas modelos 100% gratuitos ou todos os 460+ modelos do OpenRouter"
+                    >
+                      {tertiaryOnlyFree ? `✓ Gratuitos (${freeCount})` : 'Todos (460+)'}
+                    </button>
+                  </div>
+
+                  <select
+                    value={formData.tertiaryModel}
+                    onChange={(e) => setFormData({ ...formData, tertiaryModel: e.target.value })}
+                    className="input-field"
+                    style={{ fontSize: '0.84rem' }}
+                  >
+                    {!openRouterModels.some((m) => m.id === formData.tertiaryModel) && (
+                      <option value={formData.tertiaryModel}>
+                        📌 {formData.tertiaryModel} (Atual)
+                      </option>
+                    )}
+                    {filteredOpenRouter.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.isFree ? '🎁 [Gratuito] ' : ''}{m.name || m.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {openRouterError && (
+                <p style={{ fontSize: '0.72rem', color: '#f87171', marginTop: '4px' }}>
+                  ⚠️ {openRouterError}
+                </p>
+              )}
             </div>
 
             <div>
@@ -310,7 +650,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                 </button>
               </div>
               <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
-                Obtenha em <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" style={{ color: '#34d399' }}>openrouter.ai/keys</a> (modelo 100% gratuito)
+                Obtenha em <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" style={{ color: '#34d399' }}>openrouter.ai/keys</a> (com modelos 100% gratuitos)
               </p>
             </div>
           </div>
