@@ -724,13 +724,19 @@ class WhatsAppService {
         //    b) [AUDIO: ...] or [ÁUDIO: ...] (bracketed text)
         //    c) [ENVIAR_AUDIO: ...]
         let audioSpeechText = null;
+        let rawTextBeforeAudio = '';
+        let rawTextAfterAudio = '';
+        let hasAudioTag = false;
+
         // Check for quoted format: [Áudio]: "..." or [AUDIO]: "..."
         const quotedRegex = /\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)\s*\]:?\s*["'“”«»]([\s\S]*?)["'“”«»]/i;
         const quotedMatch = replyText.match(quotedRegex);
 
         if (quotedMatch) {
+          hasAudioTag = true;
           audioSpeechText = quotedMatch[1].trim();
-          replyText = replyText.replace(quotedMatch[0], '').trim();
+          rawTextBeforeAudio = replyText.slice(0, quotedMatch.index);
+          rawTextAfterAudio = replyText.slice(quotedMatch.index + quotedMatch[0].length);
         } else {
           // Balanced bracket extraction to safely capture nested emotion/pause tags like [warm and calm], [break], etc.
           const tagStartRegex = /\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)\s*/i;
@@ -756,59 +762,11 @@ class WhatsAppService {
               .trim()
               .replace(/^["'“”«»]+|["'“”«»]+$/g, '')
               .trim();
-            const fullTag = replyText.slice(startIndex, endIndex + 1);
-            replyText = replyText.replace(fullTag, '').trim();
-          }
-        }
-
-        // Clean any remaining audio tag remnants from replyText so they NEVER leak as plain text bubbles
-        replyText = replyText
-          .replace(/\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)[\s\S]*?(?:\]|$)/gi, '')
-          .replace(/\[\s*(?:AUDIO|ÁUDIO)\s*\]:?\s*["'“”«»][\s\S]*?["'“”«»]/gi, '')
-          .trim();
-
-        if (audioSpeechText && audioSpeechText.length > 0 && !signal.aborted) {
-          // Generate audio via Fish Audio TTS with automatic AI regional voice resolution
-          try {
-            const generatedAudio = await fishAudio.generateSpeech(audioSpeechText, null, null, { phone, jid, text: audioSpeechText });
-            if (signal.aborted) return;
-
-            // Anti-ban: Simulate human recording voice note
-            const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
-            await antiBan.sleep(thinkingDelay, signal);
-            if (signal.aborted || this.status !== 'connected' || !this.sock) return;
-
-            // WhatsApp presence: 'recording'
-            await this.safePresence(jid, 'recording');
-            await antiBan.sleep(recordingDelay, signal);
-            await this.safePresence(jid, 'paused');
-            if (signal.aborted || this.status !== 'connected' || !this.sock) return;
-
-            // Send native WhatsApp Voice Note (PTT) with animated waveform
-            const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
-            const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
-            await this.sock.sendMessage(jid, {
-              audio: audioBuffer,
-              mimetype: 'audio/ogg; codecs=opus',
-              ptt: true,
-              waveform
-            });
-
-            // Save audio message to store
-            const audioMsg = storage.addMessage({
-              phone,
-              fromMe: true,
-              text: `🎵 [Áudio]: "${audioSpeechText}"`,
-              type: 'audio',
-              mediaUrl: generatedAudio.audioUrl,
-              audioDuration: generatedAudio.durationSec
-            });
-            this.emit('chat:message', audioMsg);
-            storage.addLog('SUCCESS', `Áudio humanizado Fish Audio enviado para ${phone}`);
-          } catch (audioErr) {
-            console.error('Failed to send voice note:', audioErr);
-            // If audio fails, send as text fallback so customer gets the message
-            replyText = `${audioSpeechText}\n\n${replyText}`.trim();
+            hasAudioTag = true;
+            rawTextBeforeAudio = replyText.slice(0, startIndex);
+            rawTextAfterAudio = replyText.slice(endIndex + 1);
+          } else {
+            rawTextAfterAudio = replyText;
           }
         }
 
@@ -836,7 +794,7 @@ class WhatsAppService {
           }
         }
 
-        // 3. Antifraud & Delivery Strategy Engine
+        // 4. Antifraud & Delivery Strategy Engine
         const settings = storage.getSettings();
         const product = settings.product || {};
         const deliveryStrategy = product.deliveryStrategy || 'require_payment'; // 'require_payment' | 'deliver_first' | 'per_deliverable'
@@ -925,10 +883,176 @@ class WhatsAppService {
           }
         }
 
-        // ========================================================
-        // STEP 1: SEND DELIVERABLES (PDFs / Files) FIRST
-        // Deliverables arrive at the TOP of the conversation!
-        // ========================================================
+        // 5. Text Sanitizer for Natural WhatsApp Bubbles (Zero leaked prompts, tags or thought reasoning)
+        const sanitizeBubbleText = (rawStr) => {
+          if (!rawStr || typeof rawStr !== 'string') return '';
+          let txt = rawStr;
+          for (const d of allDeliverables) {
+            const cleanTag = (d.tag || '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            if (cleanTag) {
+              txt = txt.replace(new RegExp(`[-•◆*]?\\s*\\[\\s*(?:(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE):\\s*)?${cleanTag}\\s*\\]`, 'gi'), '');
+            }
+          }
+          txt = txt.replace(/\[(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE|TODOS_ARQUIVOS|TODOS_ENTREGAVEIS|TUDO):[\s\S]*?(?:\]|$)/gi, '');
+          txt = txt.replace(/^[-•◆*]?\s*\[[A-Z0-9_]{3,}\]\s*$/gm, '');
+          txt = txt.replace(/\[[A-Z0-9_]{4,}\]/g, '');
+          txt = txt.replace(/\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)[\s\S]*?(?:\]|$)/gi, '');
+          txt = txt.replace(/\[\s*(?:AUDIO|ÁUDIO)\s*\]:?\s*["'“”«»][\s\S]*?["'“”«»]/gi, '');
+          txt = txt.replace(/<think>[\s\S]*?<\/think>/gi, '');
+          txt = txt.replace(/```(?:thought|thinking)[\s\S]*?```/gi, '');
+          txt = txt.replace(/^(?:thought|thinking):\s*[\s\S]*?\n\n/gi, '');
+          txt = txt.replace(/\[\s*(?:DIRETRIZ|FASE|REGRA|INSTRUÇÃO|ATENÇÃO|ESTRUTURA|COMO RESPONDER|CONTEXTO|SITUAÇÃO)[^\]]*\]:?/gi, '');
+          txt = txt.replace(/^[-•◆*]?\s*(?:DIRETRIZ DE FUNIL|OFERTA INVERTIDA|FECHAMENTO EMOCIONAL|LIBERAÇÃO DE TUDO|CONEXÃO INICIAL|DIRETRIZ MÁXIMA|INSTRUÇÃO DO MOMENTO|SITUAÇÃO ATUAL)[\s\S]*?(?:\n|$)/gmi, '');
+          txt = txt.replace(/^O cliente JÁ RECEBEU TUDO[^\n]*\n?/gmi, '');
+          txt = txt.replace(/^NUNCA diga ["'“]amostra["'”]?[^\n]*\n?/gmi, '');
+          txt = txt.replace(/^NUNCA diga [*_]?libero o restante[^\n]*\n?/gmi, '');
+          txt = txt.replace(/^REGRA (?:CRÍTICA|SUPREMA|ABSOLUTA):[^\n]*\n?/gmi, '');
+          txt = txt.replace(/^ATENÇÃO (?:MÁXIMA|SUPREMA|ABSOLUTA):[^\n]*\n?/gmi, '');
+          txt = txt.replace(/^Sua mensagem DEVE seguir rigorosamente esta estrutura:?[^\n]*\n?/gmi, '');
+          txt = txt.replace(/^ESTRUTURA OBRIGATÓRIA DA SUA RESPOSTA:?[^\n]*\n?/gmi, '');
+          txt = txt.replace(/^Como agir conforme a análise:?[^\n]*\n?/gmi, '');
+          txt = txt.replace(/^(?:Entendi(?:\s+perfeitamente)?|Com certeza|Claro que sim|Claro|Perfeito|Certo)[!,.]?\s*(?:Aqui está|Segue|Abaixo está|Veja|vou te mandar|essa é a resposta)[\s\S]*?:(?:\n+|\s+)/i, '');
+          txt = txt.replace(/^(?:Aqui está a resposta|Aqui está a mensagem|Segue a mensagem|Segue o texto que você deve enviar)[\s\S]*?:(?:\n+|\s+)/i, '');
+          txt = txt.replace(/\n+(?:Essa resposta segue rigorosamente|Espero que ajude|Qualquer dúvida estou à disposição|Se precisar de mais alguma coisa|Como posso te ajudar agora\?|Já tem algum lead aguardando)[\s\S]*?$/i, '');
+          txt = txt.replace(/Aqui está (?:o seu |todo o )?material completo:?\s*$/gim, '');
+          txt = txt.replace(/^[-•◆*]\s*$/gm, '');
+          txt = txt.replace(/\n{3,}/g, '\n\n').trim();
+          return txt;
+        };
+
+        let textBefore = sanitizeBubbleText(rawTextBeforeAudio);
+        let textAfter = sanitizeBubbleText(rawTextAfterAudio);
+
+        // 6. Safeguard: Ensure PIX key is present ONLY during the initial Phase 2 closing (AFTER deliverables have been sent), or when customer explicitly asked for PIX!
+        const sentMsgsForPixCheck = storage.getMessages(phone) || [];
+        const hasAlreadySentPixInHistory = sentMsgsForPixCheck.some((m) => m.fromMe && m.text && (
+          (product.pixKey && m.text.includes(product.pixKey)) ||
+          m.text.includes('Chave PIX') ||
+          m.text.includes('Copiar Chave PIX')
+        ));
+        const hasSentDeliverablesInHistory = sentMsgsForPixCheck.some((m) => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
+        const hasReceivedDeliverables = hasSentDeliverablesInHistory || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || leadObj?.deliverableSent === true;
+
+        const isFirstTimePhase2Pix = deliveryStrategy === 'deliver_first' &&
+          hasReceivedDeliverables &&
+          deliverablesToSend.length === 0 &&
+          !hasAlreadySentPixInHistory &&
+          leadObj?.stage !== 'PIX_ENVIADO';
+
+        if (product.pixKey && (isFirstTimePhase2Pix || userWantsPix)) {
+          const pixPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
+          const pixBlock = `Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${pixPrice}\n\nAssim que você fizer, me envia o comprovante aqui tá bom? ❤️`;
+          const emotionalAppeal = `Eu confiei em você de olhos fechados e já te entreguei todo o material completo antes mesmo de você pagar! Fiz isso de coração aberto porque sei o quanto você se preocupa e quer o melhor para o seu pequeno... ❤️\n\nAgora estou aqui de coração te pedindo pra fazer a sua parte com essa contribuição simbólica de apenas R$ ${pixPrice}, que é o que mantém nosso trabalho vivo e de pé!`;
+
+          if (textAfter.length > 0) {
+            if (isFirstTimePhase2Pix && !userWantsPix && !textAfter.toLowerCase().includes('confi')) {
+              textAfter = `${emotionalAppeal}\n\n${textAfter}`;
+            }
+            if (!textAfter.includes(product.pixKey)) {
+              textAfter += `\n\n${pixBlock}`;
+            }
+          } else if (textBefore.length > 0 && !hasAudioTag) {
+            if (isFirstTimePhase2Pix && !userWantsPix && !textBefore.toLowerCase().includes('confi')) {
+              textBefore = `${emotionalAppeal}\n\n${textBefore}`;
+            }
+            if (!textBefore.includes(product.pixKey)) {
+              textBefore += `\n\n${pixBlock}`;
+            }
+          } else {
+            textAfter = (isFirstTimePhase2Pix && !userWantsPix) ? `${emotionalAppeal}\n\n${pixBlock}` : pixBlock;
+          }
+
+          storage.upsertLead(phone, { stage: 'PIX_ENVIADO', deliverableSent: true });
+        }
+
+        // 7. Dispatch Helpers for Text Bubbles & Audio Voice Notes
+        const sendTextBubbles = async (textToSend) => {
+          if (!textToSend || textToSend.trim().length === 0 || signal.aborted) return;
+          const bubbles = antiBan.splitIntoNaturalBubbles(textToSend);
+
+          for (let i = 0; i < bubbles.length; i++) {
+            if (signal.aborted) {
+              console.log(`[Zapix Human Pacing] Envio de bolhas cancelado para ${phone} pois o lead enviou nova mensagem.`);
+              break;
+            }
+            const bubble = bubbles[i];
+            const { baseThinking, typingTime } = antiBan.calculateTypingDelay(bubble);
+
+            await antiBan.sleep(baseThinking, signal);
+            if (signal.aborted || this.status !== 'connected' || !this.sock) break;
+
+            await this.safePresence(jid, 'composing');
+            await antiBan.sleep(typingTime, signal);
+            await this.safePresence(jid, 'paused');
+            if (signal.aborted || this.status !== 'connected' || !this.sock) break;
+
+            await this.sock.sendMessage(jid, { text: bubble });
+
+            const sentMsg = storage.addMessage({
+              phone,
+              fromMe: true,
+              text: bubble,
+              type: 'text'
+            });
+            this.emit('chat:message', sentMsg);
+
+            if (i < bubbles.length - 1) {
+              await antiBan.sleep(1500, signal);
+            }
+          }
+        };
+
+        const sendVoiceNote = async (speechText) => {
+          if (!speechText || speechText.trim().length === 0 || signal.aborted) return;
+          try {
+            const generatedAudio = await fishAudio.generateSpeech(speechText, null, null, { phone, jid, text: speechText });
+            if (signal.aborted) return;
+
+            const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
+            await antiBan.sleep(thinkingDelay, signal);
+            if (signal.aborted || this.status !== 'connected' || !this.sock) return;
+
+            await this.safePresence(jid, 'recording');
+            await antiBan.sleep(recordingDelay, signal);
+            await this.safePresence(jid, 'paused');
+            if (signal.aborted || this.status !== 'connected' || !this.sock) return;
+
+            const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
+            const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
+            await this.sock.sendMessage(jid, {
+              audio: audioBuffer,
+              mimetype: 'audio/ogg; codecs=opus',
+              ptt: true,
+              waveform
+            });
+
+            const audioMsg = storage.addMessage({
+              phone,
+              fromMe: true,
+              text: `🎵 [Áudio]: "${speechText}"`,
+              type: 'audio',
+              mediaUrl: generatedAudio.audioUrl,
+              audioDuration: generatedAudio.durationSec
+            });
+            this.emit('chat:message', audioMsg);
+            storage.addLog('SUCCESS', `Áudio humanizado Fish Audio enviado para ${phone}`);
+          } catch (audioErr) {
+            console.error('Failed to send voice note:', audioErr);
+            // Fallback: send speech text as text bubble so customer gets the message
+            await sendTextBubbles(speechText);
+          }
+        };
+
+        // 8. EXECUTE DISPATCH IN DYNAMIC SEQUENCE (AI decides what comes first!)
+        // 8.1. Send text before audio (if any)
+        if (textBefore && textBefore.length > 0 && !signal.aborted) {
+          await sendTextBubbles(textBefore);
+          if (hasAudioTag && !signal.aborted) {
+            await antiBan.sleep(1200, signal);
+          }
+        }
+
+        // 8.2. Send deliverables (if any)
         if (deliverablesToSend.length > 0 && !signal.aborted) {
           for (const deliverableToSend of deliverablesToSend) {
             if (signal.aborted || this.status !== 'connected' || !this.sock) break;
@@ -976,134 +1100,22 @@ class WhatsAppService {
             }
           }
           storage.upsertLead(phone, { stage: 'ENTREGUE', deliverableSent: true, deliverableSentAt: Date.now() });
-          // Fluxo 100% autônomo da IA: a IA conduz a conversa e faz o pitch no momento ideal, sem forçar temporizadores robóticos
         }
 
-        // ========================================================
-        // STEP 3: CLEAN SYSTEM TAGS & GUARANTEE PIX BLOCK
-        // ========================================================
-        // Thoroughly strip all deliverable tags by known tag names so they NEVER leak as text bubbles!
-        for (const d of allDeliverables) {
-          const cleanTag = (d.tag || '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          if (cleanTag) {
-            replyText = replyText.replace(new RegExp(`[-•◆*]?\\s*\\[\\s*(?:(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE):\\s*)?${cleanTag}\\s*\\]`, 'gi'), '');
+        // 8.3. Send audio voice note (if audio tag was present)
+        if (hasAudioTag && audioSpeechText && audioSpeechText.length > 0 && !signal.aborted) {
+          await sendVoiceNote(audioSpeechText);
+          if (textAfter && textAfter.length > 0 && !signal.aborted) {
+            await antiBan.sleep(1500, signal);
           }
         }
 
-        // Strip generic bracketed uppercase tags like [PRODUTO], [PDF], [ENVIAR_ARQUIVO: ...]
-        replyText = replyText.replace(/\[(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE|TODOS_ARQUIVOS|TODOS_ENTREGAVEIS|TUDO):[\s\S]*?(?:\]|$)/gi, '');
-        replyText = replyText.replace(/^[-•◆*]?\s*\[[A-Z0-9_]{3,}\]\s*$/gm, '');
-        replyText = replyText.replace(/\[[A-Z0-9_]{4,}\]/g, '');
-
-        // Strip orphaned bullets, intro lines or audio remnants
-        replyText = replyText.replace(/Aqui está (?:o seu |todo o )?material completo:?\s*$/gim, '');
-        replyText = replyText.replace(/^[-•◆*]\s*$/gm, '');
-        replyText = replyText.replace(/\[\s*(?:ENVIAR_?|MANDAR_?|GRAVAR_?)?(?:AUDIO|ÁUDIO)(?:\s*:|\s*\]:?)[\s\S]*?(?:\]|$)/gi, '');
-        replyText = replyText.replace(/\[\s*(?:AUDIO|ÁUDIO)\s*\]:?\s*["'“”«»][\s\S]*?["'“”«»]/gi, '');
-        // Anti-Leak Safeguard: Purge any prompt rules, CoT reasoning or developer notes before sending
-        replyText = replyText.replace(/<think>[\s\S]*?<\/think>/gi, '');
-        replyText = replyText.replace(/```(?:thought|thinking)[\s\S]*?```/gi, '');
-        replyText = replyText.replace(/^(?:thought|thinking):\s*[\s\S]*?\n\n/gi, '');
-        replyText = replyText.replace(/\[\s*(?:DIRETRIZ|FASE|REGRA|INSTRUÇÃO|ATENÇÃO|ESTRUTURA|COMO RESPONDER|CONTEXTO|SITUAÇÃO)[^\]]*\]:?/gi, '');
-        replyText = replyText.replace(/^[-•◆*]?\s*(?:DIRETRIZ DE FUNIL|OFERTA INVERTIDA|FECHAMENTO EMOCIONAL|LIBERAÇÃO DE TUDO|CONEXÃO INICIAL|DIRETRIZ MÁXIMA|INSTRUÇÃO DO MOMENTO|SITUAÇÃO ATUAL)[\s\S]*?(?:\n|$)/gmi, '');
-        replyText = replyText.replace(/^O cliente JÁ RECEBEU TUDO[^\n]*\n?/gmi, '');
-        replyText = replyText.replace(/^NUNCA diga ["'“]amostra["'”]?[^\n]*\n?/gmi, '');
-        replyText = replyText.replace(/^NUNCA diga [*_]?libero o restante[^\n]*\n?/gmi, '');
-        replyText = replyText.replace(/^REGRA (?:CRÍTICA|SUPREMA|ABSOLUTA):[^\n]*\n?/gmi, '');
-        replyText = replyText.replace(/^ATENÇÃO (?:MÁXIMA|SUPREMA|ABSOLUTA):[^\n]*\n?/gmi, '');
-        replyText = replyText.replace(/^Sua mensagem DEVE seguir rigorosamente esta estrutura:?[^\n]*\n?/gmi, '');
-        replyText = replyText.replace(/^ESTRUTURA OBRIGATÓRIA DA SUA RESPOSTA:?[^\n]*\n?/gmi, '');
-        replyText = replyText.replace(/^Como agir conforme a análise:?[^\n]*\n?/gmi, '');
-        replyText = replyText.replace(/^(?:Entendi(?:\s+perfeitamente)?|Com certeza|Claro que sim|Claro|Perfeito|Certo)[!,.]?\s*(?:Aqui está|Segue|Abaixo está|Veja|vou te mandar|essa é a resposta)[\s\S]*?:(?:\n+|\s+)/i, '');
-        replyText = replyText.replace(/^(?:Aqui está a resposta|Aqui está a mensagem|Segue a mensagem|Segue o texto que você deve enviar)[\s\S]*?:(?:\n+|\s+)/i, '');
-        replyText = replyText.replace(/\n+(?:Essa resposta segue rigorosamente|Espero que ajude|Qualquer dúvida estou à disposição|Se precisar de mais alguma coisa|Como posso te ajudar agora\?|Já tem algum lead aguardando)[\s\S]*?$/i, '');
-        replyText = replyText.replace(/\n{3,}/g, '\n\n').trim();
-
-        // Safeguard: Ensure PIX key is present ONLY during the initial Phase 2 closing (AFTER deliverables have been sent), or when customer explicitly asked for PIX!
-        const sentMsgsForPixCheck = storage.getMessages(phone) || [];
-        const hasAlreadySentPixInHistory = sentMsgsForPixCheck.some((m) => m.fromMe && m.text && (
-          (product.pixKey && m.text.includes(product.pixKey)) ||
-          m.text.includes('Chave PIX') ||
-          m.text.includes('Copiar Chave PIX')
-        ));
-        const hasSentDeliverablesInHistory = sentMsgsForPixCheck.some((m) => m.fromMe && m.text && m.text.includes('📎 [Enviado]:'));
-        const hasReceivedDeliverables = hasSentDeliverablesInHistory || leadObj?.stage === 'ENTREGUE' || leadObj?.stage === 'PIX_ENVIADO' || leadObj?.deliverableSent === true;
-
-        // ONLY true on the very FIRST transition to Phase 2 (materials received, not currently sending files, and PIX never sent before in history)!
-        const isFirstTimePhase2Pix = deliveryStrategy === 'deliver_first' &&
-          hasReceivedDeliverables &&
-          deliverablesToSend.length === 0 &&
-          !hasAlreadySentPixInHistory &&
-          leadObj?.stage !== 'PIX_ENVIADO';
-
-        if (product.pixKey && (isFirstTimePhase2Pix || userWantsPix)) {
-          const pixPrice = Number(product.price || 15).toFixed(2).replace('.', ',');
-          const pixBlock = `Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${pixPrice}\n\nAssim que você fizer, me envia o comprovante aqui tá bom? ❤️`;
-
-          const emotionalAppeal = `Eu confiei em você de olhos fechados e já te entreguei todo o material completo antes mesmo de você pagar! Fiz isso de coração aberto porque sei o quanto você se preocupa e quer o melhor para o seu pequeno... ❤️\n\nAgora estou aqui de coração te pedindo pra fazer a sua parte com essa contribuição simbólica de apenas R$ ${pixPrice}, que é o que mantém nosso trabalho vivo e de pé!`;
-
-          if (!replyText || replyText.trim().length === 0) {
-            replyText = `${emotionalAppeal}\n\n${pixBlock}`;
-          } else {
-            // Em Oferta Invertida Fase 2, apenas na PRIMEIRA vez que cobra e se o lead não pediu o PIX diretamente, garante o texto de apelo
-            if (isFirstTimePhase2Pix && !userWantsPix && !replyText.toLowerCase().includes('confi')) {
-              replyText = `${emotionalAppeal}\n\n${replyText}`;
-            }
-            if (!replyText.includes(product.pixKey)) {
-              replyText += `\n\n${pixBlock}`;
-            }
-          }
-
-          storage.upsertLead(phone, { stage: 'PIX_ENVIADO', deliverableSent: true });
+        // 8.4. Send text after audio (or follow-up/PIX/summary)
+        if (textAfter && textAfter.length > 0 && !signal.aborted) {
+          await sendTextBubbles(textAfter);
         }
 
-        // ========================================================
-        // STEP 4: SEND TEXT MESSAGE BUBBLES
-        // ========================================================
-        if (replyText && replyText.length > 0 && !signal.aborted) {
-          const bubbles = antiBan.splitIntoNaturalBubbles(replyText);
-
-          for (let i = 0; i < bubbles.length; i++) {
-            if (signal.aborted) {
-              console.log(`[Zapix Human Pacing] Envio de bolhas cancelado para ${phone} pois o lead enviou nova mensagem.`);
-              break;
-            }
-            const bubble = bubbles[i];
-            const { baseThinking, typingTime } = antiBan.calculateTypingDelay(bubble);
-
-            // Thinking pause (human reading / deciding)
-            await antiBan.sleep(baseThinking, signal);
-            if (signal.aborted || this.status !== 'connected' || !this.sock) break;
-
-            // Typing presence update
-            await this.safePresence(jid, 'composing');
-            await antiBan.sleep(typingTime, signal);
-            await this.safePresence(jid, 'paused');
-            if (signal.aborted || this.status !== 'connected' || !this.sock) break;
-
-            // Send bubble
-            await this.sock.sendMessage(jid, { text: bubble });
-
-            // Store message and emit to live chat
-            const sentMsg = storage.addMessage({
-              phone,
-              fromMe: true,
-              text: bubble,
-              type: 'text'
-            });
-            this.emit('chat:message', sentMsg);
-
-            // Natural pause between bubbles
-            if (i < bubbles.length - 1) {
-              await antiBan.sleep(1500, signal);
-            }
-          }
-        }
-
-        // ========================================================
-        // STEP 5: NATIVE 1-CLICK PIX COPY BUTTON
-        // ========================================================
-        // Send PIX interactive button ONLY on the first time Phase 2 closing is sent or when user explicitly asks for PIX
+        // 8.5. Send native 1-click PIX Copy Button (if applicable)
         const shouldSendPixButton =
           product.pixKey &&
           product.sendPixButton !== false &&
