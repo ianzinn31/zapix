@@ -840,40 +840,184 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
     throw new Error('Modelo OpenRouter retornou conteúdo vazio ou apenas tokens de raciocínio interno.');
   }
 
-  // Direct Google Gemini API call (Google AI Studio OpenAI-compatible endpoint)
-  async callGoogleGeminiDirect(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 60000, targetLanguage = 'pt', targetCountry = 'Brasil') {
-    if (!apiKey) {
-      throw new Error(`Google Gemini API Key não configurada para o modelo ${model}`);
-    }
+  // Helper to format messages for Google's native Gemini generateContent API
+  formatGeminiNativePayload(messages, temperature = 0.7, maxTokens = 1500) {
+    let systemText = '';
+    const rawTurns = [];
 
-    const normalizedModel = String(model).replace(/^google\//i, '').trim();
+    for (const msg of messages || []) {
+      const text = (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content || '')).trim();
+      if (!text) continue;
 
-    const payload = {
-      model: normalizedModel,
-      messages,
-      temperature,
-      max_tokens: maxTokens
-    };
-
-    const response = await axios.post('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', payload, {
-      headers: {
-        Authorization: `Bearer ${apiKey.trim()}`,
-        'Content-Type': 'application/json'
-      },
-      timeout: timeoutMs
-    });
-
-    if (response.data && response.data.choices && response.data.choices[0]?.message?.content) {
-      const content = this.sanitizeModelOutput(response.data.choices[0].message.content, targetLanguage, targetCountry);
-      if (content.length > 0) {
-        return content;
+      if (msg.role === 'system') {
+        systemText = systemText ? `${systemText}\n\n${text}` : text;
+      } else if (msg.role === 'user') {
+        rawTurns.push({ role: 'user', text });
+      } else if (msg.role === 'assistant' || msg.role === 'model') {
+        rawTurns.push({ role: 'model', text });
       }
     }
 
-    throw new Error('Google Gemini retornou conteúdo vazio.');
+    // Google Gemini Native API rules:
+    // 1. Roles must strictly alternate: user -> model -> user -> model
+    // 2. Conversation history must begin with 'user'
+    const consolidatedTurns = [];
+    for (const turn of rawTurns) {
+      if (consolidatedTurns.length === 0) {
+        if (turn.role === 'model') {
+          consolidatedTurns.push({ role: 'user', text: 'Olá' });
+        }
+        consolidatedTurns.push({ ...turn });
+      } else {
+        const lastTurn = consolidatedTurns[consolidatedTurns.length - 1];
+        if (lastTurn.role === turn.role) {
+          // Merge consecutive same-role turns into a single turn to avoid HTTP 400 alternating error
+          lastTurn.text = `${lastTurn.text}\n${turn.text}`;
+        } else {
+          consolidatedTurns.push({ ...turn });
+        }
+      }
+    }
+
+    if (consolidatedTurns.length === 0) {
+      consolidatedTurns.push({ role: 'user', text: 'Olá' });
+    }
+
+    const contents = consolidatedTurns.map(t => ({
+      role: t.role,
+      parts: [{ text: t.text }]
+    }));
+
+    const payload = {
+      contents,
+      generationConfig: {
+        temperature: Math.max(0, Math.min(2, Number(temperature) || 0.7)),
+        maxOutputTokens: Math.max(100, Math.min(8192, Number(maxTokens) || 1500))
+      }
+    };
+
+    if (systemText) {
+      payload.systemInstruction = {
+        parts: [{ text: systemText }]
+      };
+    }
+
+    return payload;
   }
 
-  // Universal Smart Model Caller: Dispatches automatically to Google Gemini Direct, OpenRouter or NVIDIA NIM
+  // Direct Google Gemini API call (Native Generative Language API + OpenAI-compatible backup)
+  async callGoogleGeminiDirect(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 60000, targetLanguage = 'pt', targetCountry = 'Brasil') {
+    const cleanKey = (apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
+    if (!cleanKey) {
+      throw new Error(`Google Gemini API Key não configurada! Insira sua chave (AIza... ou AQ...) no painel de configurações de IA.`);
+    }
+
+    const requestedModel = String(model || 'gemini-3.8-flash').replace(/^google\//i, '').trim();
+
+    // Priority candidate models for Google Gemini Direct (verified active in Google AI Studio)
+    const candidateModels = [
+      requestedModel,
+      'gemini-3.8-flash',
+      'gemini-3.7-flash',
+      'gemini-3.6-flash',
+      'gemini-3.5-flash',
+      'gemini-flash-latest',
+      'gemini-2.5-flash'
+    ].filter((m, idx, arr) => m && arr.indexOf(m) === idx);
+
+    let lastError = null;
+
+    // 1. Try Native Google Generative Language API (Official, resilient and direct)
+    for (const mod of candidateModels) {
+      try {
+        const payload = this.formatGeminiNativePayload(messages, temperature, maxTokens);
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${mod}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+
+        const response = await axios.post(url, payload, {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': cleanKey
+          },
+          timeout: timeoutMs
+        });
+
+        if (response.data && response.data.candidates && response.data.candidates[0]?.content?.parts) {
+          const parts = response.data.candidates[0].content.parts;
+          const textParts = parts.filter(p => p.text && !p.thought).map(p => p.text);
+          const rawText = textParts.join('').trim() || parts.map(p => p.text || '').join('').trim();
+          if (rawText && rawText.length > 0) {
+            return this.sanitizeModelOutput(rawText, targetLanguage, targetCountry);
+          }
+        }
+      } catch (nativeErr) {
+        lastError = nativeErr;
+        const status = nativeErr.response?.status;
+        const errData = nativeErr.response?.data;
+        const errMsg = errData?.error?.message || nativeErr.message;
+        console.warn(`[Google Gemini Nativo (${mod}) - status ${status}]: ${errMsg}`);
+
+        // If API key is rejected as invalid, abort immediately to show user
+        if (status === 400 && (String(errMsg).toLowerCase().includes('api key not valid') || String(errMsg).toLowerCase().includes('pass a valid api key') || String(errMsg).toLowerCase().includes('api_key_invalid'))) {
+          throw new Error(`Chave do Google Gemini inválida: ${errMsg}`);
+        }
+
+        // On 404, 503 (high demand) or 400 (unsupported model in this tier), continue to next candidate model
+        continue;
+      }
+    }
+
+    // 2. Try Google OpenAI-compatible endpoint with both Bearer and x-goog-api-key
+    for (const mod of candidateModels) {
+      try {
+        const openAiPayload = {
+          model: mod,
+          messages: (messages || []).map(m => ({
+            role: m.role === 'model' ? 'assistant' : m.role,
+            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '')
+          })),
+          temperature: Math.max(0, Math.min(2, Number(temperature) || 0.7)),
+          max_tokens: Number(maxTokens) || 1500
+        };
+
+        const response = await axios.post(
+          `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions?key=${encodeURIComponent(cleanKey)}`,
+          openAiPayload,
+          {
+            headers: {
+              Authorization: `Bearer ${cleanKey}`,
+              'x-goog-api-key': cleanKey,
+              'Content-Type': 'application/json'
+            },
+            timeout: timeoutMs
+          }
+        );
+
+        if (response.data && response.data.choices && response.data.choices[0]?.message?.content) {
+          const content = this.sanitizeModelOutput(response.data.choices[0].message.content, targetLanguage, targetCountry);
+          if (content && content.length > 0) {
+            return content;
+          }
+        }
+      } catch (openAiErr) {
+        lastError = openAiErr;
+        const status = openAiErr.response?.status;
+        const errMsg = openAiErr.response?.data?.[0]?.error?.message || openAiErr.response?.data?.error?.message || openAiErr.message;
+        console.warn(`[Google Gemini OpenAI (${mod}) - status ${status}]: ${errMsg}`);
+
+        if (status === 400 && (String(errMsg).toLowerCase().includes('api key not valid') || String(errMsg).toLowerCase().includes('pass a valid api key'))) {
+          throw new Error(`Chave do Google Gemini inválida: ${errMsg}`);
+        }
+      }
+    }
+
+    const finalErrMsg = lastError?.response?.data?.error?.message ||
+                        lastError?.response?.data?.[0]?.error?.message ||
+                        lastError?.message ||
+                        'Falha na chamada direta à API do Google Gemini';
+    throw new Error(`Google Gemini Direto erro: ${finalErrMsg}`);
+  }
+
+  // Universal Model Dispatcher
   async callAnyModel({
     model,
     apiKey,
@@ -885,16 +1029,24 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
     targetCountry = 'Brasil',
     tierName = 'primary'
   }) {
-    const cleanModel = (model || 'google/gemini-3.8-flash').trim();
+    const cleanModel = (model || 'gemini-3.8-flash').trim();
     const allSettings = storage.getSettings();
     const aiConfig = allSettings.ai || {};
 
-    // 1. Direct Google AI Studio Key (starts with AIza)
-    const isGoogleKey = apiKey && (apiKey.startsWith('AIza') || apiKey.length === 39);
-    if (isGoogleKey) {
+    // 1. Primary Model: ALWAYS Direct Google Gemini
+    const isGoogle = tierName === 'primary' || cleanModel.toLowerCase().includes('gemini') || cleanModel.startsWith('google/');
+    if (isGoogle) {
+      const googleKey = (
+        apiKey ||
+        aiConfig.primaryApiKey ||
+        process.env.GEMINI_API_KEY ||
+        process.env.GOOGLE_API_KEY ||
+        ''
+      ).trim();
+
       return await this.callGoogleGeminiDirect(
         cleanModel,
-        apiKey,
+        googleKey,
         messages,
         temperature,
         maxTokens,
@@ -904,26 +1056,15 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
       );
     }
 
-    // 2. OpenRouter Models (google/gemini-*, meta-llama/*, qwen/*, deepseek/*, :free, etc.)
-    const isOpenRouterPattern =
-      cleanModel.startsWith('google/') ||
-      cleanModel.startsWith('meta-llama/') ||
-      cleanModel.startsWith('anthropic/') ||
-      cleanModel.startsWith('qwen/') ||
-      cleanModel.startsWith('deepseek/') ||
-      cleanModel.startsWith('mistralai/') ||
-      cleanModel.endsWith(':free') ||
-      cleanModel.toLowerCase().includes('gemini') ||
-      (apiKey && apiKey.startsWith('sk-or-'));
-
-    if (isOpenRouterPattern) {
+    // 2. Tertiary Model: OpenRouter
+    const isOpenRouter = tierName === 'tertiary' || cleanModel.endsWith(':free') || (apiKey && apiKey.startsWith('sk-or-'));
+    if (isOpenRouter) {
       const openRouterKey = (
         (apiKey && apiKey.startsWith('sk-or-') ? apiKey : null) ||
         aiConfig.tertiaryApiKey ||
         process.env.OPENROUTER_API_KEY ||
         allSettings.fishAudio?.apiKey ||
-        allSettings.vision?.apiKey ||
-        apiKey
+        allSettings.vision?.apiKey
       )?.trim();
 
       if (!openRouterKey) {
@@ -942,11 +1083,11 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
       );
     }
 
-    // 3. NVIDIA NIM Models
+    // 3. Secondary / Fallback Model: NVIDIA NIM
     const nvidiaKey = (
-      (apiKey && !apiKey.startsWith('sk-or-') ? apiKey : null) ||
-      aiConfig.primaryApiKey ||
+      (apiKey && !apiKey.startsWith('sk-or-') && !apiKey.startsWith('AIza') ? apiKey : null) ||
       aiConfig.fallbackApiKey ||
+      aiConfig.primaryApiKey ||
       process.env.NVIDIA_NIM_PRIMARY_API_KEY ||
       process.env.NVIDIA_NIM_FALLBACK_API_KEY
     )?.trim();
@@ -1290,40 +1431,40 @@ ${hasPixBeenSent
     let responseText = null;
     let modelUsed = settings.primaryModel || 'google/gemini-3.8-flash';
 
-    // 1. Try Primary Model (Google Gemini 3.8 Flash / Universal)
+    // 1. Try Primary Model: Google Gemini (Direto da Google)
     try {
-      const isGeminiOrOpenRouter = (settings.primaryModel || '').startsWith('google/') || (settings.primaryModel || '').toLowerCase().includes('gemini');
-      const primaryKey = settings.primaryApiKey || (isGeminiOrOpenRouter ? (settings.tertiaryApiKey || process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY) : process.env.NVIDIA_NIM_PRIMARY_API_KEY);
-      const modelToCall = settings.primaryModel || 'google/gemini-3.8-flash';
+      const modelToCall = settings.primaryModel || 'gemini-3.8-flash';
       modelUsed = modelToCall;
+      const primaryKey = (settings.primaryApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
 
-      if (primaryKey || isGeminiOrOpenRouter) {
-        responseText = await this.callAnyModel({
-          model: modelToCall,
-          apiKey: primaryKey,
-          messages,
-          temperature: settings.temperature ?? 0.7,
-          maxTokens: settings.maxTokens || 1500,
-          timeoutMs: 60000, // 60s timeout for fast models like Gemini Flash
-          targetLanguage,
-          targetCountry,
-          tierName: 'primary'
-        });
-
-        // Primary succeeded - reset cooldown and ensure fallback state is inactive
-        this.lastPrimaryFailureTime = 0;
-        if (settings.isFallbackActive) {
-          storage.updateSettings({ ai: { isFallbackActive: false, lastFallbackReason: null } });
-          storage.addLog('INFO', `Modelo Primário (${modelUsed}) restabelecido com sucesso.`);
-        }
-        return { text: responseText, modelUsed, fallbackTriggered: false, locale: localeInfo };
+      if (!primaryKey) {
+        throw new Error('Chave de API do Google Gemini não configurada no painel ou no arquivo .env (GEMINI_API_KEY).');
       }
+
+      responseText = await this.callGoogleGeminiDirect(
+        modelToCall,
+        primaryKey,
+        messages,
+        settings.temperature ?? 0.7,
+        settings.maxTokens || 1500,
+        60000,
+        targetLanguage,
+        targetCountry
+      );
+
+      // Primary succeeded - reset cooldown and ensure fallback state is inactive
+      this.lastPrimaryFailureTime = 0;
+      if (settings.isFallbackActive) {
+        storage.updateSettings({ ai: { isFallbackActive: false, lastFallbackReason: null } });
+        storage.addLog('INFO', `Modelo Primário Google Gemini (${modelUsed}) restabelecido com sucesso.`);
+      }
+      return { text: responseText, modelUsed, fallbackTriggered: false, locale: localeInfo };
     } catch (primaryErr) {
       this.lastPrimaryFailureTime = Date.now();
       console.warn(`[AI Primary Error (${modelUsed})]: ${primaryErr.message}`);
       storage.addLog(
         'FALLBACK_TRIGGERED',
-        `Modelo Primário (${modelUsed}) falhou (${primaryErr.message}). Ativando fallback secundário (${settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it'}).`
+        `Modelo Primário Google Gemini (${modelUsed}) falhou (${primaryErr.message}). Ativando fallback secundário NVIDIA NIM (${settings.fallbackModel || 'z-ai/glm-5.3-flash'}).`
       );
       storage.updateSettings({
         ai: {
@@ -1333,53 +1474,50 @@ ${hasPixBeenSent
       });
     }
 
-    // 2. Try Fallback Model (NVIDIA NIM or secondary model)
+    // 2. Try Fallback Model: NVIDIA NIM
     try {
-      const fallbackModel = settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it';
-      const isFallbackOpenRouter = fallbackModel.startsWith('google/') || fallbackModel.toLowerCase().includes('gemini');
-      const fallbackKey = settings.fallbackApiKey || (isFallbackOpenRouter ? (settings.tertiaryApiKey || process.env.OPENROUTER_API_KEY) : (settings.primaryApiKey || process.env.NVIDIA_NIM_FALLBACK_API_KEY || process.env.NVIDIA_NIM_PRIMARY_API_KEY));
+      const fallbackModel = settings.fallbackModel || 'z-ai/glm-5.3-flash';
+      const fallbackKey = (settings.fallbackApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY || process.env.NVIDIA_NIM_FALLBACK_API_KEY || '').trim();
       
-      if (fallbackKey || isFallbackOpenRouter) {
+      if (fallbackKey) {
         modelUsed = fallbackModel;
-        responseText = await this.callAnyModel({
-          model: fallbackModel,
-          apiKey: fallbackKey,
+        responseText = await this.callModel(
+          fallbackModel,
+          fallbackKey,
           messages,
-          temperature: settings.temperature ?? 0.7,
-          maxTokens: settings.maxTokens || 1500,
-          timeoutMs: 60000,
+          settings.temperature ?? 0.7,
+          settings.maxTokens || 1500,
+          60000,
           targetLanguage,
-          targetCountry,
-          tierName: 'fallback'
-        });
+          targetCountry
+        );
         return { text: responseText, modelUsed, fallbackTriggered: true, fallbackTier: 'secondary_fallback', locale: localeInfo };
       }
     } catch (fallbackErr) {
       console.error(`[AI Fallback Error]: ${fallbackErr.message}`);
       storage.addLog(
         'WARNING',
-        `Modelo Secundário falhou (${fallbackErr.message}). Acionando 3º Fallback (${settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free'}).`
+        `Modelo Secundário NVIDIA NIM falhou (${fallbackErr.message}). Acionando 3º Fallback OpenRouter (${settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free'}).`
       );
     }
 
     // 3. Try Tertiary Fallback: OpenRouter Free / Backup Model
     try {
       const allSettings = storage.getSettings();
-      const tertiaryKey = settings.tertiaryApiKey || process.env.OPENROUTER_API_KEY || allSettings.fishAudio?.apiKey || allSettings.vision?.apiKey;
+      const tertiaryKey = (settings.tertiaryApiKey || process.env.OPENROUTER_API_KEY || allSettings.fishAudio?.apiKey || '').trim();
       const tertiaryModel = settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free';
       if (tertiaryKey && tertiaryModel) {
         modelUsed = tertiaryModel;
-        responseText = await this.callAnyModel({
-          model: tertiaryModel,
-          apiKey: tertiaryKey,
+        responseText = await this.callOpenRouterModel(
+          tertiaryModel,
+          tertiaryKey,
           messages,
-          temperature: settings.temperature ?? 0.7,
-          maxTokens: settings.maxTokens || 1500,
-          timeoutMs: 45000,
+          settings.temperature ?? 0.7,
+          settings.maxTokens || 1500,
+          45000,
           targetLanguage,
-          targetCountry,
-          tierName: 'tertiary'
-        });
+          targetCountry
+        );
         storage.addLog(
           'FALLBACK_TRIGGERED',
           `Modelos anteriores indisponíveis. Resposta atendida com sucesso pelo 3º Fallback (${tertiaryModel}).`

@@ -21,9 +21,9 @@ import {
 
 export default function AiConfig({ aiSettings, onSave }) {
   const [formData, setFormData] = useState({
-    primaryModel: aiSettings?.primaryModel || 'google/gemini-3.8-flash',
+    primaryModel: aiSettings?.primaryModel || 'gemini-3.8-flash',
     primaryApiKey: aiSettings?.primaryApiKey || '',
-    fallbackModel: aiSettings?.fallbackModel || 'google/diffusiongemma-26b-a4b-it',
+    fallbackModel: aiSettings?.fallbackModel || 'z-ai/glm-5.3-flash',
     fallbackApiKey: aiSettings?.fallbackApiKey || '',
     tertiaryModel: aiSettings?.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free',
     tertiaryApiKey: aiSettings?.tertiaryApiKey || '',
@@ -38,31 +38,49 @@ export default function AiConfig({ aiSettings, onSave }) {
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Dynamic models state
+  const defaultGoogleModels = [
+    { id: 'gemini-3.8-flash', name: 'gemini-3.8-flash (Google Gemini 3.8 Flash - Boss das Vendas 🏆)' },
+    { id: 'gemini-3.7-flash', name: 'gemini-3.7-flash (Google Gemini 3.7 Flash - Resposta Instantânea ⚡)' },
+    { id: 'gemini-3.5-flash', name: 'gemini-3.5-flash (Google Gemini 3.5 Flash)' },
+    { id: 'gemini-flash-latest', name: 'gemini-flash-latest (Google Gemini Flash Latest)' },
+    { id: 'gemini-2.5-flash', name: 'gemini-2.5-flash (Google Gemini 2.5 Flash)' },
+    { id: 'gemini-2.5-pro', name: 'gemini-2.5-pro (Google Gemini 2.5 Pro - Contexto Longo)' }
+  ];
+
   const defaultNimModels = [
-    { id: 'google/gemini-3.8-flash', name: 'google/gemini-3.8-flash (Google Gemini 3.8 Flash - Boss das Vendas 🏆)', org: 'google' },
-    { id: 'google/gemini-2.5-flash', name: 'google/gemini-2.5-flash (Google Gemini 2.5 Flash)', org: 'google' },
-    { id: 'z-ai/glm-5.3', name: 'z-ai/glm-5.3 (Raciocínio Avançado 128k & Ultra Rápido)', org: 'z-ai' },
-    { id: 'google/diffusiongemma-26b-a4b-it', name: 'google/diffusiongemma-26b-a4b-it (Rápido & Inteligente)', org: 'google' },
-    { id: 'nvidia/nemotron-3-ultra-550b-a55b', name: 'nvidia/nemotron-3-ultra-550b-a55b (NVIDIA NIM)', org: 'nvidia' },
-    { id: 'meta/llama-3.2-11b-vision-instruct', name: 'meta/llama-3.2-11b-vision-instruct (Baixa Latência 350ms)', org: 'meta' },
-    { id: 'nvidia/nemotron-3.5-lightning-30b-a3b', name: 'nvidia/nemotron-3.5-lightning-30b-a3b', org: 'nvidia' }
+    { id: 'z-ai/glm-5.3-flash', name: 'z-ai/glm-5.3-flash (NVIDIA NIM - Rápido & Conversacional ⚡)', org: 'z-ai' },
+    { id: 'z-ai/glm-5.3', name: 'z-ai/glm-5.3 (NVIDIA NIM - 128k Raciocínio Avançado)', org: 'z-ai' },
+    { id: 'nvidia/llama-3.1-nemotron-70b-instruct', name: 'nvidia/llama-3.1-nemotron-70b-instruct', org: 'nvidia' },
+    { id: 'meta/llama-3.2-11b-vision-instruct', name: 'meta/llama-3.2-11b-vision-instruct', org: 'meta' },
+    { id: 'google/diffusiongemma-26b-a4b-it', name: 'google/diffusiongemma-26b-a4b-it', org: 'google' }
   ];
 
   const defaultOpenRouterModels = [
-    { id: 'google/gemini-3.8-flash', name: 'Google: Gemini 3.8 Flash (Recomendado 🏆)', isFree: false },
-    { id: 'google/gemini-2.5-flash', name: 'Google: Gemini 2.5 Flash', isFree: false },
     { id: 'nvidia/nemotron-3.5-lightning:free', name: 'NVIDIA: Nemotron 3.5 Lightning (free)', isFree: true },
     { id: 'google/gemma-4-31b-it:free', name: 'Google: Gemma 4 31B (free)', isFree: true },
     { id: 'qwen/qwen3.8-27b:free', name: 'Qwen: Qwen3.8 27B (free)', isFree: true },
     { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Meta Llama 3.3 70B Instruct (free)', isFree: true }
   ];
 
+  const [googleModels, setGoogleModels] = useState(defaultGoogleModels);
   const [nimModels, setNimModels] = useState(defaultNimModels);
   const [openRouterModels, setOpenRouterModels] = useState(defaultOpenRouterModels);
+
+  const [loadingGoogle, setLoadingGoogle] = useState(false);
   const [loadingNim, setLoadingNim] = useState(false);
   const [loadingOpenRouter, setLoadingOpenRouter] = useState(false);
+
+  const [googleError, setGoogleError] = useState(null);
   const [nimError, setNimError] = useState(null);
   const [openRouterError, setOpenRouterError] = useState(null);
+
+  // Live Connection Test States
+  const [testingPrimary, setTestingPrimary] = useState(false);
+  const [primaryTestResult, setPrimaryTestResult] = useState(null);
+  const [testingFallback, setTestingFallback] = useState(false);
+  const [fallbackTestResult, setFallbackTestResult] = useState(null);
+  const [testingTertiary, setTestingTertiary] = useState(false);
+  const [tertiaryTestResult, setTertiaryTestResult] = useState(null);
 
   // Search and manual toggles
   const [primarySearch, setPrimarySearch] = useState('');
@@ -75,12 +93,35 @@ export default function AiConfig({ aiSettings, onSave }) {
   const [tertiaryOnlyFree, setTertiaryOnlyFree] = useState(true);
   const [tertiaryManualMode, setTertiaryManualMode] = useState(false);
 
+  // Fetch Google Gemini models
+  const fetchGoogleModels = async (keyOverride = null) => {
+    setLoadingGoogle(true);
+    setGoogleError(null);
+    try {
+      const key = (keyOverride || formData.primaryApiKey || '').trim();
+      const url = key ? `/api/ai/models/google?apiKey=${encodeURIComponent(key)}` : '/api/ai/models/google';
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao carregar modelos do Google');
+      }
+      if (data.models && data.models.length > 0) {
+        setGoogleModels(data.models);
+      }
+    } catch (err) {
+      console.warn('Erro ao buscar modelos Google:', err.message);
+      setGoogleError(err.message);
+    } finally {
+      setLoadingGoogle(false);
+    }
+  };
+
   // Fetch NVIDIA NIM models from backend
   const fetchNimModels = async (keyOverride = null) => {
     setLoadingNim(true);
     setNimError(null);
     try {
-      const key = (keyOverride || formData.primaryApiKey || formData.fallbackApiKey || '').trim();
+      const key = (keyOverride || formData.fallbackApiKey || '').trim();
       const url = key ? `/api/ai/models/nim?apiKey=${encodeURIComponent(key)}` : '/api/ai/models/nim';
       const res = await fetch(url);
       const data = await res.json();
@@ -121,13 +162,34 @@ export default function AiConfig({ aiSettings, onSave }) {
     }
   };
 
+  // Live Test Trigger
+  const handleTestAi = async (provider, model, apiKey, setResult, setLoading) => {
+    setLoading(true);
+    setResult(null);
+    try {
+      const res = await fetch('/api/ai/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, model, apiKey })
+      });
+      const data = await res.json();
+      setResult(data);
+    } catch (err) {
+      setResult({ success: false, error: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Sync on mount
   useEffect(() => {
+    fetchGoogleModels();
     fetchNimModels();
     fetchOpenRouterModels();
   }, []);
 
   const handleSyncAll = () => {
+    fetchGoogleModels();
     fetchNimModels();
     fetchOpenRouterModels();
   };
@@ -140,7 +202,7 @@ export default function AiConfig({ aiSettings, onSave }) {
   };
 
   // Filtered lists
-  const filteredPrimaryNim = nimModels.filter((m) => {
+  const filteredPrimaryGoogle = googleModels.filter((m) => {
     if (!primarySearch.trim()) return true;
     const q = primarySearch.toLowerCase();
     return (m.id || '').toLowerCase().includes(q) || (m.name || '').toLowerCase().includes(q);
@@ -172,10 +234,10 @@ export default function AiConfig({ aiSettings, onSave }) {
             </div>
             <div>
               <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#f8fafc' }}>
-                Cérebro de IA: NVIDIA NIM + OpenRouter
+                Cérebro de IA: Google Gemini 3.8 + NVIDIA NIM + OpenRouter
               </h3>
               <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                Selecione os modelos diretamente da lista oficial oferecida pelas APIs em tempo real.
+                Modelo 1 Direto do Google AI Studio (Boss das Vendas), com contingência automática da NVIDIA NIM e OpenRouter.
               </p>
             </div>
           </div>
@@ -184,13 +246,13 @@ export default function AiConfig({ aiSettings, onSave }) {
             <button
               type="button"
               onClick={handleSyncAll}
-              disabled={loadingNim || loadingOpenRouter}
+              disabled={loadingGoogle || loadingNim || loadingOpenRouter}
               className="btn-secondary"
               style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '8px 14px' }}
-              title="Buscar lista atualizada de modelos diretamente das APIs da NVIDIA e OpenRouter"
+              title="Buscar lista atualizada de modelos diretamente das APIs da Google, NVIDIA e OpenRouter"
             >
-              <RefreshCw size={15} className={loadingNim || loadingOpenRouter ? 'animate-spin' : ''} />
-              <span>{loadingNim || loadingOpenRouter ? 'Puxando Modelos...' : 'Puxar da API'}</span>
+              <RefreshCw size={15} className={loadingGoogle || loadingNim || loadingOpenRouter ? 'animate-spin' : ''} />
+              <span>{loadingGoogle || loadingNim || loadingOpenRouter ? 'Puxando Modelos...' : 'Sincronizar APIs'}</span>
             </button>
 
             <button type="submit" className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -248,12 +310,12 @@ export default function AiConfig({ aiSettings, onSave }) {
         {/* 3-Column Cascade Grid: Primary, Fallback 2, Fallback 3 */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '24px' }}>
           
-          {/* 1. Primary Model Card */}
+          {/* 1. Primary Model Card - Google Gemini Direto */}
           <div style={{
             background: 'rgba(255, 255, 255, 0.02)',
             padding: '20px',
             borderRadius: '12px',
-            border: '1px solid rgba(139, 92, 246, 0.25)',
+            border: '1px solid rgba(139, 92, 246, 0.35)',
             display: 'flex',
             flexDirection: 'column',
             gap: '14px'
@@ -262,19 +324,19 @@ export default function AiConfig({ aiSettings, onSave }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Zap size={18} color="#c084fc" />
                 <h4 style={{ fontSize: '0.96rem', fontWeight: 700, color: '#f8fafc' }}>
-                  1. Primário (Google Gemini / OpenRouter / NIM)
+                  1. Primário (Google Gemini Direto 🏆)
                 </h4>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span className="badge badge-conversa">Principal</span>
+                <span className="badge badge-conversa">Google AI Studio</span>
                 <button
                   type="button"
-                  onClick={() => fetchNimModels(formData.primaryApiKey)}
-                  disabled={loadingNim}
-                  title="Atualizar modelos disponíveis para esta chave"
+                  onClick={() => fetchGoogleModels(formData.primaryApiKey)}
+                  disabled={loadingGoogle}
+                  title="Atualizar modelos do Google Gemini"
                   style={{ background: 'none', border: 'none', color: '#c084fc', cursor: 'pointer', padding: '2px' }}
                 >
-                  <RefreshCw size={14} className={loadingNim ? 'animate-spin' : ''} />
+                  <RefreshCw size={14} className={loadingGoogle ? 'animate-spin' : ''} />
                 </button>
               </div>
             </div>
@@ -282,7 +344,7 @@ export default function AiConfig({ aiSettings, onSave }) {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1' }}>
-                  Modelo Primário de Vendas
+                  Modelo Primário de Vendas ({googleModels.length} no Google)
                 </label>
                 <button
                   type="button"
@@ -299,7 +361,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                   }}
                 >
                   {primaryManualMode ? <List size={12} /> : <Edit3 size={12} />}
-                  <span>{primaryManualMode ? 'Lista Rápida' : 'Digitar ID'}</span>
+                  <span>{primaryManualMode ? 'Lista Google' : 'Digitar ID'}</span>
                 </button>
               </div>
 
@@ -308,7 +370,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                   type="text"
                   value={formData.primaryModel}
                   onChange={(e) => setFormData({ ...formData, primaryModel: e.target.value })}
-                  placeholder="Ex: google/gemini-3.8-flash"
+                  placeholder="Ex: gemini-3.8-flash"
                   className="input-field"
                   style={{ fontSize: '0.84rem' }}
                 />
@@ -320,7 +382,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                       type="text"
                       value={primarySearch}
                       onChange={(e) => setPrimarySearch(e.target.value)}
-                      placeholder="Filtrar (ex: gemini, glm, llama, deepseek)..."
+                      placeholder="Filtrar Gemini (ex: 3.8, 2.5, flash)..."
                       className="input-field"
                       style={{ paddingLeft: '32px', fontSize: '0.78rem', height: '34px', background: 'rgba(0,0,0,0.2)' }}
                     />
@@ -332,60 +394,37 @@ export default function AiConfig({ aiSettings, onSave }) {
                     className="input-field"
                     style={{ fontSize: '0.84rem' }}
                   >
-                    <optgroup label="⚡ Recomendados: Google Gemini (Alta Persuasão)">
-                      <option value="google/gemini-3.8-flash">
-                        🏆 google/gemini-3.8-flash (Gemini 3.8 Flash - Boss das Vendas)
-                      </option>
-                      <option value="google/gemini-2.5-flash">
-                        ⚡ google/gemini-2.5-flash (Gemini 2.5 Flash - Baixa Latência)
-                      </option>
-                      <option value="google/gemini-2.0-flash-001">
-                        google/gemini-2.0-flash-001
-                      </option>
-                    </optgroup>
-
-                    <optgroup label="Modelos NVIDIA NIM">
-                      <option value="z-ai/glm-5.3">z-ai/glm-5.3 (128k Raciocínio)</option>
-                      <option value="google/diffusiongemma-26b-a4b-it">google/diffusiongemma-26b-a4b-it</option>
-                      <option value="nvidia/nemotron-3-ultra-550b-a55b">nvidia/nemotron-3-ultra-550b-a55b</option>
-                      <option value="meta/llama-3.2-11b-vision-instruct">meta/llama-3.2-11b-vision-instruct</option>
-                    </optgroup>
-
-                    {!nimModels.some((m) => m.id === formData.primaryModel) &&
-                     !['google/gemini-3.8-flash', 'google/gemini-2.5-flash', 'google/gemini-2.0-flash-001', 'z-ai/glm-5.3', 'google/diffusiongemma-26b-a4b-it', 'nvidia/nemotron-3-ultra-550b-a55b', 'meta/llama-3.2-11b-vision-instruct'].includes(formData.primaryModel) && (
+                    {!googleModels.some((m) => m.id === formData.primaryModel) && (
                       <option value={formData.primaryModel}>
                         📌 {formData.primaryModel} (Atual)
                       </option>
                     )}
-
-                    <optgroup label="Todos os Modelos da API">
-                      {filteredPrimaryNim.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.id}
-                        </option>
-                      ))}
-                    </optgroup>
+                    {filteredPrimaryGoogle.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name || m.id}
+                      </option>
+                    ))}
                   </select>
                 </div>
               )}
 
-              {nimError && (
+              {googleError && (
                 <p style={{ fontSize: '0.72rem', color: '#f87171', marginTop: '4px' }}>
-                  ⚠️ {nimError}
+                  ⚠️ {googleError}
                 </p>
               )}
             </div>
 
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                Chave de API Primária (OpenRouter / Gemini / NVIDIA NIM)
+                Google AI Studio API Key (Chave Direta)
               </label>
               <div style={{ position: 'relative' }}>
                 <input
                   type={showPrimaryKey ? 'text' : 'password'}
                   value={formData.primaryApiKey}
                   onChange={(e) => setFormData({ ...formData, primaryApiKey: e.target.value })}
-                  placeholder="sk-or-... (OpenRouter/Gemini) ou nvapi-... (NVIDIA)"
+                  placeholder="AIzaSy... (Chave Google AI Studio)"
                   className="input-field"
                   style={{ paddingRight: '40px', fontSize: '0.84rem' }}
                 />
@@ -398,14 +437,58 @@ export default function AiConfig({ aiSettings, onSave }) {
                 </button>
               </div>
               <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
-                {formData.primaryModel?.startsWith('google/') || formData.primaryModel?.includes('gemini')
-                  ? '⚡ Para Google Gemini (OpenRouter), se deixar em branco o sistema usa automaticamente a sua chave OpenRouter configurada!'
-                  : 'Para modelos NVIDIA NIM, use a chave nvapi-... de build.nvidia.com'}
+                Obtenha gratuitamente em <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: '#c084fc' }}>aistudio.google.com/apikey</a> (100% Direto Google, sem intermediários).
               </p>
+            </div>
+
+            {/* Test Button Card 1 */}
+            <div style={{ marginTop: 'auto', paddingTop: '10px' }}>
+              <button
+                type="button"
+                onClick={() => handleTestAi('google', formData.primaryModel, formData.primaryApiKey, setPrimaryTestResult, setTestingPrimary)}
+                disabled={testingPrimary}
+                className="btn-secondary"
+                style={{
+                  width: '100%',
+                  fontSize: '0.78rem',
+                  padding: '7px 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  borderColor: 'rgba(139, 92, 246, 0.4)'
+                }}
+              >
+                <Zap size={13} className={testingPrimary ? 'animate-spin' : ''} />
+                <span>{testingPrimary ? 'Testando Conexão...' : '⚡ Testar Google Gemini'}</span>
+              </button>
+
+              {primaryTestResult && (
+                <div style={{
+                  marginTop: '8px',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  fontSize: '0.74rem',
+                  background: primaryTestResult.success ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                  border: `1px solid ${primaryTestResult.success ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
+                  color: primaryTestResult.success ? '#34d399' : '#f87171',
+                  wordBreak: 'break-word'
+                }}>
+                  {primaryTestResult.success ? (
+                    <div>
+                      <strong>✓ OK ({primaryTestResult.latencyMs}ms):</strong> {primaryTestResult.reply}
+                    </div>
+                  ) : (
+                    <div>
+                      <strong>❌ Erro ({primaryTestResult.status || 'Falha'}):</strong> {primaryTestResult.error}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* 2. Secondary / Fallback Model Card */}
+          {/* 2. Secondary / Fallback Model Card - NVIDIA NIM */}
           <div style={{
             background: 'rgba(255, 255, 255, 0.02)',
             padding: '20px',
@@ -426,9 +509,9 @@ export default function AiConfig({ aiSettings, onSave }) {
                 <span className="badge badge-pitch">Contingência 1</span>
                 <button
                   type="button"
-                  onClick={() => fetchNimModels(formData.fallbackApiKey || formData.primaryApiKey)}
+                  onClick={() => fetchNimModels(formData.fallbackApiKey)}
                   disabled={loadingNim}
-                  title="Atualizar modelos disponíveis para esta chave"
+                  title="Atualizar modelos da NVIDIA NIM"
                   style={{ background: 'none', border: 'none', color: '#fbbf24', cursor: 'pointer', padding: '2px' }}
                 >
                   <RefreshCw size={14} className={loadingNim ? 'animate-spin' : ''} />
@@ -465,7 +548,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                   type="text"
                   value={formData.fallbackModel}
                   onChange={(e) => setFormData({ ...formData, fallbackModel: e.target.value })}
-                  placeholder="Ex: google/diffusiongemma-26b-a4b-it"
+                  placeholder="Ex: z-ai/glm-5.3-flash"
                   className="input-field"
                   style={{ fontSize: '0.84rem' }}
                 />
@@ -477,7 +560,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                       type="text"
                       value={fallbackSearch}
                       onChange={(e) => setFallbackSearch(e.target.value)}
-                      placeholder="Filtrar (ex: gemma, llama, mistral)..."
+                      placeholder="Filtrar (ex: glm, llama, mistral)..."
                       className="input-field"
                       style={{ paddingLeft: '32px', fontSize: '0.78rem', height: '34px', background: 'rgba(0,0,0,0.2)' }}
                     />
@@ -501,6 +584,12 @@ export default function AiConfig({ aiSettings, onSave }) {
                     ))}
                   </select>
                 </div>
+              )}
+
+              {nimError && (
+                <p style={{ fontSize: '0.72rem', color: '#f87171', marginTop: '4px' }}>
+                  ⚠️ {nimError}
+                </p>
               )}
             </div>
 
@@ -526,8 +615,54 @@ export default function AiConfig({ aiSettings, onSave }) {
                 </button>
               </div>
               <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
-                Chave reserva ou de outra conta NVIDIA.
+                Chave nvapi-... obtida em <a href="https://build.nvidia.com" target="_blank" rel="noreferrer" style={{ color: '#fbbf24' }}>build.nvidia.com</a>.
               </p>
+            </div>
+
+            {/* Test Button Card 2 */}
+            <div style={{ marginTop: 'auto', paddingTop: '10px' }}>
+              <button
+                type="button"
+                onClick={() => handleTestAi('nim', formData.fallbackModel, formData.fallbackApiKey, setFallbackTestResult, setTestingFallback)}
+                disabled={testingFallback}
+                className="btn-secondary"
+                style={{
+                  width: '100%',
+                  fontSize: '0.78rem',
+                  padding: '7px 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  borderColor: 'rgba(245, 158, 11, 0.4)'
+                }}
+              >
+                <Zap size={13} className={testingFallback ? 'animate-spin' : ''} />
+                <span>{testingFallback ? 'Testando Conexão...' : '⚡ Testar NVIDIA NIM'}</span>
+              </button>
+
+              {fallbackTestResult && (
+                <div style={{
+                  marginTop: '8px',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  fontSize: '0.74rem',
+                  background: fallbackTestResult.success ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                  border: `1px solid ${fallbackTestResult.success ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
+                  color: fallbackTestResult.success ? '#34d399' : '#f87171',
+                  wordBreak: 'break-word'
+                }}>
+                  {fallbackTestResult.success ? (
+                    <div>
+                      <strong>✓ OK ({fallbackTestResult.latencyMs}ms):</strong> {fallbackTestResult.reply}
+                    </div>
+                  ) : (
+                    <div>
+                      <strong>❌ Erro ({fallbackTestResult.status || 'Falha'}):</strong> {fallbackTestResult.error}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -682,6 +817,52 @@ export default function AiConfig({ aiSettings, onSave }) {
               <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
                 Obtenha em <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" style={{ color: '#34d399' }}>openrouter.ai/keys</a> (com modelos 100% gratuitos)
               </p>
+            </div>
+
+            {/* Test Button Card 3 */}
+            <div style={{ marginTop: 'auto', paddingTop: '10px' }}>
+              <button
+                type="button"
+                onClick={() => handleTestAi('openrouter', formData.tertiaryModel, formData.tertiaryApiKey, setTertiaryTestResult, setTestingTertiary)}
+                disabled={testingTertiary}
+                className="btn-secondary"
+                style={{
+                  width: '100%',
+                  fontSize: '0.78rem',
+                  padding: '7px 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  borderColor: 'rgba(16, 185, 129, 0.4)'
+                }}
+              >
+                <Zap size={13} className={testingTertiary ? 'animate-spin' : ''} />
+                <span>{testingTertiary ? 'Testando Conexão...' : '⚡ Testar OpenRouter'}</span>
+              </button>
+
+              {tertiaryTestResult && (
+                <div style={{
+                  marginTop: '8px',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  fontSize: '0.74rem',
+                  background: tertiaryTestResult.success ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                  border: `1px solid ${tertiaryTestResult.success ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
+                  color: tertiaryTestResult.success ? '#34d399' : '#f87171',
+                  wordBreak: 'break-word'
+                }}>
+                  {tertiaryTestResult.success ? (
+                    <div>
+                      <strong>✓ OK ({tertiaryTestResult.latencyMs}ms):</strong> {tertiaryTestResult.reply}
+                    </div>
+                  ) : (
+                    <div>
+                      <strong>❌ Erro ({tertiaryTestResult.status || 'Falha'}):</strong> {tertiaryTestResult.error}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -48,10 +48,10 @@ export function isSamePhoneNumber(p1, p2) {
 const DEFAULT_STATE = {
   settings: {
     ai: {
-      primaryModel: 'google/gemini-3.8-flash',
-      primaryApiKey: process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || process.env.NVIDIA_NIM_PRIMARY_API_KEY || '',
-      fallbackModel: 'google/diffusiongemma-26b-a4b-it',
-      fallbackApiKey: process.env.NVIDIA_NIM_FALLBACK_API_KEY || process.env.NVIDIA_NIM_PRIMARY_API_KEY || '',
+      primaryModel: 'gemini-3.8-flash',
+      primaryApiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
+      fallbackModel: 'z-ai/glm-5.3-flash',
+      fallbackApiKey: process.env.NVIDIA_NIM_PRIMARY_API_KEY || process.env.NVIDIA_NIM_FALLBACK_API_KEY || '',
       tertiaryModel: 'nvidia/nemotron-3.5-lightning:free',
       tertiaryApiKey: process.env.OPENROUTER_API_KEY || '',
       tertiaryProvider: 'openrouter',

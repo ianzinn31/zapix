@@ -506,10 +506,149 @@ router.post('/remarketing/trigger-now', async (req, res) => {
   }
 });
 
+// === Google Gemini Models Fetching ===
+router.get('/ai/models/google', async (req, res) => {
+  const { apiKey } = req.query;
+  const effectiveKey = (apiKey || storage.getSettings().ai?.primaryApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
+
+  const standardGoogleModels = [
+    { id: 'gemini-3.8-flash', name: 'gemini-3.8-flash (Google Gemini 3.8 Flash - Boss das Vendas 🏆)', description: 'Mais recente, ultra persuasivo para fechamento e vendas' },
+    { id: 'gemini-3.7-flash', name: 'gemini-3.7-flash (Google Gemini 3.7 Flash - Resposta Instantânea ⚡)', description: 'Velocidade extrema e alta inteligência conversacional' },
+    { id: 'gemini-3.5-flash', name: 'gemini-3.5-flash (Google Gemini 3.5 Flash)', description: 'Alta precisão e excelente raciocínio' },
+    { id: 'gemini-flash-latest', name: 'gemini-flash-latest (Google Gemini Flash Latest)', description: 'Versão mais recente estável de alta velocidade' },
+    { id: 'gemini-2.5-flash', name: 'gemini-2.5-flash (Google Gemini 2.5 Flash)', description: 'Modelo consolidado e confiável' },
+    { id: 'gemini-2.5-pro', name: 'gemini-2.5-pro (Google Gemini 2.5 Pro)', description: 'Contexto ultra longo e análise detalhada' }
+  ];
+
+  if (!effectiveKey) {
+    return res.json({
+      success: true,
+      count: standardGoogleModels.length,
+      models: standardGoogleModels,
+      isDefaultList: true
+    });
+  }
+
+  try {
+    const response = await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(effectiveKey)}`, {
+      timeout: 10000
+    });
+
+    const rawModels = response.data?.models || [];
+    const models = rawModels
+      .filter(m => (m.name || '').includes('gemini') && (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map(m => {
+        const cleanId = (m.name || '').replace(/^models\//i, '');
+        return {
+          id: cleanId,
+          name: m.displayName ? `${cleanId} (${m.displayName})` : cleanId,
+          description: m.description || ''
+        };
+      });
+
+    res.json({
+      success: true,
+      count: models.length > 0 ? models.length : standardGoogleModels.length,
+      models: models.length > 0 ? models : standardGoogleModels
+    });
+  } catch (err) {
+    console.warn('[API /ai/models/google Warning]:', err.response?.status, err.message);
+    res.json({
+      success: true,
+      count: standardGoogleModels.length,
+      models: standardGoogleModels,
+      warning: err.response?.data?.error?.message || err.message
+    });
+  }
+});
+
+// === Live AI Connection Tester ===
+router.post('/ai/test', async (req, res) => {
+  const { provider, model, apiKey } = req.body || {};
+  const t0 = Date.now();
+
+  try {
+    let result = '';
+    const testMessages = [
+      { role: 'user', content: 'Diga apenas: Conexão realizada com sucesso!' }
+    ];
+
+    if (provider === 'google' || (!provider && (model?.includes('gemini') || model?.startsWith('google/')))) {
+      const key = (apiKey || storage.getSettings().ai?.primaryApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
+      if (!key) {
+        return res.status(400).json({ success: false, error: 'Chave da API do Google Gemini não informada.' });
+      }
+      result = await nvidiaNim.callGoogleGeminiDirect(
+        model || 'gemini-3.8-flash',
+        key,
+        testMessages,
+        0.5,
+        100,
+        45000,
+        'pt',
+        'Brasil'
+      );
+    } else if (provider === 'openrouter' || (!provider && model?.endsWith(':free'))) {
+      const key = (apiKey || storage.getSettings().ai?.tertiaryApiKey || process.env.OPENROUTER_API_KEY || '').trim();
+      if (!key) {
+        return res.status(400).json({ success: false, error: 'Chave do OpenRouter não informada.' });
+      }
+      result = await nvidiaNim.callOpenRouterModel(
+        model || 'nvidia/nemotron-3.5-lightning:free',
+        key,
+        testMessages,
+        0.5,
+        100,
+        25000,
+        'pt',
+        'Brasil'
+      );
+    } else {
+      // Default to NVIDIA NIM
+      const key = (apiKey || storage.getSettings().ai?.fallbackApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY || process.env.NVIDIA_NIM_FALLBACK_API_KEY || '').trim();
+      if (!key) {
+        return res.status(400).json({ success: false, error: 'Chave da API NVIDIA NIM não informada.' });
+      }
+      result = await nvidiaNim.callModel(
+        model || 'z-ai/glm-5.3-flash',
+        key,
+        testMessages,
+        0.5,
+        100,
+        25000,
+        'pt',
+        'Brasil'
+      );
+    }
+
+    const latencyMs = Date.now() - t0;
+    res.json({
+      success: true,
+      latencyMs,
+      reply: result,
+      response: result,
+      modelUsed: model
+    });
+  } catch (err) {
+    const latencyMs = Date.now() - t0;
+    const status = err.response?.status || 500;
+    const errorMsg = err.response?.data?.error?.message ||
+                     err.response?.data?.[0]?.error?.message ||
+                     err.message;
+    console.error(`[API /ai/test Error]: status ${status} - ${errorMsg}`);
+    res.status(status >= 400 && status < 600 ? status : 500).json({
+      success: false,
+      latencyMs,
+      status,
+      error: errorMsg
+    });
+  }
+});
+
 // === Dynamic AI Models Fetching ===
 router.get('/ai/models/nim', async (req, res) => {
   const { apiKey } = req.query;
-  const effectiveKey = (apiKey || storage.getSettings().ai?.primaryApiKey || storage.getSettings().ai?.fallbackApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY || '').trim();
+  const effectiveKey = (apiKey || storage.getSettings().ai?.fallbackApiKey || process.env.NVIDIA_NIM_FALLBACK_API_KEY || process.env.NVIDIA_NIM_PRIMARY_API_KEY || '').trim();
 
   if (!effectiveKey) {
     return res.status(400).json({ error: 'Nenhuma chave de API da NVIDIA NIM informada.' });
