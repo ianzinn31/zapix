@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Cpu, 
   ShieldCheck, 
@@ -16,7 +16,21 @@ import {
   Filter,
   Sparkles,
   Edit3,
-  List
+  List,
+  Code,
+  FileCode,
+  Terminal,
+  Send,
+  HelpCircle,
+  Check,
+  Copy,
+  RotateCcw,
+  FileText,
+  Layers,
+  Settings2,
+  Play,
+  Volume2,
+  X
 } from 'lucide-react';
 
 export default function AiConfig({ aiSettings, onSave }) {
@@ -29,13 +43,241 @@ export default function AiConfig({ aiSettings, onSave }) {
     tertiaryApiKey: aiSettings?.tertiaryApiKey || '',
     temperature: aiSettings?.temperature ?? 0.7,
     maxTokens: aiSettings?.maxTokens || 1500,
-    customPromptInstructions: aiSettings?.customPromptInstructions || ''
+    customPromptInstructions: aiSettings?.customPromptInstructions || '',
+    systemPrompts: {
+      mode: aiSettings?.systemPrompts?.mode || 'smart_engine',
+      pt: aiSettings?.systemPrompts?.pt || '',
+      es: aiSettings?.systemPrompts?.es || '',
+      en: aiSettings?.systemPrompts?.en || '',
+      countries: aiSettings?.systemPrompts?.countries || {}
+    }
   });
 
   const [showPrimaryKey, setShowPrimaryKey] = useState(false);
   const [showFallbackKey, setShowFallbackKey] = useState(false);
   const [showTertiaryKey, setShowTertiaryKey] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // System Prompt & Multi-Language Management State
+  const [activePromptTab, setActivePromptTab] = useState('pt');
+  const [selectedExtraCountry, setSelectedExtraCountry] = useState('Bolívia');
+  const [defaultsData, setDefaultsData] = useState(null);
+  const [copiedPreview, setCopiedPreview] = useState(false);
+  const promptTextareaRef = useRef(null);
+
+  // Live Prompt Preview Modal State
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
+  const [previewCountry, setPreviewCountry] = useState('Brasil');
+
+  // Live Test Playground State
+  const [testPlaygroundOpen, setTestPlaygroundOpen] = useState(false);
+  const [testLeadMessage, setTestLeadMessage] = useState('Oi! Como funciona o material de vocês? Qual o valor?');
+  const [testingCustomPrompt, setTestingCustomPrompt] = useState(false);
+  const [testPromptReply, setTestPromptReply] = useState(null);
+
+  // Sync formData when props change
+  useEffect(() => {
+    if (aiSettings) {
+      setFormData((prev) => ({
+        ...prev,
+        primaryModel: aiSettings.primaryModel || prev.primaryModel,
+        primaryApiKey: aiSettings.primaryApiKey !== undefined ? aiSettings.primaryApiKey : prev.primaryApiKey,
+        fallbackModel: aiSettings.fallbackModel || prev.fallbackModel,
+        fallbackApiKey: aiSettings.fallbackApiKey !== undefined ? aiSettings.fallbackApiKey : prev.fallbackApiKey,
+        tertiaryModel: aiSettings.tertiaryModel || prev.tertiaryModel,
+        tertiaryApiKey: aiSettings.tertiaryApiKey !== undefined ? aiSettings.tertiaryApiKey : prev.tertiaryApiKey,
+        temperature: aiSettings.temperature !== undefined ? aiSettings.temperature : prev.temperature,
+        maxTokens: aiSettings.maxTokens || prev.maxTokens,
+        customPromptInstructions: aiSettings.customPromptInstructions !== undefined ? aiSettings.customPromptInstructions : prev.customPromptInstructions,
+        systemPrompts: {
+          mode: aiSettings.systemPrompts?.mode || prev.systemPrompts?.mode || 'smart_engine',
+          pt: aiSettings.systemPrompts?.pt !== undefined ? aiSettings.systemPrompts.pt : (prev.systemPrompts?.pt || ''),
+          es: aiSettings.systemPrompts?.es !== undefined ? aiSettings.systemPrompts.es : (prev.systemPrompts?.es || ''),
+          en: aiSettings.systemPrompts?.en !== undefined ? aiSettings.systemPrompts.en : (prev.systemPrompts?.en || ''),
+          countries: {
+            ...(prev.systemPrompts?.countries || {}),
+            ...(aiSettings.systemPrompts?.countries || {})
+          }
+        }
+      }));
+    }
+  }, [aiSettings]);
+
+  // Fetch prompt defaults and dynamic variable definitions
+  useEffect(() => {
+    fetch('/api/ai/prompts/defaults')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setDefaultsData(data);
+        }
+      })
+      .catch((err) => console.warn('Erro ao carregar defaults de prompts:', err));
+  }, []);
+
+  // Helper to get currently active prompt text
+  const getCurrentPromptText = () => {
+    const sp = formData.systemPrompts || {};
+    if (activePromptTab === 'pt') return sp.pt || '';
+    if (activePromptTab === 'es') return sp.es || '';
+    if (activePromptTab === 'en') return sp.en || '';
+    if (activePromptTab === 'es-MX') return sp.countries?.['México'] || '';
+    if (activePromptTab === 'es-CO') return sp.countries?.['Colômbia'] || '';
+    if (activePromptTab === 'es-AR') return sp.countries?.['Argentina'] || '';
+    if (activePromptTab === 'other-country') return sp.countries?.[selectedExtraCountry] || '';
+    return '';
+  };
+
+  // Helper to update currently active prompt text
+  const handleUpdateCurrentPromptText = (text) => {
+    setFormData((prev) => {
+      const sp = { ...(prev.systemPrompts || {}) };
+      const countries = { ...(sp.countries || {}) };
+
+      if (activePromptTab === 'pt') sp.pt = text;
+      else if (activePromptTab === 'es') sp.es = text;
+      else if (activePromptTab === 'en') sp.en = text;
+      else if (activePromptTab === 'es-MX') countries['México'] = text;
+      else if (activePromptTab === 'es-CO') countries['Colômbia'] = text;
+      else if (activePromptTab === 'es-AR') countries['Argentina'] = text;
+      else if (activePromptTab === 'other-country') countries[selectedExtraCountry] = text;
+
+      sp.countries = countries;
+      return { ...prev, systemPrompts: sp };
+    });
+  };
+
+  // Helper to load Battle-Tested Boss Template for current tab
+  const handleLoadBossTemplate = () => {
+    if (!defaultsData?.templates) return;
+    const t = defaultsData.templates;
+    let templateToLoad = '';
+
+    if (activePromptTab === 'pt') templateToLoad = t.pt;
+    else if (activePromptTab === 'es') templateToLoad = t.es;
+    else if (activePromptTab === 'en') templateToLoad = t.en;
+    else if (activePromptTab === 'es-MX') templateToLoad = t.countries?.['México'] || t.es;
+    else if (activePromptTab === 'es-CO') templateToLoad = t.countries?.['Colômbia'] || t.es;
+    else if (activePromptTab === 'es-AR') templateToLoad = t.countries?.['Argentina'] || t.es;
+    else if (activePromptTab === 'other-country') templateToLoad = t.countries?.[selectedExtraCountry] || t.es;
+
+    if (templateToLoad) {
+      handleUpdateCurrentPromptText(templateToLoad);
+    }
+  };
+
+  // Helper to insert a variable chip at cursor position
+  const handleInsertVariable = (tag) => {
+    const textarea = promptTextareaRef.current;
+    const currentVal = getCurrentPromptText();
+    if (!textarea) {
+      handleUpdateCurrentPromptText(currentVal + (currentVal ? ' ' : '') + tag);
+      return;
+    }
+
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || 0;
+    const nextVal = currentVal.substring(0, start) + tag + currentVal.substring(end);
+    handleUpdateCurrentPromptText(nextVal);
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + tag.length, start + tag.length);
+    }, 50);
+  };
+
+  // Helper to open real-time preview modal
+  const handleOpenPreview = async (countryOverride = null) => {
+    const targetCtry = countryOverride || (
+      activePromptTab === 'pt' ? 'Brasil' :
+      activePromptTab === 'es-MX' ? 'México' :
+      activePromptTab === 'es-CO' ? 'Colômbia' :
+      activePromptTab === 'es-AR' ? 'Argentina' :
+      activePromptTab === 'en' ? 'Estados Unidos' :
+      activePromptTab === 'other-country' ? selectedExtraCountry :
+      'Brasil'
+    );
+    setPreviewCountry(targetCtry);
+    setPreviewLoading(true);
+    setPreviewModalOpen(true);
+
+    try {
+      const res = await fetch('/api/ai/prompts/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          country: targetCtry,
+          language: targetCtry === 'Brasil' ? 'pt' : (targetCtry === 'Estados Unidos' ? 'en' : 'es'),
+          customTemplate: getCurrentPromptText() || null
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPreviewData(data);
+      }
+    } catch (err) {
+      console.warn('Erro ao gerar preview:', err);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  // Helper to test custom prompt live with AI
+  const handleTestCustomPrompt = async () => {
+    setTestingCustomPrompt(true);
+    setTestPromptReply(null);
+    try {
+      const currentPrompt = getCurrentPromptText();
+      const targetCtry = (
+        activePromptTab === 'pt' ? 'Brasil' :
+        activePromptTab === 'es-MX' ? 'México' :
+        activePromptTab === 'es-CO' ? 'Colômbia' :
+        activePromptTab === 'es-AR' ? 'Argentina' :
+        activePromptTab === 'en' ? 'Estados Unidos' :
+        activePromptTab === 'other-country' ? selectedExtraCountry :
+        'Brasil'
+      );
+
+      let promptToSend = currentPrompt;
+      if (currentPrompt) {
+        const previewRes = await fetch('/api/ai/prompts/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            country: targetCtry,
+            language: targetCtry === 'Brasil' ? 'pt' : (targetCtry === 'Estados Unidos' ? 'en' : 'es'),
+            customTemplate: currentPrompt
+          })
+        });
+        const previewJson = await previewRes.json();
+        if (previewJson.finalPrompt) {
+          promptToSend = previewJson.finalPrompt;
+        }
+      }
+
+      const res = await fetch('/api/ai/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'google',
+          model: formData.primaryModel || 'gemini-3.8-flash',
+          apiKey: formData.primaryApiKey,
+          customSystemPrompt: promptToSend,
+          testMessage: testLeadMessage,
+          country: targetCtry,
+          language: targetCtry === 'Brasil' ? 'pt' : (targetCtry === 'Estados Unidos' ? 'en' : 'es')
+        })
+      });
+      const data = await res.json();
+      setTestPromptReply(data);
+    } catch (err) {
+      setTestPromptReply({ success: false, error: err.message });
+    } finally {
+      setTestingCustomPrompt(false);
+    }
+  };
 
   // Dynamic models state
   const defaultGoogleModels = [
@@ -905,19 +1147,775 @@ export default function AiConfig({ aiSettings, onSave }) {
           </div>
         </div>
 
-        {/* Custom Instructions */}
+        {/* === CONTROLE TOTAL DO SYSTEM PROMPT & COMPORTAMENTOS === */}
+        <div style={{
+          marginTop: '32px',
+          paddingTop: '24px',
+          borderTop: '1px solid rgba(255, 255, 255, 0.08)'
+        }}>
+          {/* Section Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                background: 'rgba(16, 185, 129, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#10b981'
+              }}>
+                <Terminal size={20} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  Controle Total do System Prompt & Comportamentos dos Modelos
+                  <span style={{
+                    fontSize: '0.68rem',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    background: formData.systemPrompts?.mode === 'custom' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                    color: formData.systemPrompts?.mode === 'custom' ? '#38bdf8' : '#34d399',
+                    border: `1px solid ${formData.systemPrompts?.mode === 'custom' ? 'rgba(56, 189, 248, 0.4)' : 'rgba(16, 185, 129, 0.4)'}`
+                  }}>
+                    {formData.systemPrompts?.mode === 'custom' ? 'MODO CUSTOMIZADO ATIVO' : 'MOTOR INTELIGENTE BOSS ATIVO'}
+                  </span>
+                </h3>
+                <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '2px 0 0' }}>
+                  Controle exatamente o que é enviado para o Google Gemini e NVIDIA NIM, com suporte para múltiplas línguas, ofertas regionais e variáveis dinâmicas.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Mode Switcher Cards */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '12px',
+            marginBottom: '20px'
+          }}>
+            {/* Card 1: Smart Engine */}
+            <div
+              onClick={() => setFormData((prev) => ({
+                ...prev,
+                systemPrompts: { ...prev.systemPrompts, mode: 'smart_engine' }
+              }))}
+              style={{
+                padding: '14px 16px',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                background: formData.systemPrompts?.mode === 'smart_engine' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(15, 23, 42, 0.6)',
+                border: formData.systemPrompts?.mode === 'smart_engine' ? '1.5px solid #10b981' : '1px solid rgba(255, 255, 255, 0.08)',
+                boxShadow: formData.systemPrompts?.mode === 'smart_engine' ? '0 0 20px rgba(16, 185, 129, 0.15)' : 'none'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles size={16} color={formData.systemPrompts?.mode === 'smart_engine' ? '#10b981' : '#64748b'} />
+                  <span style={{ fontSize: '0.86rem', fontWeight: 700, color: formData.systemPrompts?.mode === 'smart_engine' ? '#34d399' : '#e2e8f0' }}>
+                    Modo Inteligente Automático (Motor Boss)
+                  </span>
+                </div>
+                <input
+                  type="radio"
+                  checked={formData.systemPrompts?.mode === 'smart_engine'}
+                  onChange={() => {}}
+                  style={{ accentColor: '#10b981' }}
+                />
+              </div>
+              <p style={{ fontSize: '0.74rem', color: '#94a3b8', margin: 0, lineHeight: 1.4 }}>
+                O motor nativo do Zapix gera automaticamente os prompts otimizados de alta persuasão, adaptando moedas, tickets e regras por país do lead.
+              </p>
+            </div>
+
+            {/* Card 2: Custom Control */}
+            <div
+              onClick={() => setFormData((prev) => ({
+                ...prev,
+                systemPrompts: { ...prev.systemPrompts, mode: 'custom' }
+              }))}
+              style={{
+                padding: '14px 16px',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                background: formData.systemPrompts?.mode === 'custom' ? 'rgba(56, 189, 248, 0.1)' : 'rgba(15, 23, 42, 0.6)',
+                border: formData.systemPrompts?.mode === 'custom' ? '1.5px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.08)',
+                boxShadow: formData.systemPrompts?.mode === 'custom' ? '0 0 20px rgba(56, 189, 248, 0.15)' : 'none'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Code size={16} color={formData.systemPrompts?.mode === 'custom' ? '#38bdf8' : '#64748b'} />
+                  <span style={{ fontSize: '0.86rem', fontWeight: 700, color: formData.systemPrompts?.mode === 'custom' ? '#38bdf8' : '#e2e8f0' }}>
+                    Modo Controle Total (Customizado) 🚀
+                  </span>
+                </div>
+                <input
+                  type="radio"
+                  checked={formData.systemPrompts?.mode === 'custom'}
+                  onChange={() => {}}
+                  style={{ accentColor: '#38bdf8' }}
+                />
+              </div>
+              <p style={{ fontSize: '0.74rem', color: '#94a3b8', margin: 0, lineHeight: 1.4 }}>
+                O modelo recebe <strong>EXATAMENTE</strong> o System Prompt definido por você nas abas abaixo, com total liberdade sobre a persona e estratégia.
+              </p>
+            </div>
+          </div>
+
+          {/* Language / Country Selector Tabs */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            flexWrap: 'wrap',
+            marginBottom: '14px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            paddingBottom: '10px'
+          }}>
+            {[
+              { id: 'pt', label: 'Brasil (Português)', flag: '🇧🇷' },
+              { id: 'es-MX', label: 'México (ES)', flag: '🇲🇽' },
+              { id: 'es-CO', label: 'Colômbia (ES)', flag: '🇨🇴' },
+              { id: 'es-AR', label: 'Argentina (ES)', flag: '🇦🇷' },
+              { id: 'es', label: 'LatAm Geral (ES Neutro)', flag: '🌎' },
+              { id: 'en', label: 'Global (Inglês)', flag: '🇺🇸' },
+              { id: 'other-country', label: 'Mais Países...', flag: '🌐' }
+            ].map((tab) => {
+              const isActive = activePromptTab === tab.id;
+              // Check if has custom content
+              let hasContent = false;
+              const sp = formData.systemPrompts || {};
+              if (tab.id === 'pt') hasContent = Boolean(sp.pt?.trim());
+              else if (tab.id === 'es') hasContent = Boolean(sp.es?.trim());
+              else if (tab.id === 'en') hasContent = Boolean(sp.en?.trim());
+              else if (tab.id === 'es-MX') hasContent = Boolean(sp.countries?.['México']?.trim());
+              else if (tab.id === 'es-CO') hasContent = Boolean(sp.countries?.['Colômbia']?.trim());
+              else if (tab.id === 'es-AR') hasContent = Boolean(sp.countries?.['Argentina']?.trim());
+              else if (tab.id === 'other-country') hasContent = Boolean(sp.countries?.[selectedExtraCountry]?.trim());
+
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActivePromptTab(tab.id)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.78rem',
+                    fontWeight: isActive ? 600 : 500,
+                    background: isActive ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                    border: `1px solid ${isActive ? 'rgba(56, 189, 248, 0.4)' : 'rgba(255, 255, 255, 0.08)'}`,
+                    color: isActive ? '#38bdf8' : '#94a3b8',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  <span>{tab.flag}</span>
+                  <span>{tab.label}</span>
+                  {hasContent && (
+                    <span style={{
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '50%',
+                      background: '#10b981',
+                      display: 'inline-block'
+                    }} />
+                  )}
+                </button>
+              );
+            })}
+
+            {/* Extra country selector if activePromptTab is 'other-country' */}
+            {activePromptTab === 'other-country' && (
+              <select
+                value={selectedExtraCountry}
+                onChange={(e) => setSelectedExtraCountry(e.target.value)}
+                style={{
+                  padding: '5px 10px',
+                  borderRadius: '6px',
+                  background: '#0f172a',
+                  border: '1px solid rgba(56, 189, 248, 0.4)',
+                  color: '#e2e8f0',
+                  fontSize: '0.78rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="Bolívia">🇧🇴 Bolívia</option>
+                <option value="Paraguai">🇵🇾 Paraguai</option>
+                <option value="Peru">🇵🇪 Peru</option>
+                <option value="Chile">🇨🇱 Chile</option>
+                <option value="Estados Unidos">🇺🇸 Estados Unidos</option>
+              </select>
+            )}
+          </div>
+
+          {/* Prompt Editor Card Container */}
+          <div style={{
+            background: 'rgba(10, 15, 29, 0.95)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '12px',
+            padding: '16px',
+            marginBottom: '20px'
+          }}>
+            {/* Editor Action Toolbar */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '10px',
+              marginBottom: '12px',
+              paddingBottom: '10px',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.06)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {/* Load Boss Template */}
+                <button
+                  type="button"
+                  onClick={handleLoadBossTemplate}
+                  className="btn-secondary"
+                  style={{
+                    fontSize: '0.75rem',
+                    padding: '5px 10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    borderColor: 'rgba(16, 185, 129, 0.4)',
+                    color: '#34d399'
+                  }}
+                  title="Carregar roteiro mestre de vendas otimizado para esta língua"
+                >
+                  <Sparkles size={13} />
+                  <span>📥 Carregar Template Boss das Vendas 🏆</span>
+                </button>
+
+                {/* Preview Compiled Prompt */}
+                <button
+                  type="button"
+                  onClick={() => handleOpenPreview()}
+                  className="btn-secondary"
+                  style={{
+                    fontSize: '0.75rem',
+                    padding: '5px 10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    borderColor: 'rgba(56, 189, 248, 0.4)',
+                    color: '#38bdf8'
+                  }}
+                  title="Ver o prompt final completo com todas as variáveis preenchidas"
+                >
+                  <Eye size={13} />
+                  <span>👁️ Pré-visualizar Prompt Final</span>
+                </button>
+
+                {/* Live Test Drawer Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setTestPlaygroundOpen(!testPlaygroundOpen)}
+                  className="btn-secondary"
+                  style={{
+                    fontSize: '0.75rem',
+                    padding: '5px 10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    borderColor: testPlaygroundOpen ? '#10b981' : 'rgba(245, 158, 11, 0.4)',
+                    color: testPlaygroundOpen ? '#34d399' : '#fbbf24',
+                    background: testPlaygroundOpen ? 'rgba(16, 185, 129, 0.15)' : 'transparent'
+                  }}
+                  title="Testar a resposta da IA ao vivo com este prompt"
+                >
+                  <Zap size={13} />
+                  <span>{testPlaygroundOpen ? 'Fechar Teste ao Vivo' : '⚡ Testar Prompt com IA ao Vivo'}</span>
+                </button>
+
+                {/* Clear */}
+                {getCurrentPromptText() && (
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateCurrentPromptText('')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#ef4444',
+                      fontSize: '0.72rem',
+                      cursor: 'pointer',
+                      padding: '4px 6px'
+                    }}
+                  >
+                    Limpar
+                  </button>
+                )}
+              </div>
+
+              {/* Word & Token Counters */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.74rem', color: '#64748b' }}>
+                <span>Palavras: <strong style={{ color: '#cbd5e1' }}>{getCurrentPromptText().trim() ? getCurrentPromptText().trim().split(/\s+/).length : 0}</strong></span>
+                <span>Caracteres: <strong style={{ color: '#cbd5e1' }}>{getCurrentPromptText().length}</strong></span>
+                <span>Tokens est.: <strong style={{ color: '#38bdf8' }}>~{Math.ceil(getCurrentPromptText().length / 4)}</strong></span>
+              </div>
+            </div>
+
+            {/* Quick-Insert Dynamic Variables (Clickable Chips) */}
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#94a3b8' }}>
+                  Variáveis Dinâmicas (clique para inserir no prompt onde estiver o cursor):
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {[
+                  { tag: '{{NOME_PRODUTO}}', label: 'Nome Produto', color: '#10b981' },
+                  { tag: '{{VALOR_BASICO}}', label: 'Preço Básico', color: '#10b981' },
+                  { tag: '{{VALOR_COMPLETO}}', label: 'Preço Completo', color: '#10b981' },
+                  { tag: '{{MOEDA}}', label: 'Moeda', color: '#38bdf8' },
+                  { tag: '{{PAIS}}', label: 'País', color: '#38bdf8' },
+                  { tag: '{{METODO_PAGAMENTO}}', label: 'Método Pagamento', color: '#a855f7' },
+                  { tag: '{{PAGAMENTO_INFO}}', label: 'Dados de Pagamento', color: '#a855f7' },
+                  { tag: '{{ENTREGAVEIS}}', label: 'Entregáveis (PDF/Foto)', color: '#ec4899' },
+                  { tag: '{{TAGS_ARQUIVOS}}', label: 'Tags de Arquivos', color: '#ec4899' },
+                  { tag: '{{DIRETRIZ_AUDIO}}', label: 'Diretriz de Áudio', color: '#f59e0b' },
+                  { tag: '{{DIRETRIZ_ENTREGA}}', label: 'Diretriz de Entrega', color: '#f59e0b' },
+                  { tag: '{{HISTORICO_MEMORIA}}', label: 'Regras de Memória', color: '#6366f1' },
+                  { tag: '{{DIRETRIZ_CONTEXTO}}', label: 'Contexto Atual', color: '#6366f1' },
+                  { tag: '{{DORES}}', label: 'Dores', color: '#64748b' },
+                  { tag: '{{BENEFICIOS}}', label: 'Benefícios', color: '#64748b' },
+                  { tag: '{{OBJECOES}}', label: 'Objeções', color: '#64748b' },
+                  { tag: '{{DIAS_GARANTIA}}', label: 'Garantia', color: '#64748b' }
+                ].map((v) => (
+                  <button
+                    key={v.tag}
+                    type="button"
+                    onClick={() => handleInsertVariable(v.tag)}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: `1px solid rgba(255, 255, 255, 0.08)`,
+                      borderRadius: '6px',
+                      padding: '3px 8px',
+                      fontSize: '0.70rem',
+                      fontFamily: 'monospace',
+                      color: v.color,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                      e.currentTarget.style.borderColor = v.color;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                    }}
+                  >
+                    + {v.tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Prompt Textarea */}
+            <div>
+              <textarea
+                ref={promptTextareaRef}
+                value={getCurrentPromptText()}
+                onChange={(e) => handleUpdateCurrentPromptText(e.target.value)}
+                placeholder={`Se deixado em branco, o Zapix usará o motor inteligente Boss das Vendas padrão para este país/idioma.\n\nEscreva seu System Prompt completo aqui, ou clique no botão acima "Carregar Template Boss das Vendas 🏆" para iniciar com um roteiro validado pronto para personalizar!`}
+                style={{
+                  width: '100%',
+                  minHeight: '380px',
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                  fontSize: '0.82rem',
+                  lineHeight: '1.5',
+                  padding: '14px',
+                  background: '#070b14',
+                  color: '#e2e8f0',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '8px',
+                  resize: 'vertical',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Syntax Tips Footer */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '10px',
+              marginTop: '8px',
+              fontSize: '0.72rem',
+              color: '#64748b'
+            }}>
+              <div>
+                💡 <strong>Dica de Formato:</strong> Use <code style={{ color: '#f59e0b', background: 'rgba(245, 158, 11, 0.1)', padding: '1px 5px', borderRadius: '4px' }}>[AUDIO: texto falado]</code> para notas de voz e <code style={{ color: '#ec4899', background: 'rgba(236, 72, 153, 0.1)', padding: '1px 5px', borderRadius: '4px' }}>[ENVIAR_ARQUIVO: TAG]</code> para envio de PDFs/fotos.
+              </div>
+              <div style={{ color: '#94a3b8' }}>
+                Suporta sintaxe dupla <code style={{ color: '#38bdf8' }}>{'{{TAG}}'}</code> ou simples <code style={{ color: '#38bdf8' }}>{'{TAG}'}</code>.
+              </div>
+            </div>
+
+            {/* Live Testing Playground (Expandable) */}
+            {testPlaygroundOpen && (
+              <div style={{
+                marginTop: '16px',
+                padding: '16px',
+                background: 'rgba(15, 23, 42, 0.85)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                borderRadius: '10px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Zap size={16} color="#10b981" />
+                    <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#34d399' }}>
+                      Playground de Teste em Tempo Real com IA
+                    </span>
+                    <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                      (Modelo: {formData.primaryModel})
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTestPlaygroundOpen(false)}
+                    style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* Quick lead message presets */}
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                  <span style={{ fontSize: '0.70rem', color: '#64748b', alignSelf: 'center' }}>Perguntas rápidas:</span>
+                  {[
+                    'Oi, quanto custa o material?',
+                    'Como funciona o método de vocês?',
+                    'Tem atividades para 4 anos?',
+                    'Como faço para pagar agora?',
+                    'Pode me mandar um áudio explicando?'
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setTestLeadMessage(preset)}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        color: '#cbd5e1',
+                        fontSize: '0.70rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Lead message input */}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                  <input
+                    type="text"
+                    value={testLeadMessage}
+                    onChange={(e) => setTestLeadMessage(e.target.value)}
+                    placeholder="Digite a mensagem que o lead enviaria no WhatsApp..."
+                    className="input-field"
+                    style={{ flex: 1, fontSize: '0.82rem' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleTestCustomPrompt}
+                    disabled={testingCustomPrompt}
+                    className="btn-primary"
+                    style={{
+                      fontSize: '0.80rem',
+                      padding: '8px 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Send size={14} className={testingCustomPrompt ? 'animate-spin' : ''} />
+                    <span>{testingCustomPrompt ? 'Testando...' : '🚀 Testar Resposta'}</span>
+                  </button>
+                </div>
+
+                {/* Test Output Box */}
+                {testPromptReply && (
+                  <div style={{
+                    padding: '12px',
+                    borderRadius: '8px',
+                    background: testPromptReply.success ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                    border: `1px solid ${testPromptReply.success ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                    color: testPromptReply.success ? '#e2e8f0' : '#f87171',
+                    fontSize: '0.82rem'
+                  }}>
+                    {testPromptReply.success ? (
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '6px' }}>
+                          <span style={{ color: '#34d399', fontWeight: 600, fontSize: '0.74rem' }}>
+                            ✓ Resposta Gerada pelo Modelo ({testPromptReply.latencyMs}ms):
+                          </span>
+                          <span style={{ color: '#64748b', fontSize: '0.70rem' }}>
+                            {testPromptReply.modelUsed}
+                          </span>
+                        </div>
+                        <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.45' }}>
+                          {testPromptReply.reply || testPromptReply.response}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <strong>❌ Erro ao testar prompt:</strong> {testPromptReply.error}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Custom Instructions Booster (Global) */}
         <div>
           <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-            Instruções Customizadas Adicionais (System Prompt Booster)
+            Instruções Customizadas Globais Adicionais (System Prompt Booster)
           </label>
           <textarea
             value={formData.customPromptInstructions}
             onChange={(e) => setFormData({ ...formData, customPromptInstructions: e.target.value })}
             className="input-field"
-            rows={4}
+            rows={3}
             placeholder="Ex: Trate o cliente sempre pelo primeiro nome. Nunca mencione termos concorrentes. Se perguntar sobre suporte, diga que respondemos em menos de 15 minutos..."
           />
         </div>
+
+        {/* Live Preview Modal */}
+        {previewModalOpen && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 99999,
+            background: 'rgba(0, 0, 0, 0.8)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}>
+            <div style={{
+              background: '#0a0f1d',
+              border: '1px solid rgba(56, 189, 248, 0.3)',
+              borderRadius: '14px',
+              maxWidth: '920px',
+              width: '100%',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
+            }}>
+              {/* Modal Header */}
+              <div style={{
+                padding: '16px 20px',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '10px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Eye size={18} color="#38bdf8" />
+                  <h3 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#f8fafc' }}>
+                    Pré-visualização do System Prompt Final (O que é enviado ao Modelo)
+                  </h3>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {/* Country Selector in Preview */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Simular País:</span>
+                    <select
+                      value={previewCountry}
+                      onChange={(e) => handleOpenPreview(e.target.value)}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        background: '#0f172a',
+                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                        color: '#e2e8f0',
+                        fontSize: '0.74rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="Brasil">🇧🇷 Brasil (BRL / R$)</option>
+                      <option value="México">🇲🇽 México (MXN / $)</option>
+                      <option value="Colômbia">🇨🇴 Colômbia (COP / $)</option>
+                      <option value="Argentina">🇦🇷 Argentina (ARS / $)</option>
+                      <option value="Bolívia">🇧🇴 Bolívia (BOB / Bs)</option>
+                      <option value="Paraguai">🇵🇾 Paraguai (PYG / Gs)</option>
+                      <option value="Estados Unidos">🇺🇸 Estados Unidos (USD / $)</option>
+                    </select>
+                  </div>
+
+                  {/* Copy Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (previewData?.finalPrompt) {
+                        navigator.clipboard.writeText(previewData.finalPrompt);
+                        setCopiedPreview(true);
+                        setTimeout(() => setCopiedPreview(false), 2000);
+                      }
+                    }}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: '6px',
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: copiedPreview ? '#34d399' : '#cbd5e1',
+                      fontSize: '0.74rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    {copiedPreview ? <Check size={13} /> : <Copy size={13} />}
+                    <span>{copiedPreview ? 'Copiado!' : 'Copiar'}</span>
+                  </button>
+
+                  {/* Close Button */}
+                  <button
+                    type="button"
+                    onClick={() => setPreviewModalOpen(false)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#94a3b8',
+                      cursor: 'pointer',
+                      padding: '4px'
+                    }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Body */}
+              <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
+                {previewLoading ? (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                    <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 10px' }} />
+                    <p style={{ margin: 0, fontSize: '0.84rem' }}>Renderizando e interpolando variáveis do prompt...</p>
+                  </div>
+                ) : previewData ? (
+                  <div>
+                    {/* Prompt Stats Bar */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '14px',
+                      marginBottom: '14px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      fontSize: '0.75rem',
+                      color: '#94a3b8'
+                    }}>
+                      <span>País Simulado: <strong style={{ color: '#38bdf8' }}>{previewData.country}</strong></span>
+                      <span>Idioma: <strong style={{ color: '#38bdf8' }}>{previewData.language}</strong></span>
+                      <span>Palavras: <strong style={{ color: '#cbd5e1' }}>{previewData.wordCount}</strong></span>
+                      <span>Caracteres: <strong style={{ color: '#cbd5e1' }}>{previewData.charCount}</strong></span>
+                      <span>Tokens Estimados: <strong style={{ color: '#10b981' }}>~{previewData.estimatedTokens}</strong></span>
+                    </div>
+
+                    {/* Compiled Prompt Code Viewer */}
+                    <div style={{
+                      background: '#040711',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '8px',
+                      padding: '14px',
+                      maxHeight: '400px',
+                      overflowY: 'auto',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      fontSize: '0.80rem',
+                      lineHeight: '1.5',
+                      color: '#e2e8f0',
+                      whiteSpace: 'pre-wrap'
+                    }}>
+                      {previewData.finalPrompt}
+                    </div>
+
+                    {/* Resolved Variables Table */}
+                    {previewData.variables && (
+                      <div style={{ marginTop: '16px' }}>
+                        <h4 style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          Variáveis Resolvidas Nesta Oferta:
+                        </h4>
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                          gap: '6px',
+                          maxHeight: '160px',
+                          overflowY: 'auto'
+                        }}>
+                          {Object.entries(previewData.variables).map(([k, v]) => (
+                            <div
+                              key={k}
+                              style={{
+                                padding: '6px 8px',
+                                borderRadius: '6px',
+                                background: 'rgba(255, 255, 255, 0.02)',
+                                border: '1px solid rgba(255, 255, 255, 0.06)',
+                                fontSize: '0.72rem'
+                              }}
+                            >
+                              <span style={{ color: '#38bdf8', fontFamily: 'monospace' }}>{`{{${k}}}`}: </span>
+                              <span style={{ color: '#cbd5e1' }}>{String(v).slice(0, 50)}{String(v).length > 50 ? '...' : ''}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                    Nenhum dado de pré-visualização disponível.
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div style={{
+                padding: '12px 20px',
+                borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                display: 'flex',
+                justifyContent: 'flex-end'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setPreviewModalOpen(false)}
+                  className="btn-secondary"
+                  style={{ fontSize: '0.80rem', padding: '6px 16px' }}
+                >
+                  Fechar Visualização
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </form>
   );

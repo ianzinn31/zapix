@@ -562,16 +562,75 @@ router.get('/ai/models/google', async (req, res) => {
   }
 });
 
-// === Live AI Connection Tester ===
+// === System Prompt Defaults & Live Preview ===
+router.get('/ai/prompts/defaults', (req, res) => {
+  try {
+    const templates = nvidiaNim.getDefaultPromptTemplates();
+    res.json({
+      success: true,
+      templates,
+      variablesDoc: [
+        { tag: '{{NOME_PRODUTO}}', label: 'Nome do Produto', desc: 'Nome configurado do produto ou infoproduto' },
+        { tag: '{{VALOR_BASICO}}', label: 'Preço Básico', desc: 'Ticket básico formatado na moeda do país' },
+        { tag: '{{VALOR_COMPLETO}}', label: 'Preço Completo', desc: 'Ticket completo formatado na moeda do país' },
+        { tag: '{{MOEDA}}', label: 'Código da Moeda', desc: 'BRL, MXN, COP, ARS, BOB, PYG, USD' },
+        { tag: '{{PAIS}}', label: 'País do Lead', desc: 'Brasil, México, Colômbia, Argentina, etc.' },
+        { tag: '{{METODO_PAGAMENTO}}', label: 'Método de Pagamento', desc: 'PIX, SPEI Automático (XPag), Nequi, Alias, etc.' },
+        { tag: '{{PAGAMENTO_INFO}}', label: 'Dados de Pagamento', desc: 'Chave PIX, conta bancária ou instruções automáticas' },
+        { tag: '{{ENTREGAVEIS}}', label: 'Lista de Entregáveis', desc: 'Lista de PDFs e materiais com suas respectivas tags' },
+        { tag: '{{TAGS_ARQUIVOS}}', label: 'Tags de Arquivos', desc: '[ENVIAR_ARQUIVO: TAG1] [ENVIAR_ARQUIVO: TAG2]' },
+        { tag: '{{DIRETRIZ_AUDIO}}', label: 'Diretriz de Áudio', desc: 'Regras de notas de voz [AUDIO: ...] e humanização' },
+        { tag: '{{DIRETRIZ_ENTREGA}}', label: 'Diretriz de Entrega', desc: 'Estratégia de entrega antes ou depois do pagamento' },
+        { tag: '{{HISTORICO_MEMORIA}}', label: 'Regras de Memória', desc: 'Não repetição de perguntas e saudações' },
+        { tag: '{{DIRETRIZ_CONTEXTO}}', label: 'Contexto Atual', desc: 'Diretiva do momento da conversa (dúvida, comprovante, etc.)' },
+        { tag: '{{DORES}}', label: 'Dores do Cliente', desc: 'Principais dores e desafios cadastrados' },
+        { tag: '{{BENEFICIOS}}', label: 'Benefícios', desc: 'Principais benefícios e diferenciais cadastrados' },
+        { tag: '{{OBJECOES}}', label: 'Objeções', desc: 'Respostas prontas para quebra de objeções' },
+        { tag: '{{DIAS_GARANTIA}}', label: 'Garantia', desc: 'Prazo da garantia incondicional' }
+      ]
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/ai/prompts/preview', (req, res) => {
+  try {
+    const { language, country, phone, customTemplate, contextDirective } = req.body || {};
+    const preview = nvidiaNim.renderPromptPreview({
+      language,
+      country,
+      phone,
+      customTemplate,
+      contextDirective
+    });
+    res.json({ success: true, ...preview });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// === Live AI Connection Tester & Prompt Validator ===
 router.post('/ai/test', async (req, res) => {
-  const { provider, model, apiKey } = req.body || {};
+  const { provider, model, apiKey, customSystemPrompt, testMessage, country, language } = req.body || {};
   const t0 = Date.now();
 
   try {
     let result = '';
-    const testMessages = [
-      { role: 'user', content: 'Diga apenas: Conexão realizada com sucesso!' }
-    ];
+    const testMessages = [];
+
+    if (customSystemPrompt && typeof customSystemPrompt === 'string' && customSystemPrompt.trim()) {
+      testMessages.push({ role: 'system', content: customSystemPrompt.trim() });
+    }
+
+    testMessages.push({
+      role: 'user',
+      content: testMessage && testMessage.trim() ? testMessage.trim() : 'Diga apenas: Conexão realizada com sucesso!'
+    });
+
+    const targetLang = language || (country === 'Brasil' ? 'pt' : (country === 'Estados Unidos' ? 'en' : 'es'));
+    const targetCtry = country || 'Brasil';
+    const maxTokensToUse = customSystemPrompt ? 350 : 100;
 
     if (provider === 'google' || (!provider && (model?.includes('gemini') || model?.startsWith('google/')))) {
       const key = (apiKey || storage.getSettings().ai?.primaryApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
@@ -583,10 +642,10 @@ router.post('/ai/test', async (req, res) => {
         key,
         testMessages,
         0.5,
-        100,
+        maxTokensToUse,
         45000,
-        'pt',
-        'Brasil'
+        targetLang,
+        targetCtry
       );
     } else if (provider === 'openrouter' || (!provider && model?.endsWith(':free'))) {
       const key = (apiKey || storage.getSettings().ai?.tertiaryApiKey || process.env.OPENROUTER_API_KEY || '').trim();
@@ -598,10 +657,10 @@ router.post('/ai/test', async (req, res) => {
         key,
         testMessages,
         0.5,
-        100,
+        maxTokensToUse,
         25000,
-        'pt',
-        'Brasil'
+        targetLang,
+        targetCtry
       );
     } else {
       // Default to NVIDIA NIM
@@ -614,10 +673,10 @@ router.post('/ai/test', async (req, res) => {
         key,
         testMessages,
         0.5,
-        100,
+        maxTokensToUse,
         25000,
-        'pt',
-        'Brasil'
+        targetLang,
+        targetCtry
       );
     }
 

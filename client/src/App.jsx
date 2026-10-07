@@ -531,7 +531,7 @@ export default function App() {
     { id: 'product', label: 'Oferta & Infoproduto', icon: Package },
     { id: 'deliverables', label: 'Entregáveis (PDF/Foto)', icon: FileText, badge: deliverables.length },
     { id: 'remarketing', label: 'Remarketing (Áudio)', icon: RotateCcw },
-    { id: 'ai', label: 'NVIDIA NIM (IA)', icon: Cpu },
+    { id: 'ai', label: 'Modelos & Prompts IA', icon: Cpu },
     { id: 'fish_audio', label: 'Fish Audio (Voz)', icon: Mic },
     { id: 'anti_ban', label: 'Anti-Banimento', icon: ShieldCheck },
     { id: 'meta_ads', label: 'Meta Ads & Webhooks', icon: Megaphone }

@@ -228,17 +228,518 @@ class NvidiaNimService {
     };
   }
 
+  // Default Master Boss Prompt Templates for rapid loading and total control
+  getDefaultPromptTemplates() {
+    return {
+      pt: `Você é um consultor especialista e mestre em atendimento consultivo e vendas persuasivas no WhatsApp para {{NOME_PRODUTO}} no {{PAIS}}.
+Seu objetivo principal é criar conexão humana genuína, entender as necessidades do cliente e fechar a venda de forma acolhedora e altamente persuasiva.
+
+=== DADOS DA OFERTA E PRODUTO ===
+- Produto: {{NOME_PRODUTO}}
+- Nicho: {{NICHO}}
+- Público-Alvo: {{PUBLICO_ALVO}}
+- Pacote Básico: {{VALOR_BASICO}}
+- Pacote Completo: {{VALOR_COMPLETO}}
+- Forma de Pagamento: {{METODO_PAGAMENTO}}
+- Instruções de Pagamento: {{PAGAMENTO_INFO}}
+- Garantia Incondicional: {{DIAS_GARANTIA}}
+
+=== ENTREGÁVEIS E MATERIAIS ===
+{{ENTREGAVEIS}}
+Tags para liberação dos arquivos: {{TAGS_ARQUIVOS}}
+
+=== DORES E TRANSFORMAÇÃO DO CLIENTE ===
+Dores comuns:
+{{DORES}}
+
+Benefícios principais:
+{{BENEFICIOS}}
+
+Resolução de objeções:
+{{OBJECOES}}
+
+=== ESTRATÉGIA DE ÁUDIO NO WHATSAPP ===
+{{DIRETRIZ_AUDIO}}
+- Para enviar áudio, utilize a tag [AUDIO: texto do áudio limpo].
+- Grave áudio quando o cliente falar de dúvidas sobre os filhos, rotina ou pedir áudio explicitamente.
+- NUNCA use marcadores técnicos dentro do áudio como [warm], [break] ou reticências exageradas.
+
+=== ESTRATÉGIA DE ENTREGA E CONVERSÃO ===
+{{DIRETRIZ_ENTREGA}}
+
+=== REGRAS DE MEMÓRIA E ATENDIMENTO HUMANO ===
+{{HISTORICO_MEMORIA}}
+- NUNCA repita saudações ("Olá!", "Tudo bem?") se a conversa já estiver em andamento.
+- NUNCA repita perguntas que o cliente já respondeu no histórico.
+- Responda primeiro à pergunta do lead antes de apresentar ofertas.
+- NUNCA termine uma mensagem em tópicos ou preços soltos sem fazer uma pergunta calorosa passando a bola para o cliente.
+
+=== DIRETRIZES DO MOMENTO ATUAL ===
+{{DIRETRIZ_CONTEXTO}}`,
+
+      es: `Eres un asesor experto de élite en atención consultiva y cierre de ventas persuasivas por WhatsApp para {{NOME_PRODUTO}} en {{PAIS}}.
+Tu objetivo primordial es generar una conexión humana real, empatizar con las necesidades del cliente y cerrar la venta con calidez y máxima persuasión.
+
+=== DATOS DE LA OFERTA Y PRODUCTO ===
+- Producto: {{NOME_PRODUTO}}
+- Nicho: {{NICHO}}
+- Público Objetivo: {{PUBLICO_ALVO}}
+- Paquete Básico: {{VALOR_BASICO}}
+- Paquete Completo: {{VALOR_COMPLETO}}
+- Método de Pago: {{METODO_PAGAMENTO}}
+- Instrucciones de Pago: {{PAGAMENTO_INFO}}
+- Garantía: {{DIAS_GARANTIA}}
+
+=== MATERIALES Y ENTREGABLES ===
+{{ENTREGAVEIS}}
+Etiquetas para enviar archivos: {{TAGS_ARQUIVOS}}
+
+=== DESAFÍOS Y BENEFICIOS ===
+Desafíos del cliente:
+{{DORES}}
+
+Beneficios principales:
+{{BENEFICIOS}}
+
+Resolución de objeciones:
+{{OBJECOES}}
+
+=== ESTRATEGIA DE NOTAS DE VOZ POR WHATSAPP ===
+{{DIRETRIZ_AUDIO}}
+- Para enviar nota de voz, usa la etiqueta [AUDIO: texto hablado limpio].
+- Envía audio cuando el cliente comparta la edad de sus hijos, dificultades de aprendizaje o pida audio.
+- NUNCA uses etiquetas técnicas como [warm] dentro del audio.
+
+=== ESTRATEGIA DE ENTREGA Y CONVERSIÓN ===
+{{DIRETRIZ_ENTREGA}}
+
+=== REGLAS CRÍTICAS DE MEMORIA Y ATENCIÓN HUMANA ===
+{{HISTORICO_MEMORIA}}
+- NUNCA repitas saludos ("¡Hola!", "¿Cómo estás?") si la conversación ya está activa.
+- NUNCA repitas preguntas que el cliente ya respondió en el historial.
+- Responde primero a la pregunta del lead antes de presentar la oferta.
+- NUNCA termines un mensaje con viñetas o precios sueltos sin hacer una pregunta cercana que invite al cliente a responder.
+
+=== SITUACIÓN Y DIRECTRICES DEL MOMENTO ACTUAL ===
+{{DIRETRIZ_CONTEXTO}}`,
+
+      en: `You are an expert sales consultant and consultative closing specialist on WhatsApp for {{NOME_PRODUTO}} in {{PAIS}}.
+Your primary goal is to build genuine human connection, understand customer needs, and close sales smoothly.
+
+=== OFFER & PRODUCT DETAILS ===
+- Product: {{NOME_PRODUTO}}
+- Niche: {{NICHO}}
+- Target Audience: {{PUBLICO_ALVO}}
+- Basic Package: {{VALOR_BASICO}}
+- Complete Package: {{VALOR_COMPLETO}}
+- Payment Method: {{METODO_PAGAMENTO}}
+- Payment Details: {{PAGAMENTO_INFO}}
+- Guarantee: {{DIAS_GARANTIA}}
+
+=== DELIVERABLES & MATERIALS ===
+{{ENTREGAVEIS}}
+File tags to send materials: {{TAGS_ARQUIVOS}}
+
+=== PAIN POINTS & BENEFITS ===
+Customer Challenges:
+{{DORES}}
+
+Main Benefits:
+{{BENEFICIOS}}
+
+Objections:
+{{OBJECOES}}
+
+=== WHATSAPP VOICE NOTE STRATEGY ===
+{{DIRETRIZ_AUDIO}}
+- Use [AUDIO: clean voice note text] to send voice messages.
+- Golden moments for voice notes: when they share specific challenges or explicitly ask for voice.
+- NEVER use brackets or emotion tags like [warm] inside voice notes.
+
+=== MEMORY & CONVERSATIONAL RULES ===
+{{HISTORICO_MEMORIA}}
+- NEVER repeat greetings ("Hello!", "How are you?") if the conversation is already in progress.
+- NEVER repeat questions the customer has already answered.
+- Always address the customer's question first.
+- NEVER end a message without an engaging question passing the conversational turn to the client.
+
+=== CURRENT CONTEXT ===
+{{DIRETRIZ_CONTEXTO}}`,
+
+      countries: {
+        'Brasil': '',
+        'México': `Eres un asesor comercial mexicano nativo de élite en WhatsApp para {{NOME_PRODUTO}} en México.
+Usa expresiones mexicanas cálidas, amables y cercanas (ej: "¡Qué onda! Con todo gusto", "oye", "ahorita te platico", "te paso la info", "está padrísimo", "para orientarte mejor, ¿qué edad tiene tu pequeño o pequeña?", "porfa").
+
+=== DATOS DE LA OFERTA (MÉXICO) ===
+- Producto: {{NOME_PRODUTO}}
+- Paquete Básico: {{VALOR_BASICO}}
+- Paquete Completo: {{VALOR_COMPLETO}}
+- Método de Pago: {{METODO_PAGAMENTO}}
+- Instrucciones: {{PAGAMENTO_INFO}}
+- Garantía: {{DIAS_GARANTIA}}
+
+=== MATERIALES Y ENTREGABLES ===
+{{ENTREGAVEIS}}
+Etiquetas de archivos: {{TAGS_ARQUIVOS}}
+
+=== ESTRATEGIA DE NOTAS DE VOZ ===
+{{DIRETRIZ_AUDIO}}
+- Graba nota de voz con [AUDIO: texto hablado mexicano limpio].
+
+=== REGLAS DE MEMORIA Y CIERRE ===
+{{HISTORICO_MEMORIA}}
+- NUNCA repitas saludos si la conversación ya está abierta.
+- Cierra siempre con una pregunta amable pasando la pelota al cliente.
+
+=== CONTEXTO ACTUAL ===
+{{DIRETRIZ_CONTEXTO}}`,
+
+        'Colômbia': `Eres un asesor comercial colombiano nativo de élite en WhatsApp para {{NOME_PRODUTO}} en Colombia.
+Usa expresiones colombianas amables, educadas y respetuosas (ej: "¡Hola! Con mucho gusto", "chévere", "de una", "listo", "a la orden", "¿qué edad tiene tu niño(a)?").
+
+=== DATOS DE LA OFERTA (COLOMBIA) ===
+- Producto: {{NOME_PRODUTO}}
+- Paquete Básico: {{VALOR_BASICO}}
+- Paquete Completo: {{VALOR_COMPLETO}}
+- Método de Pago: {{METODO_PAGAMENTO}} (Nequi / Bre-B)
+- Instrucciones: {{PAGAMENTO_INFO}}
+- Garantía: {{DIAS_GARANTIA}}
+
+=== MATERIALES Y ENTREGABLES ===
+{{ENTREGAVEIS}}
+Etiquetas de archivos: {{TAGS_ARQUIVOS}}
+
+=== ESTRATEGIA DE NOTAS DE VOZ ===
+{{DIRETRIZ_AUDIO}}
+- Graba nota de voz con [AUDIO: texto hablado colombiano cálido y amable].
+
+=== REGLAS DE MEMORIA Y CIERRE ===
+{{HISTORICO_MEMORIA}}
+- Cierra siempre con una pregunta empática pasando la pelota al cliente.
+
+=== CONTEXTO ACTUAL ===
+{{DIRETRIZ_CONTEXTO}}`,
+
+        'Argentina': `Sos un asesor comercial argentino de élite en WhatsApp para {{NOME_PRODUTO}} en Argentina.
+Usa expresiones argentinas naturales, fluidas y empáticas (voseo respetuoso, "¡Hola! ¿Cómo estás?", "te cuento", "te paso la info", "fijate", "cualquier duda avisame").
+
+=== DATOS DE LA OFERTA (ARGENTINA) ===
+- Producto: {{NOME_PRODUTO}}
+- Paquete Básico: {{VALOR_BASICO}}
+- Paquete Completo: {{VALOR_COMPLETO}}
+- Método de Pago: {{METODO_PAGAMENTO}} (Alias / Transferencia)
+- Instrucciones: {{PAGAMENTO_INFO}}
+- Garantía: {{DIAS_GARANTIA}}
+
+=== MATERIALES Y ENTREGABLES ===
+{{ENTREGAVEIS}}
+Etiquetas de archivos: {{TAGS_ARQUIVOS}}
+
+=== ESTRATEGIA DE AUDIO Y CIERRE ===
+{{DIRETRIZ_AUDIO}}
+- Usa [AUDIO: texto hablado argentino fluido].
+- Cierra siempre con una pregunta que invite a responder.
+
+=== CONTEXTO ACTUAL ===
+{{DIRETRIZ_CONTEXTO}}`,
+
+        'Bolívia': '',
+        'Paraguai': '',
+        'Peru': '',
+        'Chile': '',
+        'Estados Unidos': ''
+      }
+    };
+  }
+
+  // Extract and format all dynamic template variables for system prompts
+  buildPromptVariables(leadPhone = '', localeInfo = null, contextDirective = '') {
+    const settings = storage.getSettings();
+    const product = settings.product || {};
+    const deliverables = storage.getDeliverables();
+
+    const locale = localeInfo || this.detectLanguageAndCountry('', [], leadPhone);
+    const targetCountry = locale.country || product.targetCountry || 'Brasil';
+    const isLatAm = locale.isLatAm;
+    const targetLanguage = locale.language || (isLatAm ? 'es' : 'pt');
+
+    // Resolve country-specific pricing
+    const countryPrices = product.countryPrices || {};
+    const specificCountryPrice = countryPrices[targetCountry] || storage.getCountryPrice(targetCountry);
+    const localizedOffer = product.localizedOffers?.[targetCountry] || storage.getLocalizedOffer(targetCountry);
+
+    let resolvedTicketBasic = 0;
+    let resolvedTicketComplete = 0;
+
+    if (specificCountryPrice && (specificCountryPrice.ticketBasic > 0 || specificCountryPrice.ticketComplete > 0)) {
+      resolvedTicketBasic = Number(specificCountryPrice.ticketBasic) || 0;
+      resolvedTicketComplete = Number(specificCountryPrice.ticketComplete) || Math.round(resolvedTicketBasic * 1.6);
+    } else if (localizedOffer && (localizedOffer.ticketBasic > 0 || localizedOffer.ticketComplete > 0)) {
+      resolvedTicketBasic = Number(localizedOffer.ticketBasic) || 0;
+      resolvedTicketComplete = Number(localizedOffer.ticketComplete) || Math.round(resolvedTicketBasic * 1.6);
+    } else if (targetCountry === 'Brasil') {
+      resolvedTicketBasic = Number(product.ticketBasic) || Number(product.price) || 15;
+      resolvedTicketComplete = Number(product.ticketComplete) || 37;
+    } else {
+      const presetDefaults = {
+        'México': { basic: 150, complete: 250 },
+        'Colômbia': { basic: 45000, complete: 75000 },
+        'Argentina': { basic: 15000, complete: 25000 },
+        'Bolívia': { basic: 70, complete: 120 },
+        'Paraguai': { basic: 120000, complete: 200000 },
+        'Estados Unidos': { basic: 15, complete: 27 }
+      };
+      const def = presetDefaults[targetCountry] || { basic: 15, complete: 27 };
+      resolvedTicketBasic = def.basic;
+      resolvedTicketComplete = def.complete;
+    }
+
+    let currencyCode = isLatAm
+      ? (targetCountry === 'México' ? 'MXN' : targetCountry === 'Colômbia' ? 'COP' : targetCountry === 'Bolívia' ? 'BOB' : targetCountry === 'Paraguai' ? 'PYG' : targetCountry === 'Argentina' ? 'ARS' : 'USD')
+      : (product.currencyCode || 'BRL');
+    if (specificCountryPrice?.currencyCode) {
+      currencyCode = specificCountryPrice.currencyCode;
+    } else if (isLatAm && product.currencyCode && product.currencyCode !== 'BRL') {
+      currencyCode = product.currencyCode;
+    }
+
+    const currencySymbol = specificCountryPrice?.currencySymbol || (isLatAm ? (currencyCode === 'BOB' ? 'Bs' : currencyCode === 'PYG' ? 'Gs' : '$') : (product.currencySymbol || 'R$'));
+
+    // Format prices nicely
+    let formattedTicketBasic = '';
+    let formattedTicketComplete = '';
+    if (targetCountry === 'Brasil' || targetLanguage === 'pt') {
+      formattedTicketBasic = `R$ ${Number(resolvedTicketBasic).toFixed(2).replace('.', ',')}`;
+      formattedTicketComplete = `R$ ${Number(resolvedTicketComplete).toFixed(2).replace('.', ',')}`;
+    } else if (targetCountry === 'Colômbia') {
+      formattedTicketBasic = `$ ${Number(resolvedTicketBasic).toLocaleString('es-CO')} COP`;
+      formattedTicketComplete = `$ ${Number(resolvedTicketComplete).toLocaleString('es-CO')} COP`;
+    } else if (targetCountry === 'Argentina') {
+      formattedTicketBasic = `$ ${Number(resolvedTicketBasic).toLocaleString('es-AR')} ARS`;
+      formattedTicketComplete = `$ ${Number(resolvedTicketComplete).toLocaleString('es-AR')} ARS`;
+    } else if (targetCountry === 'México') {
+      formattedTicketBasic = `$ ${resolvedTicketBasic} MXN`;
+      formattedTicketComplete = `$ ${resolvedTicketComplete} MXN`;
+    } else {
+      formattedTicketBasic = `${currencySymbol} ${resolvedTicketBasic} ${currencyCode}`;
+      formattedTicketComplete = `${currencySymbol} ${resolvedTicketComplete} ${currencyCode}`;
+    }
+
+    // Deliverables
+    const deliverableList = deliverables
+      .map((d) => {
+        if (isLatAm) {
+          const cleanDesc = (d.description || '')
+            .replace(/atividades/gi, 'actividades')
+            .replace(/crianças/gi, 'niños')
+            .replace(/alfabetização/gi, 'alfabetización')
+            .replace(/inglês/gi, 'inglés');
+          return `- ${d.name} (${d.type.toUpperCase()}) | Tag: [${d.tag}] | Descripción: ${cleanDesc}`;
+        }
+        return `- ${d.name} (${d.type.toUpperCase()}) | Tag: [${d.tag}] | Descrição: ${d.description}`;
+      })
+      .join('\n') || '- Material Digital Completo | Tag: [PRODUTO]';
+
+    const allDelivTags = deliverables.map(d => `[ENVIAR_ARQUIVO: ${d.tag}]`).join(' ') || '[ENVIAR_ARQUIVO: PRODUTO]';
+
+    // Payment details
+    let paymentMethodName = 'PIX';
+    let paymentInfoDetails = '';
+    if (targetCountry === 'México') {
+      paymentMethodName = 'SPEI Automático (XPag)';
+      paymentInfoDetails = `Transferencia interbancaria SPEI / CLABE única. Activación 100% automática tras la transferencia.`;
+    } else if (targetCountry === 'Colômbia') {
+      paymentMethodName = 'Nequi / Bre-B';
+      paymentInfoDetails = `Número Nequi: ${product.nequiNumber || 'Consulte'} (Titular: ${product.nequiBeneficiary || 'Oficial'}). Solicite comprobante para liberar acceso.`;
+    } else if (targetCountry === 'Bolívia') {
+      paymentMethodName = 'QR Simple / Banco';
+      paymentInfoDetails = `Banco: ${product.boliviaBankName || ''} - Cuenta: ${product.boliviaAccountNumber || ''} (Titular: ${product.boliviaBeneficiary || 'Oficial'}).`;
+    } else if (targetCountry === 'Argentina' || targetCountry === 'Paraguai') {
+      paymentMethodName = 'Alias / Transferencia';
+      paymentInfoDetails = `Clave Alias: ${product.aliasKey || 'Consulte'} (Banco: ${product.aliasBank || ''} - Titular: ${product.aliasBeneficiary || 'Oficial'}).`;
+    } else {
+      paymentMethodName = 'PIX';
+      paymentInfoDetails = `Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'} | Titular: ${product.pixBeneficiary || 'ian alves dos anjos'}. Enviar comprovante para confirmação.`;
+    }
+
+    const deliveryStrategy = product.deliveryStrategy || 'require_payment';
+    const deliveryGuideline = deliveryStrategy === 'deliver_first'
+      ? (isLatAm ? 'Entregar el material completo primero con las etiquetas de archivos y cobrar después.' : 'Entregar o material completo primeiro com as tags de arquivos e cobrar depois.')
+      : (isLatAm ? 'Cobro previo: los materiales oficiales se liberan automáticamente tras el pago.' : 'Cobrança prévia: os materiais oficiais são liberados automaticamente após a confirmação do pagamento.');
+
+    const audioGuideline = isLatAm
+      ? 'Prioriza notas de voz [AUDIO: ...] de 15 a 25 segundos para generar conexión humana y confianza. NUNCA uses marcadores como [warm] dentro del audio.'
+      : 'Priorize notas de voz [AUDIO: ...] de 15 a 25 segundos para gerar conexão humana e confiança. NUNCA use marcadores como [warm] dentro do áudio.';
+
+    return {
+      NOME_PRODUTO: product.name || 'Material Educativo',
+      NICHO: product.niche || 'Educação Infantil',
+      PUBLICO_ALVO: product.targetAudience || 'Mães e pais',
+      PAIS: targetCountry,
+      IDIOMA: targetLanguage,
+      VALOR_BASICO: formattedTicketBasic,
+      VALOR_COMPLETO: formattedTicketComplete,
+      VALOR_BASICO_NUM: String(resolvedTicketBasic),
+      VALOR_COMPLETO_NUM: String(resolvedTicketComplete),
+      MOEDA: currencyCode,
+      SIMBOLO_MOEDA: currencySymbol,
+      METODO_PAGAMENTO: paymentMethodName,
+      PAGAMENTO_INFO: paymentInfoDetails,
+      ENTREGAVEIS: deliverableList,
+      TAGS_ARQUIVOS: allDelivTags,
+      DIRETRIZ_AUDIO: audioGuideline,
+      DIRETRIZ_ENTREGA: deliveryGuideline,
+      DIRETRIZ_CONTEXTO: contextDirective || '',
+      DORES: Array.isArray(product.mainPainPoints) && product.mainPainPoints.length ? product.mainPainPoints.join('\n- ') : 'Dificuldades no aprendizado, excesso de telas, falta de tempo',
+      BENEFICIOS: Array.isArray(product.mainBenefits) && product.mainBenefits.length ? product.mainBenefits.join('\n- ') : 'Material prático, desenvolvimento cognitivo lúdico, economia de tempo',
+      OBJECOES: Array.isArray(product.objections) && product.objections.length
+        ? product.objections.map(o => typeof o === 'string' ? o : `${o.question || o.trigger || ''}: ${o.answer || o.response || ''}`).join('\n')
+        : 'É seguro? Sim, 100% confiável com garantia e suporte imediato.',
+      DIAS_GARANTIA: `${product.guaranteeDays || 7} dias`,
+      HISTORICO_MEMORIA: isLatAm
+        ? 'Lee atentamente todo el historial de la conversación. Nunca repitas preguntas ya respondidas ni te vuelvas a presentar en conversaciones activas.'
+        : 'Leia atentamente todo o histórico da conversa. Nunca repita perguntas já respondidas nem se reapresente em conversas ativas.'
+    };
+  }
+
+  // Interpolate both {{KEY}} and {KEY} dynamic tags in system prompt
+  interpolatePromptVariables(template = '', variables = {}) {
+    if (!template || typeof template !== 'string') return '';
+    let result = template;
+
+    // Harmonize common aliases (English / Portuguese)
+    const allVars = {
+      ...variables,
+      TARGET_COUNTRY: variables.PAIS || '',
+      CURRENCY_CODE: variables.MOEDA || '',
+      CURRENCY_SYMBOL: variables.SIMBOLO_MOEDA || '',
+      TICKET_BASIC: variables.VALOR_BASICO_NUM || variables.VALOR_BASICO || '',
+      TICKET_COMPLETE: variables.VALOR_COMPLETO_NUM || variables.VALOR_COMPLETO || '',
+      PRODUCT_NAME: variables.NOME_PRODUTO || '',
+      PAYMENT_METHOD: variables.METODO_PAGAMENTO || '',
+      PAYMENT_INFO: variables.PAGAMENTO_INFO || ''
+    };
+
+    for (const [key, val] of Object.entries(allVars)) {
+      const safeVal = val !== undefined && val !== null ? String(val) : '';
+      const regexDouble = new RegExp(`\\{\\{${key}\\}\\}`, 'gi');
+      const regexSingle = new RegExp(`\\{${key}\\}`, 'gi');
+      result = result.replace(regexDouble, safeVal).replace(regexSingle, safeVal);
+    }
+    return result;
+  }
+
+  // Render a live preview of what will be sent to the model with all variables resolved
+  renderPromptPreview({ language = 'pt', country = 'Brasil', phone = '', customTemplate = null, contextDirective = '' } = {}) {
+    const settings = storage.getSettings();
+    const sysPrompts = settings.ai?.systemPrompts || {};
+    const localeInfo = {
+      country: country || 'Brasil',
+      language: language || (country === 'Brasil' ? 'pt' : (country === 'Estados Unidos' ? 'en' : 'es')),
+      isLatAm: country !== 'Brasil' && country !== 'Estados Unidos'
+    };
+
+    const variables = this.buildPromptVariables(phone, localeInfo, contextDirective);
+
+    // Pick template
+    let template = customTemplate;
+    if (!template) {
+      if (sysPrompts.countries && sysPrompts.countries[country] && sysPrompts.countries[country].trim()) {
+        template = sysPrompts.countries[country].trim();
+      } else if (language === 'en' && sysPrompts.en && sysPrompts.en.trim()) {
+        template = sysPrompts.en.trim();
+      } else if (localeInfo.isLatAm && sysPrompts.es && sysPrompts.es.trim()) {
+        template = sysPrompts.es.trim();
+      } else if (!localeInfo.isLatAm && language === 'pt' && sysPrompts.pt && sysPrompts.pt.trim()) {
+        template = sysPrompts.pt.trim();
+      }
+    }
+
+    // If still no custom template, fall back to default template for preview
+    if (!template) {
+      const defaults = this.getDefaultPromptTemplates();
+      if (defaults.countries?.[country]) {
+        template = defaults.countries[country];
+      } else if (language === 'en') {
+        template = defaults.en;
+      } else if (localeInfo.isLatAm) {
+        template = defaults.es;
+      } else {
+        template = defaults.pt;
+      }
+    }
+
+    let finalPrompt = this.interpolatePromptVariables(template, variables);
+
+    if (contextDirective && !template.includes('DIRETRIZ_CONTEXTO')) {
+      finalPrompt += `\n\n=== CONTEXTO E DIRETRIZES DO MOMENTO ATUAL ===\n${contextDirective}\n`;
+    }
+
+    if (settings.ai?.customPromptInstructions) {
+      finalPrompt += `\n\n=== INSTRUÇÕES ADICIONAIS DO USUÁRIO ===\n${settings.ai.customPromptInstructions}\n`;
+    }
+
+    const wordCount = finalPrompt.trim().split(/\s+/).filter(Boolean).length;
+    const charCount = finalPrompt.length;
+    const estimatedTokens = Math.ceil(charCount / 4);
+
+    return {
+      finalPrompt,
+      template,
+      variables,
+      mode: sysPrompts.mode || 'smart_engine',
+      country,
+      language,
+      wordCount,
+      charCount,
+      estimatedTokens
+    };
+  }
+
   // Construct sales-focused prompt with product context, deliverables, and behavioral rules
   buildSystemPrompt(contextDirective = '', leadPhone = '', localeInfo = null) {
     const settings = storage.getSettings();
     const product = settings.product || {};
     const deliverables = storage.getDeliverables();
+    const sysPrompts = settings.ai?.systemPrompts || {};
 
     // 1. Dynamic System Variables (LatAm & Brazil Architecture)
     const locale = localeInfo || this.detectLanguageAndCountry('', [], leadPhone);
     const targetCountry = locale.country || product.targetCountry || 'Brasil';
     const isLatAm = locale.isLatAm;
     const targetLanguage = locale.language || (isLatAm ? 'es' : 'pt');
+
+    // 2. Check if Custom Prompt Mode is active
+    const isCustomMode = sysPrompts.mode === 'custom';
+    let customTemplate = null;
+
+    if (sysPrompts.countries && sysPrompts.countries[targetCountry] && sysPrompts.countries[targetCountry].trim()) {
+      customTemplate = sysPrompts.countries[targetCountry].trim();
+    } else if (targetLanguage === 'en' && sysPrompts.en && sysPrompts.en.trim()) {
+      customTemplate = sysPrompts.en.trim();
+    } else if (isLatAm && sysPrompts.es && sysPrompts.es.trim()) {
+      customTemplate = sysPrompts.es.trim();
+    } else if (!isLatAm && targetLanguage === 'pt' && sysPrompts.pt && sysPrompts.pt.trim()) {
+      customTemplate = sysPrompts.pt.trim();
+    }
+
+    // If Custom Mode is active and template is present, use it directly!
+    if (isCustomMode && customTemplate) {
+      const variables = this.buildPromptVariables(leadPhone, locale, contextDirective);
+      let renderedPrompt = this.interpolatePromptVariables(customTemplate, variables);
+
+      if (contextDirective && !customTemplate.includes('DIRETRIZ_CONTEXTO')) {
+        renderedPrompt += `\n\n=== CONTEXTO E DIRETRIZES DO MOMENTO ATUAL ===\n${contextDirective}\n`;
+      }
+
+      if (settings.ai?.customPromptInstructions) {
+        const extraBooster = this.interpolatePromptVariables(settings.ai.customPromptInstructions, variables);
+        renderedPrompt += `\n\n=== INSTRUÇÕES ADICIONAIS DO USUÁRIO ===\n${extraBooster}\n`;
+      }
+
+      return renderedPrompt;
+    }
 
     // 2. Resolve Country-Specific Pricing (Guarantee each country uses its own custom tickets)
     const countryPrices = product.countryPrices || {};

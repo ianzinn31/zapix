@@ -59,7 +59,24 @@ const DEFAULT_STATE = {
       maxTokens: 1500,
       isFallbackActive: false,
       lastFallbackReason: null,
-      customPromptInstructions: ''
+      customPromptInstructions: '',
+      systemPrompts: {
+        mode: 'smart_engine', // 'smart_engine' | 'custom'
+        pt: '',
+        es: '',
+        en: '',
+        countries: {
+          'Brasil': '',
+          'México': '',
+          'Colômbia': '',
+          'Argentina': '',
+          'Bolívia': '',
+          'Paraguai': '',
+          'Peru': '',
+          'Chile': '',
+          'Estados Unidos': ''
+        }
+      }
     },
     fishAudio: {
       provider: 'openrouter',
@@ -376,9 +393,17 @@ class StorageService {
           if (invalidFallback.includes(this.data.settings.ai.fallbackModel) || !this.data.settings.ai.fallbackModel) {
             this.data.settings.ai.fallbackModel = 'google/diffusiongemma-26b-a4b-it';
           }
-          if (this.data.settings.ai.isFallbackActive && (this.data.settings.ai.primaryModel === 'google/gemini-3.8-flash' || this.data.settings.ai.primaryModel === 'z-ai/glm-5.3')) {
-            this.data.settings.ai.isFallbackActive = false;
-            this.data.settings.ai.lastFallbackReason = null;
+          if (!this.data.settings.ai.systemPrompts) {
+            this.data.settings.ai.systemPrompts = { ...DEFAULT_STATE.settings.ai.systemPrompts };
+          } else {
+            this.data.settings.ai.systemPrompts = {
+              ...DEFAULT_STATE.settings.ai.systemPrompts,
+              ...this.data.settings.ai.systemPrompts,
+              countries: {
+                ...(DEFAULT_STATE.settings.ai.systemPrompts.countries || {}),
+                ...(this.data.settings.ai.systemPrompts.countries || {})
+              }
+            };
           }
           await supabaseService.saveSettings(this.data.settings);
         } else {
@@ -515,7 +540,24 @@ class StorageService {
 
   updateSettings(partialSettings) {
     if (partialSettings.ai) {
-      this.data.settings.ai = { ...this.data.settings.ai, ...partialSettings.ai };
+      const existingSystemPrompts = this.data.settings.ai?.systemPrompts || DEFAULT_STATE.settings.ai.systemPrompts;
+      const incomingSystemPrompts = partialSettings.ai.systemPrompts;
+      const updatedSystemPrompts = incomingSystemPrompts
+        ? {
+            ...existingSystemPrompts,
+            ...incomingSystemPrompts,
+            countries: {
+              ...(existingSystemPrompts?.countries || {}),
+              ...(incomingSystemPrompts.countries || {})
+            }
+          }
+        : existingSystemPrompts;
+
+      this.data.settings.ai = {
+        ...this.data.settings.ai,
+        ...partialSettings.ai,
+        systemPrompts: updatedSystemPrompts
+      };
     }
     if (partialSettings.fishAudio) {
       const existingRegional = this.data.settings.fishAudio?.regionalVoices || DEFAULT_STATE.settings.fishAudio.regionalVoices;
