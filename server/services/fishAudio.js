@@ -395,9 +395,9 @@ class FishAudioService {
     const apiKey = config.apiKey || process.env.OPENROUTER_API_KEY || process.env.FISH_AUDIO_API_KEY;
     const model = customModel || config.model || 'fish-audio/s2.1-pro-free:free';
 
-    // Strict configurable timeout: default 8s, max 8s
-    const configuredTimeout = Number(config.timeoutMs) || 8000;
-    const requestTimeoutMs = Math.min(Math.max(configuredTimeout, 1000), 8000);
+    // Configurable timeout: default 25s, minimum 5s, maximum 60s
+    const configuredTimeout = Number(config.timeoutMs) || 25000;
+    const requestTimeoutMs = Math.min(Math.max(configuredTimeout, 5000), 60000);
 
     // Normalize context object
     const contextObj = typeof leadContext === 'string'
@@ -414,11 +414,6 @@ class FishAudioService {
     }
 
     const speechText = this.formatSpeechCadence(text);
-
-    // 1. Preventive Payload Validation: 350 char limit to avoid synthesis timeout
-    if (speechText.length > 350) {
-      throw new Error(`Texto para síntese excede o limite máximo preventivo (${speechText.length} > 350 caracteres).`);
-    }
 
     const speechSpeed = config.speed || 0.88;
 

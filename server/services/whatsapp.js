@@ -1150,17 +1150,7 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
         const sendVoiceNote = async (speechText) => {
           if (!speechText || speechText.trim().length === 0 || signal.aborted) return;
 
-          // 1. Preventive Payload Validation: 350 char limit to avoid synthesis timeout
           const cleanSpeechText = fishAudio.formatSpeechCadence(speechText);
-          if (cleanSpeechText.length > 350) {
-            console.warn(`[Fish Audio Safeguard] Texto de áudio muito longo (${cleanSpeechText.length} caracteres > 350). Revertido preventivamente para envio em texto.`);
-            storage.addLog(
-              'WARNING',
-              `[Fish Audio Safeguard] Texto do áudio com ${cleanSpeechText.length} caracteres (limite: 350). Revertido preventivamente para envio em texto.`
-            );
-            await sendTextBubbles(speechText);
-            return;
-          }
 
           try {
             const generatedAudio = await fishAudio.generateSpeech(cleanSpeechText, null, null, {
@@ -1820,50 +1810,41 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
     if (manualSpeechText && manualSpeechText.length > 0) {
       const speechText = manualSpeechText;
 
-      // 1. Preventive Payload Validation: 350 char limit
-      if (speechText.length > 350) {
-        console.warn(`[Fish Audio Safeguard] Texto de áudio manual excede 350 caracteres (${speechText.length} > 350). Revertido preventivamente para texto.`);
+      try {
+        const generatedAudio = await fishAudio.generateSpeech(speechText, null, null, { phone, jid, text: speechText });
+        const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
+        const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
+
+        const sentResult = await this.sock.sendMessage(jid, {
+          audio: audioBuffer,
+          mimetype: 'audio/ogg; codecs=opus',
+          ptt: true,
+          waveform
+        });
+
+        try { await this.safePresence(jid, 'paused'); } catch (_) {}
+
+        const audioMsg = storage.addMessage({
+          id: sentResult?.key?.id,
+          phone,
+          fromMe: true,
+          text: `🎵 [Áudio]: "${speechText}"`,
+          type: 'audio',
+          mediaUrl: generatedAudio.audioUrl,
+          audioDuration: generatedAudio.durationSec,
+          status: 'delivered'
+        });
+        this.emit('chat:message', audioMsg);
+        this.emit('lead:updated', storage.getLead(phone));
+        storage.addLog('SUCCESS', `Áudio enviado manualmente para ${phone}`);
+        return audioMsg;
+      } catch (audioErr) {
+        console.warn(`[Fish Audio Fallback] Falha na síntese de voz. Revertido para envio em texto: ${audioErr.message}`);
         storage.addLog(
           'WARNING',
-          `[Fish Audio Safeguard] Texto de áudio manual com ${speechText.length} caracteres (limite: 350). Revertido preventivamente para envio em texto.`
+          `[Fish Audio Fallback] Falha na síntese de voz. Revertido para envio em texto: ${audioErr.message}`
         );
-      } else {
-        try {
-          const generatedAudio = await fishAudio.generateSpeech(speechText, null, null, { phone, jid, text: speechText });
-          const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
-          const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
-
-          const sentResult = await this.sock.sendMessage(jid, {
-            audio: audioBuffer,
-            mimetype: 'audio/ogg; codecs=opus',
-            ptt: true,
-            waveform
-          });
-
-          try { await this.safePresence(jid, 'paused'); } catch (_) {}
-
-          const audioMsg = storage.addMessage({
-            id: sentResult?.key?.id,
-            phone,
-            fromMe: true,
-            text: `🎵 [Áudio]: "${speechText}"`,
-            type: 'audio',
-            mediaUrl: generatedAudio.audioUrl,
-            audioDuration: generatedAudio.durationSec,
-            status: 'delivered'
-          });
-          this.emit('chat:message', audioMsg);
-          this.emit('lead:updated', storage.getLead(phone));
-          storage.addLog('SUCCESS', `Áudio enviado manualmente para ${phone}`);
-          return audioMsg;
-        } catch (audioErr) {
-          console.warn(`[Fish Audio Fallback] Falha na síntese de voz. Revertido para envio em texto: ${audioErr.message}`);
-          storage.addLog(
-            'WARNING',
-            `[Fish Audio Fallback] Falha na síntese de voz. Revertido para envio em texto: ${audioErr.message}`
-          );
-          try { await this.safePresence(jid, 'paused'); } catch (_) {}
-        }
+        try { await this.safePresence(jid, 'paused'); } catch (_) {}
       }
 
       // Revert payload: send the text directly as a regular message
@@ -1998,15 +1979,7 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
       throw new Error(`JID inválido para o contato: ${phone}`);
     }
 
-    // 1. Preventive Payload Validation: 350 char limit to avoid synthesis timeout
-    if (typeof speechText === 'string' && speechText.trim().length > 350) {
-      console.warn(`[Fish Audio Safeguard] Texto de áudio remarketing excede 350 caracteres (${speechText.trim().length} > 350). Revertido preventivamente para texto.`);
-      storage.addLog(
-        'WARNING',
-        `[Fish Audio Safeguard] Texto do áudio com ${speechText.trim().length} caracteres (limite: 350). Revertido preventivamente para envio em texto.`
-      );
-      return await this.sendTextDirect(phone, speechText);
-    }
+
 
     try {
       const generatedAudio = await fishAudio.generateSpeech(speechText, null, null, { phone, jid, text: speechText });

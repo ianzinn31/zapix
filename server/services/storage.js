@@ -69,8 +69,7 @@ const DEFAULT_STATE = {
       enabled: true,
       autoAudioMode: 'hybrid_high_conversion',
       speed: 0.85,
-      timeoutMs: 8000, // Strict timeout: max 8s
-      maxChars: 350,   // Max characters allowed for TTS synthesis
+      timeoutMs: 25000,
       regionalVoices: {
         'pt-BR': {
           country: 'Brasil',
