@@ -702,6 +702,9 @@ class WhatsAppService {
         if (lead && lead.aiActive === false) return;
         if (signal.aborted) return;
 
+        storage.upsertLead(phone, { isProcessing: true });
+        this.emit('lead:updated', storage.getLead(phone));
+
         // Fetch recent conversation history
         const history = storage.getMessages(phone);
 
@@ -942,6 +945,40 @@ class WhatsAppService {
           return txt;
         };
 
+        // Handle message splitting around deliverables when files are being sent without audio
+        if (deliverablesToSend.length > 0 && !hasAudioTag) {
+          const fileTagMatches = [...replyText.matchAll(/\[(?:ENVIAR_)?(?:ARQUIVO|IMAGEM|DOCUMENTO|PDF|FOTO|DELIVERABLE):\s*([^\]]+)\]/gi)];
+          if (fileTagMatches.length > 0) {
+            const firstTagIdx = fileTagMatches[0].index;
+            const lastMatch = fileTagMatches[fileTagMatches.length - 1];
+            const lastTagEndIdx = lastMatch.index + lastMatch[0].length;
+            rawTextBeforeAudio = replyText.slice(0, firstTagIdx).trim();
+            rawTextAfterAudio = replyText.slice(lastTagEndIdx).trim();
+          } else {
+            // Intelligent paragraph split: Intro text answering doubts / introducing files goes before files; closing CTA goes after
+            const paragraphs = replyText.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+            const fileIntroRegex = /(?:👇|⬇️|te mando|te envio|te comparto|aqui tienes|aqui te dejo|te paso|segue abaixo|estou te enviando|vou te mandar|te dejo|aqui estan|aqui estão)/i;
+            const splitIdx = paragraphs.findIndex(p => fileIntroRegex.test(p));
+
+            if (splitIdx !== -1) {
+              rawTextBeforeAudio = paragraphs.slice(0, splitIdx + 1).join('\n\n');
+              rawTextAfterAudio = paragraphs.slice(splitIdx + 1).join('\n\n');
+            } else if (paragraphs.length > 1) {
+              const closingRegex = /(?:\?|¿|dices|revisa|avísame|me avisas|dúvida|achou|opci[oó]n|paquete|comenzar|começar)/i;
+              if (closingRegex.test(paragraphs[paragraphs.length - 1])) {
+                rawTextBeforeAudio = paragraphs.slice(0, -1).join('\n\n');
+                rawTextAfterAudio = paragraphs[paragraphs.length - 1];
+              } else {
+                rawTextBeforeAudio = replyText;
+                rawTextAfterAudio = '';
+              }
+            } else {
+              rawTextBeforeAudio = replyText;
+              rawTextAfterAudio = '';
+            }
+          }
+        }
+
         let textBefore = sanitizeBubbleText(rawTextBeforeAudio);
         let textAfter = sanitizeBubbleText(rawTextAfterAudio);
 
@@ -1112,15 +1149,32 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
 
         const sendVoiceNote = async (speechText) => {
           if (!speechText || speechText.trim().length === 0 || signal.aborted) return;
+
+          // 1. Preventive Payload Validation: 350 char limit to avoid synthesis timeout
+          const cleanSpeechText = fishAudio.formatSpeechCadence(speechText);
+          if (cleanSpeechText.length > 350) {
+            console.warn(`[Fish Audio Safeguard] Texto de áudio muito longo (${cleanSpeechText.length} caracteres > 350). Revertido preventivamente para envio em texto.`);
+            storage.addLog(
+              'WARNING',
+              `[Fish Audio Safeguard] Texto do áudio com ${cleanSpeechText.length} caracteres (limite: 350). Revertido preventivamente para envio em texto.`
+            );
+            await sendTextBubbles(speechText);
+            return;
+          }
+
           try {
-            const generatedAudio = await fishAudio.generateSpeech(speechText, null, null, {
+            const generatedAudio = await fishAudio.generateSpeech(cleanSpeechText, null, null, {
               phone,
               jid,
-              text: speechText,
+              text: cleanSpeechText,
               targetCountry: aiResult.locale?.country,
               language: aiResult.locale?.language
             });
             if (signal.aborted) return;
+
+            if (!generatedAudio || !generatedAudio.oggPath || !fs.existsSync(generatedAudio.oggPath)) {
+              throw new Error('Arquivo de áudio OGG não foi gerado pelo serviço TTS.');
+            }
 
             const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
             await antiBan.sleep(thinkingDelay, signal);
@@ -1151,80 +1205,106 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
             this.emit('chat:message', audioMsg);
             storage.addLog('SUCCESS', `Áudio humanizado Fish Audio enviado para ${phone}`);
           } catch (audioErr) {
-            console.error('Failed to send voice note:', audioErr);
-            // Fallback: send speech text as text bubble so customer gets the message
-            await sendTextBubbles(speechText);
+            console.warn(`[Fish Audio Fallback] Falha na síntese de voz. Revertido para envio em texto: ${audioErr.message}`);
+            storage.addLog(
+              'WARNING',
+              `[Fish Audio Fallback] Falha na síntese de voz. Revertido para envio em texto: ${audioErr.message}`
+            );
+            await this.safePresence(jid, 'paused');
+            // Failover: send speech text as natural text bubbles so lead is never left hanging
+            if (!signal.aborted) {
+              await sendTextBubbles(speechText);
+            }
           }
         };
 
-        // 8. EXECUTE DISPATCH IN DYNAMIC SEQUENCE (AI decides what comes first!)
-        // 8.1. Send text before audio (if any)
+        // 8. EXECUTE DISPATCH IN DYNAMIC SEQUENCE (Strict Human Pacing & Top-Down / Bottom-Up Delivery)
+        const orderMode = product.deliverablesOrderMode || 'top_down';
+        const finalDeliverablesQueue = orderMode === 'bottom_up'
+          ? [...deliverablesToSend].reverse()
+          : [...deliverablesToSend];
+
+        // 8.1. Send intro text before files / audio (Answers questions & announces materials)
         if (textBefore && textBefore.length > 0 && !signal.aborted) {
           await sendTextBubbles(textBefore);
-          if (hasAudioTag && !signal.aborted) {
-            await antiBan.sleep(1200, signal);
+          if ((finalDeliverablesQueue.length > 0 || hasAudioTag) && !signal.aborted) {
+            await antiBan.sleep(2500, signal); // Delay de 2 a 3 segundos após o texto tirando dúvidas
           }
         }
 
-        // 8.2. Send deliverables (if any)
-        if (deliverablesToSend.length > 0 && !signal.aborted) {
-          for (const deliverableToSend of deliverablesToSend) {
-            if (signal.aborted || this.status !== 'connected' || !this.sock) break;
-            await antiBan.sleep(1200, signal);
-            if (signal.aborted || this.status !== 'connected' || !this.sock) break;
+        // 8.2. Send audio voice note (if audio tag was present)
+        if (hasAudioTag && audioSpeechText && audioSpeechText.length > 0 && !signal.aborted) {
+          await sendVoiceNote(audioSpeechText);
+          if (finalDeliverablesQueue.length > 0 && !signal.aborted) {
+            await antiBan.sleep(2500, signal);
+          }
+        }
 
-            let fullPath = path.join(UPLOADS_DIR, deliverableToSend.filename);
-            if (!fs.existsSync(fullPath)) {
-              fullPath = path.resolve(DATA_DIR, deliverableToSend.path.replace(/^\/?data\//, ''));
-            }
+        // 8.3. Send deliverables (Strictly sequential with confirmation & 2.5s delay to prevent upload racing)
+        if (finalDeliverablesQueue.length > 0 && !signal.aborted) {
+          for (let dIdx = 0; dIdx < finalDeliverablesQueue.length; dIdx++) {
+            if (signal.aborted || this.status !== 'connected' || !this.sock) break;
+            const deliverableToSend = finalDeliverablesQueue[dIdx];
 
-            if (fs.existsSync(fullPath)) {
-              const fileBuffer = fs.readFileSync(fullPath);
-              const isPdf = deliverableToSend.type === 'pdf' || deliverableToSend.filename.toLowerCase().endsWith('.pdf');
-              let cleanFileName = deliverableToSend.name || deliverableToSend.filename;
-              if (isPdf && !cleanFileName.toLowerCase().endsWith('.pdf')) {
-                cleanFileName += '.pdf';
+            try {
+              let fullPath = path.join(UPLOADS_DIR, deliverableToSend.filename);
+              if (!fs.existsSync(fullPath)) {
+                fullPath = path.resolve(DATA_DIR, deliverableToSend.path.replace(/^\/?data\//, ''));
               }
 
-              if (isPdf) {
-                await this.sock.sendMessage(jid, {
-                  document: fileBuffer,
-                  mimetype: 'application/pdf',
-                  fileName: cleanFileName
+              if (fs.existsSync(fullPath)) {
+                const fileBuffer = fs.readFileSync(fullPath);
+                const isPdf = deliverableToSend.type === 'pdf' || deliverableToSend.filename.toLowerCase().endsWith('.pdf');
+                let cleanFileName = deliverableToSend.name || deliverableToSend.filename;
+                if (isPdf && !cleanFileName.toLowerCase().endsWith('.pdf')) {
+                  cleanFileName += '.pdf';
+                }
+
+                if (isPdf) {
+                  await this.sock.sendMessage(jid, {
+                    document: fileBuffer,
+                    mimetype: 'application/pdf',
+                    fileName: cleanFileName
+                  });
+                } else {
+                  await this.sock.sendMessage(jid, {
+                    image: fileBuffer,
+                    caption: deliverableToSend.description || deliverableToSend.name
+                  });
+                }
+
+                const delivMsg = storage.addMessage({
+                  phone,
+                  fromMe: true,
+                  text: `📎 [Enviado]: ${cleanFileName}`,
+                  type: deliverableToSend.type || (isPdf ? 'pdf' : 'image'),
+                  mediaUrl: deliverableToSend.url
                 });
+                this.emit('chat:message', delivMsg);
+                storage.addLog('SUCCESS', `Entregável (${cleanFileName}) enviado com sucesso para ${phone}`);
+
+                // Delay sequencial de 2.5s entre cada arquivo para que a API do WhatsApp termine o upload e respeite a ordem
+                if (dIdx < finalDeliverablesQueue.length - 1) {
+                  await antiBan.sleep(2500, signal);
+                }
               } else {
-                await this.sock.sendMessage(jid, {
-                  image: fileBuffer,
-                  caption: deliverableToSend.description || deliverableToSend.name
-                });
+                console.error(`Deliverable file not found on disk: ${fullPath}`);
+                storage.addLog('ERROR', `Arquivo não encontrado no disco: ${deliverableToSend.filename}`);
               }
-
-              const delivMsg = storage.addMessage({
-                phone,
-                fromMe: true,
-                text: `📎 [Enviado]: ${cleanFileName}`,
-                type: deliverableToSend.type || (isPdf ? 'pdf' : 'image'),
-                mediaUrl: deliverableToSend.url
-              });
-              this.emit('chat:message', delivMsg);
-              storage.addLog('SUCCESS', `Entregável (${cleanFileName}) enviado com sucesso para ${phone}`);
-            } else {
-              console.error(`Deliverable file not found on disk: ${fullPath}`);
-              storage.addLog('ERROR', `Arquivo não encontrado no disco: ${deliverableToSend.filename}`);
+            } catch (mediaErr) {
+              console.error(`[WhatsApp Media Error] Erro ao enviar entregável ${deliverableToSend.filename}:`, mediaErr);
+              storage.addLog('ERROR', `Erro ao enviar entregável (${deliverableToSend.name || deliverableToSend.filename}): ${mediaErr.message}`);
             }
           }
           storage.upsertLead(phone, { stage: 'ENTREGUE', deliverableSent: true, deliverableSentAt: Date.now() });
-        }
 
-        // 8.3. Send audio voice note (if audio tag was present)
-        if (hasAudioTag && audioSpeechText && audioSpeechText.length > 0 && !signal.aborted) {
-          await sendVoiceNote(audioSpeechText);
+          // Delay de 2 a 3 segundos após o último arquivo antes de disparar o texto de fechamento
           if (textAfter && textAfter.length > 0 && !signal.aborted) {
-            await antiBan.sleep(1500, signal);
+            await antiBan.sleep(2500, signal);
           }
         }
 
-        // 8.4. Send text after audio (or follow-up/PIX/summary)
+        // 8.4. Send closing text / CTA / follow-up / PIX / SPEI
         if (textAfter && textAfter.length > 0 && !signal.aborted) {
           await sendTextBubbles(textAfter);
         }
@@ -1263,6 +1343,9 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
         console.error(`Error in handleAiResponse for ${phone}:`, err);
         storage.addLog('ERROR', `Erro ao responder ${phone}: ${err.message}`);
       } finally {
+        await this.safePresence(jid, 'paused').catch(() => {});
+        storage.upsertLead(phone, { isProcessing: false });
+        this.emit('lead:updated', storage.getLead(phone));
         if (this.activeLeadControllers.get(phone) === abortController) {
           this.activeLeadControllers.delete(phone);
         }
@@ -1293,6 +1376,8 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
     if (jid) {
       this.safePresence(jid, 'paused').catch(() => {});
     }
+    storage.upsertLead(phone, { isProcessing: false });
+    this.emit('lead:updated', storage.getLead(phone));
   }
 
   // Schedule automated Phase 2 closing and PIX request (disabled to ensure natural conversational flow)
@@ -1413,7 +1498,9 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
             }
           }
         } catch (audioErr) {
-          console.error('[Zapix Timer] Falha ao sintetizar/enviar áudio automático:', audioErr);
+          console.warn(`[Fish Audio Fallback] Falha na síntese de voz. Revertido para envio em texto: ${audioErr.message}`);
+          storage.addLog('WARNING', `[Fish Audio Fallback] Falha na síntese de voz. Revertido para envio em texto: ${audioErr.message}`);
+          await this.safePresence(targetJid, 'paused').catch(() => {});
         }
       }
 
@@ -1732,33 +1819,56 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
 
     if (manualSpeechText && manualSpeechText.length > 0) {
       const speechText = manualSpeechText;
-      const generatedAudio = await fishAudio.generateSpeech(speechText, null, null, { phone, jid, text: speechText });
-      const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
-      const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
 
-      const sentResult = await this.sock.sendMessage(jid, {
-        audio: audioBuffer,
-        mimetype: 'audio/ogg; codecs=opus',
-        ptt: true,
-        waveform
-      });
+      // 1. Preventive Payload Validation: 350 char limit
+      if (speechText.length > 350) {
+        console.warn(`[Fish Audio Safeguard] Texto de áudio manual excede 350 caracteres (${speechText.length} > 350). Revertido preventivamente para texto.`);
+        storage.addLog(
+          'WARNING',
+          `[Fish Audio Safeguard] Texto de áudio manual com ${speechText.length} caracteres (limite: 350). Revertido preventivamente para envio em texto.`
+        );
+      } else {
+        try {
+          const generatedAudio = await fishAudio.generateSpeech(speechText, null, null, { phone, jid, text: speechText });
+          const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
+          const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
 
-      try { await this.safePresence(jid, 'paused'); } catch (_) {}
+          const sentResult = await this.sock.sendMessage(jid, {
+            audio: audioBuffer,
+            mimetype: 'audio/ogg; codecs=opus',
+            ptt: true,
+            waveform
+          });
 
-      const audioMsg = storage.addMessage({
-        id: sentResult?.key?.id,
-        phone,
-        fromMe: true,
-        text: `🎵 [Áudio]: "${speechText}"`,
-        type: 'audio',
-        mediaUrl: generatedAudio.audioUrl,
-        audioDuration: generatedAudio.durationSec,
-        status: 'delivered'
-      });
-      this.emit('chat:message', audioMsg);
-      this.emit('lead:updated', storage.getLead(phone));
-      storage.addLog('SUCCESS', `Áudio enviado manualmente para ${phone}`);
-      return audioMsg;
+          try { await this.safePresence(jid, 'paused'); } catch (_) {}
+
+          const audioMsg = storage.addMessage({
+            id: sentResult?.key?.id,
+            phone,
+            fromMe: true,
+            text: `🎵 [Áudio]: "${speechText}"`,
+            type: 'audio',
+            mediaUrl: generatedAudio.audioUrl,
+            audioDuration: generatedAudio.durationSec,
+            status: 'delivered'
+          });
+          this.emit('chat:message', audioMsg);
+          this.emit('lead:updated', storage.getLead(phone));
+          storage.addLog('SUCCESS', `Áudio enviado manualmente para ${phone}`);
+          return audioMsg;
+        } catch (audioErr) {
+          console.warn(`[Fish Audio Fallback] Falha na síntese de voz. Revertido para envio em texto: ${audioErr.message}`);
+          storage.addLog(
+            'WARNING',
+            `[Fish Audio Fallback] Falha na síntese de voz. Revertido para envio em texto: ${audioErr.message}`
+          );
+          try { await this.safePresence(jid, 'paused'); } catch (_) {}
+        }
+      }
+
+      // Revert payload: send the text directly as a regular message
+      text = speechText;
+      type = 'text';
     }
 
     // 3. Audio file with mediaUrl
@@ -1888,37 +1998,57 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
       throw new Error(`JID inválido para o contato: ${phone}`);
     }
 
-    const generatedAudio = await fishAudio.generateSpeech(speechText, null, null, { phone, jid, text: speechText });
-    const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
-    
-    await antiBan.sleep(thinkingDelay);
-    await this.safePresence(jid, 'recording');
-    await antiBan.sleep(recordingDelay);
-    await this.safePresence(jid, 'paused');
-    if (!this.sock || this.status !== 'connected') {
-      throw new Error('Conexão perdida durante gravação.');
+    // 1. Preventive Payload Validation: 350 char limit to avoid synthesis timeout
+    if (typeof speechText === 'string' && speechText.trim().length > 350) {
+      console.warn(`[Fish Audio Safeguard] Texto de áudio remarketing excede 350 caracteres (${speechText.trim().length} > 350). Revertido preventivamente para texto.`);
+      storage.addLog(
+        'WARNING',
+        `[Fish Audio Safeguard] Texto do áudio com ${speechText.trim().length} caracteres (limite: 350). Revertido preventivamente para envio em texto.`
+      );
+      return await this.sendTextDirect(phone, speechText);
     }
 
-    const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
-    const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
-    await this.sock.sendMessage(jid, {
-      audio: audioBuffer,
-      mimetype: 'audio/ogg; codecs=opus',
-      ptt: true,
-      waveform
-    });
+    try {
+      const generatedAudio = await fishAudio.generateSpeech(speechText, null, null, { phone, jid, text: speechText });
+      const { thinkingDelay, recordingDelay } = antiBan.calculateAudioRecordingDelay(generatedAudio.durationSec);
+      
+      await antiBan.sleep(thinkingDelay);
+      await this.safePresence(jid, 'recording');
+      await antiBan.sleep(recordingDelay);
+      await this.safePresence(jid, 'paused');
+      if (!this.sock || this.status !== 'connected') {
+        throw new Error('Conexão perdida durante gravação.');
+      }
 
-    const audioMsg = storage.addMessage({
-      phone,
-      fromMe: true,
-      text: `🎵 [Áudio Remarketing]: "${speechText}"`,
-      type: 'audio',
-      mediaUrl: generatedAudio.audioUrl,
-      audioDuration: generatedAudio.durationSec
-    });
-    this.emit('chat:message', audioMsg);
-    storage.addLog('SUCCESS', `Áudio de Remarketing enviado com sucesso para ${phone}`);
-    return { success: true, audioMsg, generatedAudio };
+      const audioBuffer = fs.readFileSync(generatedAudio.oggPath);
+      const waveform = generatedAudio.waveform || await fishAudio.extractWaveform(generatedAudio.oggPath);
+      await this.sock.sendMessage(jid, {
+        audio: audioBuffer,
+        mimetype: 'audio/ogg; codecs=opus',
+        ptt: true,
+        waveform
+      });
+
+      const audioMsg = storage.addMessage({
+        phone,
+        fromMe: true,
+        text: `🎵 [Áudio Remarketing]: "${speechText}"`,
+        type: 'audio',
+        mediaUrl: generatedAudio.audioUrl,
+        audioDuration: generatedAudio.durationSec
+      });
+      this.emit('chat:message', audioMsg);
+      storage.addLog('SUCCESS', `Áudio de Remarketing enviado com sucesso para ${phone}`);
+      return { success: true, audioMsg, generatedAudio };
+    } catch (err) {
+      console.warn(`[Fish Audio Fallback] Falha na síntese de voz. Revertido para envio em texto: ${err.message}`);
+      storage.addLog(
+        'WARNING',
+        `[Fish Audio Fallback] Falha na síntese de voz. Revertido para envio em texto: ${err.message}`
+      );
+      await this.safePresence(jid, 'paused').catch(() => {});
+      return await this.sendTextDirect(phone, speechText);
+    }
   }
 
   // Send a text directly to a contact

@@ -12,12 +12,17 @@ import {
   ShieldCheck,
   Gift,
   Layers,
-  ArrowRightLeft
+  ArrowRightLeft,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 
 export default function DeliverablesManager({ 
   deliverables = [], 
   deliveryStrategy = 'require_payment', 
+  orderMode = 'top_down',
+  onUpdateOrderMode,
+  onReorder,
   onUpload, 
   onUpdate, 
   onDelete 
@@ -73,6 +78,24 @@ export default function DeliverablesManager({
     navigator.clipboard.writeText(text);
     setCopiedTag(id);
     setTimeout(() => setCopiedTag(null), 2000);
+  };
+
+  const handleMoveUp = (index) => {
+    if (index <= 0) return;
+    const newItems = [...deliverables];
+    const temp = newItems[index - 1];
+    newItems[index - 1] = newItems[index];
+    newItems[index] = temp;
+    if (onReorder) onReorder(newItems);
+  };
+
+  const handleMoveDown = (index) => {
+    if (index >= deliverables.length - 1) return;
+    const newItems = [...deliverables];
+    const temp = newItems[index + 1];
+    newItems[index + 1] = newItems[index];
+    newItems[index] = temp;
+    if (onReorder) onReorder(newItems);
   };
 
   return (
@@ -261,9 +284,63 @@ export default function DeliverablesManager({
 
       {/* Deliverables List Card */}
       <div className="glass-card" style={{ padding: '24px' }}>
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', marginBottom: '16px' }}>
-          Arquivos Cadastrados ({deliverables.length})
-        </h3>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', margin: 0 }}>
+              Arquivos Cadastrados ({deliverables.length})
+            </h3>
+            <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: 0, marginTop: '2px' }}>
+              Use as setas para definir qual arquivo é enviado primeiro para o WhatsApp.
+            </p>
+          </div>
+
+          {/* WhatsApp View / Dispatch Sequence Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.03)', padding: '4px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <span style={{ fontSize: '0.72rem', color: '#94a3b8', paddingLeft: '8px', fontWeight: 600 }}>
+              Sequência no WhatsApp:
+            </span>
+            <button
+              type="button"
+              onClick={() => onUpdateOrderMode && onUpdateOrderMode('top_down')}
+              style={{
+                padding: '6px 10px',
+                borderRadius: '7px',
+                fontSize: '0.74rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                background: orderMode === 'top_down' ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                border: orderMode === 'top_down' ? '1px solid #3b82f6' : 'none',
+                color: orderMode === 'top_down' ? '#60a5fa' : '#94a3b8',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+              title="O 1º arquivo é disparado primeiro e fica no topo da conversa do cliente"
+            >
+              <span>⬆️ Top-Down (1º no topo)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onUpdateOrderMode && onUpdateOrderMode('bottom_up')}
+              style={{
+                padding: '6px 10px',
+                borderRadius: '7px',
+                fontSize: '0.74rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                background: orderMode === 'bottom_up' ? 'rgba(245, 158, 11, 0.2)' : 'transparent',
+                border: orderMode === 'bottom_up' ? '1px solid #f59e0b' : 'none',
+                color: orderMode === 'bottom_up' ? '#fbbf24' : '#94a3b8',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+              title="O 1º arquivo é disparado por último e fica colado logo acima do texto final de fechamento"
+            >
+              <span>⬇️ Bottom-Up (1º no fechamento)</span>
+            </button>
+          </div>
+        </div>
 
         {deliverables.length === 0 ? (
           <p style={{ color: '#64748b', fontSize: '0.85rem', textAlign: 'center', padding: '30px' }}>
@@ -271,7 +348,7 @@ export default function DeliverablesManager({
           </p>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
-            {deliverables.map((item) => {
+            {deliverables.map((item, index) => {
               const isPdf = item.type === 'pdf';
               const triggerTag = isPdf ? `[ENVIAR_ARQUIVO: ${item.tag}]` : `[ENVIAR_IMAGEM: ${item.tag}]`;
               const isPaid = item.requirePayment !== false;
@@ -286,7 +363,8 @@ export default function DeliverablesManager({
                     padding: '16px',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '12px'
+                    gap: '12px',
+                    position: 'relative'
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
@@ -300,22 +378,71 @@ export default function DeliverablesManager({
                         {isPdf ? <FileText size={22} /> : <ImageIcon size={22} />}
                       </div>
                       <div>
-                        <h4 style={{ fontSize: '0.92rem', fontWeight: 600, color: '#f8fafc' }}>
-                          {item.name}
-                        </h4>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{
+                            fontSize: '0.68rem',
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            background: 'rgba(59, 130, 246, 0.2)',
+                            color: '#60a5fa',
+                            border: '1px solid rgba(59, 130, 246, 0.4)'
+                          }}>
+                            #{index + 1}
+                          </span>
+                          <h4 style={{ fontSize: '0.92rem', fontWeight: 600, color: '#f8fafc', margin: 0 }}>
+                            {item.name}
+                          </h4>
+                        </div>
                         <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
                           {item.type.toUpperCase()} • {item.size ? `${Math.round(item.size / 1024)} KB` : 'Anexo'}
                         </span>
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => onDelete(item.id)}
-                      className="btn-outline-danger"
-                      title="Excluir entregável"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {/* Move Up / Down Buttons */}
+                      <button
+                        type="button"
+                        onClick={() => handleMoveUp(index)}
+                        disabled={index === 0}
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          borderRadius: '6px',
+                          color: index === 0 ? '#475569' : '#cbd5e1',
+                          padding: '4px 6px',
+                          cursor: index === 0 ? 'not-allowed' : 'pointer'
+                        }}
+                        title="Subir prioridade (enviar antes)"
+                      >
+                        <ChevronUp size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMoveDown(index)}
+                        disabled={index === deliverables.length - 1}
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          borderRadius: '6px',
+                          color: index === deliverables.length - 1 ? '#475569' : '#cbd5e1',
+                          padding: '4px 6px',
+                          cursor: index === deliverables.length - 1 ? 'not-allowed' : 'pointer'
+                        }}
+                        title="Descer prioridade (enviar depois)"
+                      >
+                        <ChevronDown size={14} />
+                      </button>
+                      <button
+                        onClick={() => onDelete(item.id)}
+                        className="btn-outline-danger"
+                        title="Excluir entregável"
+                        style={{ padding: '5px 7px' }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
 
                   {item.description && (

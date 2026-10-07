@@ -48,10 +48,10 @@ export function isSamePhoneNumber(p1, p2) {
 const DEFAULT_STATE = {
   settings: {
     ai: {
-      primaryModel: 'z-ai/glm-5.3',
-      primaryApiKey: process.env.NVIDIA_NIM_PRIMARY_API_KEY || '',
+      primaryModel: 'google/gemini-3.8-flash',
+      primaryApiKey: process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || process.env.NVIDIA_NIM_PRIMARY_API_KEY || '',
       fallbackModel: 'google/diffusiongemma-26b-a4b-it',
-      fallbackApiKey: process.env.NVIDIA_NIM_FALLBACK_API_KEY || '',
+      fallbackApiKey: process.env.NVIDIA_NIM_FALLBACK_API_KEY || process.env.NVIDIA_NIM_PRIMARY_API_KEY || '',
       tertiaryModel: 'nvidia/nemotron-3.5-lightning:free',
       tertiaryApiKey: process.env.OPENROUTER_API_KEY || '',
       tertiaryProvider: 'openrouter',
@@ -69,6 +69,8 @@ const DEFAULT_STATE = {
       enabled: true,
       autoAudioMode: 'hybrid_high_conversion',
       speed: 0.85,
+      timeoutMs: 8000, // Strict timeout: max 8s
+      maxChars: 350,   // Max characters allowed for TTS synthesis
       regionalVoices: {
         'pt-BR': {
           country: 'Brasil',
@@ -233,6 +235,7 @@ const DEFAULT_STATE = {
       aliasBeneficiary: '',
       aliasInstructions: 'Transferencia directa vía Alias',
       deliveryStrategy: 'require_payment', // 'require_payment' | 'deliver_first' | 'per_deliverable'
+      deliverablesOrderMode: 'top_down', // 'top_down' | 'bottom_up'
       deliveryInstructions: '',
       checkoutUrl: '',
       pixKey: '',
@@ -351,27 +354,30 @@ class StorageService {
             }
             this.data.settings.transcription.apiKey = process.env.GROQ_API_KEY;
           }
-          // Upgrade deprecated or 404 model names to verified active NVIDIA NIM models
-          const invalidPrimary = [
+          // Upgrade deprecated or legacy default models to Google Gemini 3.8 Flash
+          const legacyOrInvalidPrimary = [
             'z-ai/glm-5.3-flash',
+            'z-ai/glm-5.3',
             'moonshotai/kimi-k2.6',
             'meta/llama-3.3-70b-instruct',
             'meta/llama-3.1-70b-instruct',
-            'nvidia/nemotron-4-340b-instruct'
+            'nvidia/nemotron-4-340b-instruct',
+            'nvidia/nemotron-3-ultra-550b-a55b'
           ];
-          if (invalidPrimary.includes(this.data.settings.ai.primaryModel) || !this.data.settings.ai.primaryModel) {
-            this.data.settings.ai.primaryModel = 'z-ai/glm-5.3';
+          if (legacyOrInvalidPrimary.includes(this.data.settings.ai.primaryModel) || !this.data.settings.ai.primaryModel) {
+            this.data.settings.ai.primaryModel = 'google/gemini-3.8-flash';
           }
           const invalidFallback = [
             'mistralai/mixtral-8x22b-instruct',
             'nvidia/nemotron-4-340b-instruct',
+            'nvidia/nemotron-3-ultra-550b-a55b',
             'meta/llama-3.3-70b-instruct',
             'meta/llama-3.1-70b-instruct'
           ];
           if (invalidFallback.includes(this.data.settings.ai.fallbackModel) || !this.data.settings.ai.fallbackModel) {
             this.data.settings.ai.fallbackModel = 'google/diffusiongemma-26b-a4b-it';
           }
-          if (this.data.settings.ai.isFallbackActive && this.data.settings.ai.primaryModel === 'z-ai/glm-5.3') {
+          if (this.data.settings.ai.isFallbackActive && (this.data.settings.ai.primaryModel === 'google/gemini-3.8-flash' || this.data.settings.ai.primaryModel === 'z-ai/glm-5.3')) {
             this.data.settings.ai.isFallbackActive = false;
             this.data.settings.ai.lastFallbackReason = null;
           }
@@ -450,27 +456,30 @@ class StorageService {
           systemLogs: parsed.systemLogs || DEFAULT_STATE.systemLogs
         };
 
-        // Normalize deprecated models and reset fallback if using active model
-        const invalidPrimary = [
+        // Normalize deprecated or legacy default models to Google Gemini 3.8 Flash
+        const legacyOrInvalidPrimary = [
           'z-ai/glm-5.3-flash',
+          'z-ai/glm-5.3',
           'moonshotai/kimi-k2.6',
           'meta/llama-3.3-70b-instruct',
           'meta/llama-3.1-70b-instruct',
-          'nvidia/nemotron-4-340b-instruct'
+          'nvidia/nemotron-4-340b-instruct',
+          'nvidia/nemotron-3-ultra-550b-a55b'
         ];
-        if (invalidPrimary.includes(loaded.settings.ai.primaryModel) || !loaded.settings.ai.primaryModel) {
-          loaded.settings.ai.primaryModel = 'z-ai/glm-5.3';
+        if (legacyOrInvalidPrimary.includes(loaded.settings.ai.primaryModel) || !loaded.settings.ai.primaryModel) {
+          loaded.settings.ai.primaryModel = 'google/gemini-3.8-flash';
         }
         const invalidFallback = [
           'mistralai/mixtral-8x22b-instruct',
           'nvidia/nemotron-4-340b-instruct',
+          'nvidia/nemotron-3-ultra-550b-a55b',
           'meta/llama-3.3-70b-instruct',
           'meta/llama-3.1-70b-instruct'
         ];
         if (invalidFallback.includes(loaded.settings.ai.fallbackModel) || !loaded.settings.ai.fallbackModel) {
           loaded.settings.ai.fallbackModel = 'google/diffusiongemma-26b-a4b-it';
         }
-        if (loaded.settings.ai.isFallbackActive && loaded.settings.ai.primaryModel === 'z-ai/glm-5.3') {
+        if (loaded.settings.ai.isFallbackActive && (loaded.settings.ai.primaryModel === 'google/gemini-3.8-flash' || loaded.settings.ai.primaryModel === 'z-ai/glm-5.3')) {
           loaded.settings.ai.isFallbackActive = false;
           loaded.settings.ai.lastFallbackReason = null;
         }
@@ -947,6 +956,24 @@ class StorageService {
     this.save();
     supabaseService.deleteDeliverable(id);
     return true;
+  }
+
+  reorderDeliverables(orderedIds) {
+    if (!Array.isArray(orderedIds)) return this.data.deliverables;
+    const itemMap = new Map(this.data.deliverables.map((d) => [d.id, d]));
+    const reordered = [];
+    for (const id of orderedIds) {
+      if (itemMap.has(id)) {
+        reordered.push(itemMap.get(id));
+        itemMap.delete(id);
+      }
+    }
+    for (const remaining of itemMap.values()) {
+      reordered.push(remaining);
+    }
+    this.data.deliverables = reordered;
+    this.save();
+    return this.data.deliverables;
   }
 
   // Sales

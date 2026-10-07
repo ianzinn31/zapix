@@ -291,6 +291,16 @@ router.get('/deliverables', (req, res) => {
   res.json(storage.getDeliverables());
 });
 
+router.post('/deliverables/reorder', (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids)) {
+    return res.status(400).json({ error: 'ids deve ser um array de IDs' });
+  }
+  const reordered = storage.reorderDeliverables(ids);
+  storage.addLog('INFO', `Ordem dos entregáveis atualizada (${reordered.length} arquivos)`);
+  res.json(reordered);
+});
+
 router.post('/deliverables', (req, res) => {
   upload.single('file')(req, res, (err) => {
     if (err) {

@@ -21,7 +21,7 @@ import {
 
 export default function AiConfig({ aiSettings, onSave }) {
   const [formData, setFormData] = useState({
-    primaryModel: aiSettings?.primaryModel || 'z-ai/glm-5.3',
+    primaryModel: aiSettings?.primaryModel || 'google/gemini-3.8-flash',
     primaryApiKey: aiSettings?.primaryApiKey || '',
     fallbackModel: aiSettings?.fallbackModel || 'google/diffusiongemma-26b-a4b-it',
     fallbackApiKey: aiSettings?.fallbackApiKey || '',
@@ -39,16 +39,21 @@ export default function AiConfig({ aiSettings, onSave }) {
 
   // Dynamic models state
   const defaultNimModels = [
+    { id: 'google/gemini-3.8-flash', name: 'google/gemini-3.8-flash (Google Gemini 3.8 Flash - Boss das Vendas 🏆)', org: 'google' },
+    { id: 'google/gemini-2.5-flash', name: 'google/gemini-2.5-flash (Google Gemini 2.5 Flash)', org: 'google' },
     { id: 'z-ai/glm-5.3', name: 'z-ai/glm-5.3 (Raciocínio Avançado 128k & Ultra Rápido)', org: 'z-ai' },
     { id: 'google/diffusiongemma-26b-a4b-it', name: 'google/diffusiongemma-26b-a4b-it (Rápido & Inteligente)', org: 'google' },
+    { id: 'nvidia/nemotron-3-ultra-550b-a55b', name: 'nvidia/nemotron-3-ultra-550b-a55b (NVIDIA NIM)', org: 'nvidia' },
     { id: 'meta/llama-3.2-11b-vision-instruct', name: 'meta/llama-3.2-11b-vision-instruct (Baixa Latência 350ms)', org: 'meta' },
     { id: 'nvidia/nemotron-3.5-lightning-30b-a3b', name: 'nvidia/nemotron-3.5-lightning-30b-a3b', org: 'nvidia' }
   ];
 
   const defaultOpenRouterModels = [
+    { id: 'google/gemini-3.8-flash', name: 'Google: Gemini 3.8 Flash (Recomendado 🏆)', isFree: false },
+    { id: 'google/gemini-2.5-flash', name: 'Google: Gemini 2.5 Flash', isFree: false },
     { id: 'nvidia/nemotron-3.5-lightning:free', name: 'NVIDIA: Nemotron 3.5 Lightning (free)', isFree: true },
-    { id: 'qwen/qwen3.8-27b:free', name: 'Qwen: Qwen3.8 27B (free)', isFree: true },
     { id: 'google/gemma-4-31b-it:free', name: 'Google: Gemma 4 31B (free)', isFree: true },
+    { id: 'qwen/qwen3.8-27b:free', name: 'Qwen: Qwen3.8 27B (free)', isFree: true },
     { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Meta Llama 3.3 70B Instruct (free)', isFree: true }
   ];
 
@@ -257,7 +262,7 @@ export default function AiConfig({ aiSettings, onSave }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Zap size={18} color="#c084fc" />
                 <h4 style={{ fontSize: '0.96rem', fontWeight: 700, color: '#f8fafc' }}>
-                  1. Primário (NVIDIA NIM)
+                  1. Primário (Google Gemini / OpenRouter / NIM)
                 </h4>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -277,7 +282,7 @@ export default function AiConfig({ aiSettings, onSave }) {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1' }}>
-                  Modelo Primário ({nimModels.length} na API)
+                  Modelo Primário de Vendas
                 </label>
                 <button
                   type="button"
@@ -294,7 +299,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                   }}
                 >
                   {primaryManualMode ? <List size={12} /> : <Edit3 size={12} />}
-                  <span>{primaryManualMode ? 'Lista da API' : 'Digitar ID'}</span>
+                  <span>{primaryManualMode ? 'Lista Rápida' : 'Digitar ID'}</span>
                 </button>
               </div>
 
@@ -303,7 +308,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                   type="text"
                   value={formData.primaryModel}
                   onChange={(e) => setFormData({ ...formData, primaryModel: e.target.value })}
-                  placeholder="Ex: meta/llama-3.2-11b-vision-instruct"
+                  placeholder="Ex: google/gemini-3.8-flash"
                   className="input-field"
                   style={{ fontSize: '0.84rem' }}
                 />
@@ -315,7 +320,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                       type="text"
                       value={primarySearch}
                       onChange={(e) => setPrimarySearch(e.target.value)}
-                      placeholder="Filtrar (ex: llama, glm, deepseek, gemma)..."
+                      placeholder="Filtrar (ex: gemini, glm, llama, deepseek)..."
                       className="input-field"
                       style={{ paddingLeft: '32px', fontSize: '0.78rem', height: '34px', background: 'rgba(0,0,0,0.2)' }}
                     />
@@ -327,16 +332,39 @@ export default function AiConfig({ aiSettings, onSave }) {
                     className="input-field"
                     style={{ fontSize: '0.84rem' }}
                   >
-                    {!nimModels.some((m) => m.id === formData.primaryModel) && (
+                    <optgroup label="⚡ Recomendados: Google Gemini (Alta Persuasão)">
+                      <option value="google/gemini-3.8-flash">
+                        🏆 google/gemini-3.8-flash (Gemini 3.8 Flash - Boss das Vendas)
+                      </option>
+                      <option value="google/gemini-2.5-flash">
+                        ⚡ google/gemini-2.5-flash (Gemini 2.5 Flash - Baixa Latência)
+                      </option>
+                      <option value="google/gemini-2.0-flash-001">
+                        google/gemini-2.0-flash-001
+                      </option>
+                    </optgroup>
+
+                    <optgroup label="Modelos NVIDIA NIM">
+                      <option value="z-ai/glm-5.3">z-ai/glm-5.3 (128k Raciocínio)</option>
+                      <option value="google/diffusiongemma-26b-a4b-it">google/diffusiongemma-26b-a4b-it</option>
+                      <option value="nvidia/nemotron-3-ultra-550b-a55b">nvidia/nemotron-3-ultra-550b-a55b</option>
+                      <option value="meta/llama-3.2-11b-vision-instruct">meta/llama-3.2-11b-vision-instruct</option>
+                    </optgroup>
+
+                    {!nimModels.some((m) => m.id === formData.primaryModel) &&
+                     !['google/gemini-3.8-flash', 'google/gemini-2.5-flash', 'google/gemini-2.0-flash-001', 'z-ai/glm-5.3', 'google/diffusiongemma-26b-a4b-it', 'nvidia/nemotron-3-ultra-550b-a55b', 'meta/llama-3.2-11b-vision-instruct'].includes(formData.primaryModel) && (
                       <option value={formData.primaryModel}>
                         📌 {formData.primaryModel} (Atual)
                       </option>
                     )}
-                    {filteredPrimaryNim.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.id}
-                      </option>
-                    ))}
+
+                    <optgroup label="Todos os Modelos da API">
+                      {filteredPrimaryNim.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.id}
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
                 </div>
               )}
@@ -350,14 +378,14 @@ export default function AiConfig({ aiSettings, onSave }) {
 
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                NVIDIA NIM API Key (1ª Chave)
+                Chave de API Primária (OpenRouter / Gemini / NVIDIA NIM)
               </label>
               <div style={{ position: 'relative' }}>
                 <input
                   type={showPrimaryKey ? 'text' : 'password'}
                   value={formData.primaryApiKey}
                   onChange={(e) => setFormData({ ...formData, primaryApiKey: e.target.value })}
-                  placeholder="nvapi-xxxxxxxxxxxxxxxxxxxxxxxx"
+                  placeholder="sk-or-... (OpenRouter/Gemini) ou nvapi-... (NVIDIA)"
                   className="input-field"
                   style={{ paddingRight: '40px', fontSize: '0.84rem' }}
                 />
@@ -370,7 +398,9 @@ export default function AiConfig({ aiSettings, onSave }) {
                 </button>
               </div>
               <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
-                Obtenha em <a href="https://build.nvidia.com" target="_blank" rel="noreferrer" style={{ color: '#c084fc' }}>build.nvidia.com</a>
+                {formData.primaryModel?.startsWith('google/') || formData.primaryModel?.includes('gemini')
+                  ? '⚡ Para Google Gemini (OpenRouter), se deixar em branco o sistema usa automaticamente a sua chave OpenRouter configurada!'
+                  : 'Para modelos NVIDIA NIM, use a chave nvapi-... de build.nvidia.com'}
               </p>
             </div>
           </div>

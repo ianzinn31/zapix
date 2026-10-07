@@ -24,9 +24,13 @@ server/data/audio_cache/*
 server/data/uploads/*
 !server/data/uploads/.gitkeep
 
+# Scratch test scripts
+scratch/
+
 # System & IDE
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
 *.log
+

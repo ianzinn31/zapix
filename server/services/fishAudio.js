@@ -395,6 +395,10 @@ class FishAudioService {
     const apiKey = config.apiKey || process.env.OPENROUTER_API_KEY || process.env.FISH_AUDIO_API_KEY;
     const model = customModel || config.model || 'fish-audio/s2.1-pro-free:free';
 
+    // Strict configurable timeout: default 8s, max 8s
+    const configuredTimeout = Number(config.timeoutMs) || 8000;
+    const requestTimeoutMs = Math.min(Math.max(configuredTimeout, 1000), 8000);
+
     // Normalize context object
     const contextObj = typeof leadContext === 'string'
       ? { phone: leadContext, text, customVoiceId }
@@ -403,18 +407,26 @@ class FishAudioService {
     const resolved = this.resolveVoice(contextObj);
     const voiceId = resolved.voiceId;
 
-    console.log(`[Fish Audio AI] Voz selecionada: ${resolved.country} (${resolved.language}) -> ID: ${voiceId} [${resolved.reason}]`);
+    console.log(`[Fish Audio AI] Voz selecionada: ${resolved.country} (${resolved.language}) -> ID: ${voiceId} [${resolved.reason}] (timeout: ${requestTimeoutMs}ms)`);
 
     if (!text || text.trim().length === 0) {
       throw new Error('Texto para conversão em áudio não fornecido.');
     }
 
     const speechText = this.formatSpeechCadence(text);
+
+    // 1. Preventive Payload Validation: 350 char limit to avoid synthesis timeout
+    if (speechText.length > 350) {
+      throw new Error(`Texto para síntese excede o limite máximo preventivo (${speechText.length} > 350 caracteres).`);
+    }
+
     const speechSpeed = config.speed || 0.88;
 
     const filePrefix = `fish_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
     const tempMp3Path = path.join(AUDIO_CACHE_DIR, `${filePrefix}.mp3`);
     const finalOggPath = path.join(AUDIO_CACHE_DIR, `${filePrefix}.ogg`);
+
+    let lastError = null;
 
     // 1. Try OpenRouter with Fish Audio model
     if (apiKey) {
@@ -437,8 +449,12 @@ class FishAudioService {
             'Content-Type': 'application/json'
           },
           responseType: 'arraybuffer',
-          timeout: 30000 // 30s timeout
+          timeout: requestTimeoutMs // Strict timeout (max 8s)
         });
+
+        if (response.status !== 200) {
+          throw new Error(`OpenRouter Fish Audio retornou status HTTP ${response.status}`);
+        }
 
         fs.writeFileSync(tempMp3Path, Buffer.from(response.data));
 
@@ -463,11 +479,12 @@ class FishAudioService {
           regionalKey: resolved.key
         };
       } catch (openRouterErr) {
+        lastError = openRouterErr;
         const errMsg = openRouterErr.response?.data?.toString() || openRouterErr.message;
-        console.warn(`[OpenRouter Fish Audio Error]: ${errMsg}`);
+        console.warn(`[OpenRouter Fish Audio Error]: ${errMsg} (timeout: ${requestTimeoutMs}ms)`);
         storage.addLog(
           'WARNING',
-          `OpenRouter (${model}) falhou: ${errMsg.slice(0, 100)}. Tentando rota direta ou fallback sintetizado.`
+          `OpenRouter (${model}) falhou na síntese: ${errMsg.slice(0, 100)}.`
         );
 
         // 2. Try direct Fish Audio if it was a direct API key (starts with 'fa_' or 32 hex)
@@ -484,8 +501,13 @@ class FishAudioService {
                 'Content-Type': 'application/json'
               },
               responseType: 'arraybuffer',
-              timeout: 25000
+              timeout: requestTimeoutMs // Strict timeout (max 8s)
             });
+
+            if (directRes.status !== 200) {
+              throw new Error(`Direct Fish Audio retornou status HTTP ${directRes.status}`);
+            }
+
             fs.writeFileSync(tempMp3Path, Buffer.from(directRes.data));
             await this.convertToWhatsAppOpus(tempMp3Path, finalOggPath, speechSpeed);
             const durationSec = Math.max(Math.ceil(text.length / 13), 3);
@@ -499,42 +521,18 @@ class FishAudioService {
               provider: 'fish-audio-direct'
             };
           } catch (directErr) {
+            lastError = directErr;
             console.warn(`[Direct Fish Audio Error]: ${directErr.message}`);
           }
         }
       }
     }
 
-    // 3. Fallback: Generate a clean tone audio using ffmpeg so WhatsApp audio functionality still works for testing
-    try {
-      const durationSec = Math.max(Math.min(Math.ceil(text.length / 16), 15), 3);
-      const toneArgs = [
-        '-y',
-        '-f', 'lavfi',
-        '-i', `sine=frequency=440:duration=${durationSec}`,
-        '-af', 'volume=0.2',
-        '-c:a', 'libopus',
-        '-b:a', '32k',
-        '-ar', '48000',
-        '-ac', '1',
-        finalOggPath
-      ];
-      await execFileAsync('ffmpeg', toneArgs);
-      const waveform = await this.extractWaveform(finalOggPath);
-
-      return {
-        oggPath: finalOggPath,
-        audioUrl: `/audio/${path.basename(finalOggPath)}`,
-        durationSec,
-        waveform,
-        filename: path.basename(finalOggPath),
-        isSynthetic: true,
-        model
-      };
-    } catch (fallbackErr) {
-      console.error('Audio generation fallback failed:', fallbackErr);
-      throw fallbackErr;
-    }
+    // Failover: Throw explicit error so caller can fallback to natural text message!
+    throw new Error(
+      lastError?.message ||
+      `Falha na síntese Fish Audio (timeout ${requestTimeoutMs}ms ou serviço indisponível).`
+    );
   }
 }
 

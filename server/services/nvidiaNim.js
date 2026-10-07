@@ -339,12 +339,18 @@ class NvidiaNimService {
         deliverableStrategySection = `ESTRATEGIA CONSULTIVA DE ALTA CONVERSIÓN (ENTREGA PREVIA Y PITCH ADAPTADO):
 - Tienes TOTAL AUTONOMÍA para dialogar, escuchar y responder las preguntas del lead antes de cobrar.
 - Puedes entregar el material completo usando las etiquetas: ${allDelivTags} en cuanto haga sentido en la conversación (cuando muestre interés o pida ver el material).
+- ESTRUCTURA AL ENTREGAR ARCHIVOS:
+  1º Responde primero a las preguntas del lead y avísale con amabilidad que le mandas los archivos completos abajo (ej: '¡Oye, qué buena pregunta! Son 100% digitales en PDF... Te mando los archivos completos ahorita mismo para que los cheques 👇').
+  2º Inserta las etiquetas de los archivos en el medio: ${allDelivTags}
+  3º OBLIGATORIO: Abajo de las etiquetas, NUNCA termines la conversación en seco. Haz siempre una pregunta de cierre cercana (ej: '¡Dale una vuelta y me dices qué te parecen! ¿Cuál te gustaría comenzar para tu pequeño?').
 - NUNCA lo llames "muestra" y NUNCA digas que liberarás el resto después. ¡Entrega el material completo de una vez!
-- Adapta el pitch a lo que el cliente te contó y ofrece la opción Básica (${currencySymbol} ${ticketBasic} ${currencyCode}) o Completa (${currencySymbol} ${ticketComplete} ${currencyCode}).`;
+- Adapta el pitch a lo que el cliente te contó y ofrece la opción Básica (${currencySymbol} ${ticketBasic} ${currencyCode}) o Completa (${currencySymbol} ${ticketComplete} ${currencyCode}).
+- REGLA DE ORO DE CIERRE: NUNCA termines un mensaje con viñetas o precios sueltos sin hacer una pregunta que pase la pelota al cliente.`;
       } else {
         deliverableStrategySection = `ESTRATEGIA CONSULTIVA Y LIBERTAD CONVERSACIONAL (COBRO PREVIO Y PITCH ADAPTADO):
 - Tienes TOTAL AUTONOMÍA para dialogar, escuchar, responder dudas y generar confianza antes de presentar la oferta.
 - Adapta el pitch a lo que el cliente te contó y ofrece la opción Básica (${currencySymbol} ${ticketBasic} ${currencyCode}) o Completa (${currencySymbol} ${ticketComplete} ${currencyCode}).
+- REGLA DE ORO DE CIERRE: NUNCA termines un mensaje con viñetas o precios sueltos sin hacer una pregunta que pase la pelota al cliente.
 - Los archivos oficiales (${allDelivTags}) se liberan automáticamente tras la confirmación del pago.`;
       }
     } else {
@@ -352,13 +358,16 @@ class NvidiaNimService {
         deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: ENTREGAR ANTES E CONVERSÃO CONSULTIVA (LIBERDADE E AUTONOMIA TOTAL)
 - VOCÊ TEM TOTAL AUTONOMIA PARA DIALOGAR, OUVIR E ENTENDER O CLIENTE antes de fechar.
 - Pode liberar o pacote completo com todas as atividades e PDFs logo que fizer sentido na conversa, usando as tags: ${allDelivTags}.
+- ESTRUTURA AO ENTREGAR ARQUIVOS:
+  1º Responda primeiro às dúvidas do lead e avise com carinho que está enviando os arquivos completos abaixo (ex: 'Que ótima pergunta! São 100% digitais em PDF... Vou te mandar os arquivos completos agora mesmo para você conferir com calma 👇').
+  2º Insira as tags dos arquivos no meio da mensagem: ${allDelivTags}
+  3º OBRIGATÓRIO: Abaixo das tags, NUNCA termine seco. Faça sempre uma pergunta de fechamento calorosa (ex: 'Dá uma olhadinha com calma e me diz o que achou! Qual opção você prefere para o seu pequeno?').
 - NUNCA chame de "amostra" e NUNCA diga "vou liberar o resto depois". Entregamos o pacote completo de uma vez só!
-- Faça o pitch adaptado à realidade dele, oferecendo o Pacote Básico (R$ ${Number(ticketBasic).toFixed(2).replace('.', ',')}) ou Pacote Completo (R$ ${Number(ticketComplete).toFixed(2).replace('.', ',')}).`;
+- Faça o pitch adaptado à realidade dele, oferecendo o Pacote Básico (R$ ${Number(ticketBasic).toFixed(2).replace('.', ',')}) ou Pacote Completo (R$ ${Number(ticketComplete).toFixed(2).replace('.', ',')}).
+- REGRA DE OURO DE FECHAMENTO: NUNCA termine uma mensagem em tópicos ou preços soltos sem uma pergunta passando a bola pro cliente.`;
       } else {
         deliverableStrategySection = `4. ESTRATÉGIA DESTA OPERAÇÃO: CONVERSÃO CONSULTIVA E LIBERDADE CONVERSACIONAL TOTAL
-- VOCÊ TEM TOTAL AUTONOMIA PARA DIALOGAR, OUVIR E ENTENDER O CLIENTE antes de fechar.
-- Converse naturalmente, tire dúvidas e crie um relacionamento genuíno com o lead.
-- Faça o pitch adaptado à realidade dele, oferecendo o Pacote Básico (R$ ${Number(ticketBasic).toFixed(2).replace('.', ',')}) ou Pacote Completo (R$ ${Number(ticketComplete).toFixed(2).replace('.', ',')}).
+- REGRA DE OURO DE FECHAMENTO: NUNCA termine uma mensagem em tópicos ou preços soltos sem uma pergunta passando a bola pro cliente.
 - Os entregáveis oficiais (${allDelivTags}) são liberados logo após o pagamento ser confirmado.`;
       }
     }
@@ -377,25 +386,43 @@ class NvidiaNimService {
 1. IDIOMA 100% EXCLUSIVO: El cliente te está hablando en ESPAÑOL. Debes responder absolutamente el 100% DE TU MENSAJE (cada frase, palabra y nota de voz) EXCLUSIVAMENTE en ESPAÑOL NATIVO de ${targetCountry}.
 2. MODISMOS Y TONO COLOQUIAL: Usa las expresiones naturales y modismos de ${targetCountry}: ${slangGuide}.
 3. PROHIBICIÓN ABSOLUTA DE MEZCLAR IDIOMAS: NUNCA, BAJO NINGUNA CIRCUNSTANCIA, RESPONDAS O MEZCLES FRASES EN PORTUGUÉS.
-   - NUNCA digas: "Nosso material foi pensado para que as crianças aprendam inglês..." -> DI: "Nuestro material está pensado para que los niños aprendan inglés jugando..."
+   - NUNCA digas: "Nosso material foi pensado para que as crianças aprendam inglês..." -> DI: "Nuestro material está pensado para que los niños aprendan jugando..."
    - NUNCA digas: "Para eu te ajudar melhor, qual a idade do seu pequeno..." -> DI: "Para orientarte mejor, ¿qué edad tiene tu pequeño o pequeña?"
    - NUNCA uses: "você", "crianças", "com certeza", "olá", "tá bom". Usa el español coloquial de ${targetCountry}.
-Eres una especialista en atención y ventas humanas por WhatsApp, cálida, empática, rápida y nativa de ${targetCountry}. Tu objetivo es atender leads con total naturalidad, escuchar sus necesidades, responder todas sus dudas, presentar las opciones de oferta en moneda local (${currencyCode}) y guiarlos hasta la compra sin forzar ni apresurar.
 
 ---
 
-### 🌟 REGLA SUPREMA: ATENCIÓN 100% DEDICADA AL CASO DEL LEAD (CERO GUIONES FORZADOS)
-1. **CERO GUIONES FORZADOS NI ROBÓTICOS**: Queda estrictamente PROHIBIDO recitar guiones memorizados, discursos enlatados o responder con fórmulas fijas. Eres una persona real atendiendo a otra persona real en WhatsApp.
-2. **ATENCIÓN 100% DEDICADA AL CASO DE ESTE CLIENTE**: Tu objetivo supremo es convencer al lead de que estás ahí 100% por él/ella, escuchando con empatía y prestando atención exclusiva a SU caso particular (mencionando nombres, edades de los hijos, dudas reales, dificultades con la escuela o el celular).
-3. **ADAPTACIÓN DINÁMICA DE AUDIOS Y MENSAJES**: Las notas de voz [AUDIO: ...] y tus respuestas de texto NUNCA deben ser un guión genérico copiado. Debes formular las palabras en el momento exacto, hablando directamente a lo que él/ella te compartió.
-4. **NATIVIDAD CULTURAL**: Habla con expresiones naturales, suaves y coloquiales del español de ${targetCountry}. Cero lenguaje técnico o traducciones automáticas.
-5. **COMUNICACIÓN NATURAL EN WHATSAPP**: Mensajes de texto dinámicos y humanos (máximo 1 a 2 frases por mensaje). Tienes libertad total para enviar notas de voz [AUDIO: ...] cuando quieras generar mayor cercanía, explicar detalles o conectar emocionalmente. ¡Tú decides con total autonomía si envías el texto antes del audio, el audio antes del texto, o respondes únicamente en texto!
-6. **PRECISIÓN DE VALORES**: Presenta SIEMPRE los precios en moneda local (${currencySymbol} ${ticketBasic} ${currencyCode} en la opción Básica y ${currencySymbol} ${ticketComplete} ${currencyCode} en la opción Completa/VIP). NUNCA menciones dólares (USD) ni reales (BRL).
-7. **PAGOS SIN PRESIÓN**: NUNCA envíes datos o instrucciones de pago de forma prematura si el cliente solo está conociendo o haciendo preguntas sobre el producto. Solo proporciona los datos de pago cuando el cliente pregunte cómo pagar o confirme que desea empezar.
-8. **DESARROLLA LA CONVERSACIÓN PRIMERO (PROHIBIDO COBRAR DE ENTRADA)**: En los primeiros intercambios con el cliente, concéntrate 100% en conversar, descubrir la edad del niño/a, qué dificultades tienen y presentar los beneficios de forma cercana. JAMÁS cobres ni envíes datos bancarios o cuentas de transferencia antes de que la conversación se desarrolle y el cliente muestre clara intención de compra.
-9. **PROHIBICIÓN TOTAL DE OFRECER "MUESTRAS" O DEMOS**: NUNCA ofrezcas "muestras", "actividades de prueba" o "demos". El producto se entrega completo con garantía incondicional de 7 días. Presenta el valor del paquete y guía hacia la compra.
-10. **PREGUNTAS CLARAS Y DIRECTAS (CERO PREGUNTAS DOBLES)**: Haz una sola pregunta clara por mensaje (ej: "¿Te gustaría comenzar con la opción Básica de ${currencySymbol} ${ticketBasic} ${currencyCode} o la Completa de ${currencySymbol} ${ticketComplete} ${currencyCode}?"). NUNCA hagas preguntas dobles contradictorias como "¿quieres pagar o prefieres una muestra?".
-11. **PROHIBIDO REPETIR PLACEHOLDERS**: Si el cliente envía corchetes o marcadores como "[idade]" o "[edad]", jamás los repitas textualmente. Habla con total naturalidad sobre "su edad".
+👑 EL BOSS ABSOLUTO DE LAS VENTAS, ARTICULACIÓN SUPREMA Y MODO PERSONAJE/CAMALEÓN (${targetCountry.toUpperCase()}):
+Eres la especialista número 1 del mundo en ventas conversacionales humanas por WhatsApp. Tu articulación es impecable, magnética, carismática y persuasiva.
+Tu lema de honor: NINGÚN LEAD SE PIERDE. Tienes una habilidad psicológica fuera de serie para conectar con cualquier persona, asumir personajes estratégicos y hacerle ver que lo que ofreces es la mejor oportunidad de su vida.
+
+---
+
+### 🎭 MODO PERSONAJE Y CAMALEÓN PSICOLÓGICO ADAPTATIVO:
+No tienes una sola personalidad rígida. Detectas al instante el perfil emocional, el nivel de dolor y el tono del lead, y adoptas el personaje exacto para ganarte su confianza y cerrar la venta:
+1. 🎭 PERSONAJE: LA MAMÁ / EDUCADORA CÁLIDA Y CÓMPLICE (para padres angustiados, cansados o con niños en las pantallas):
+   - Muestra empatía profunda de madre a madre/padre. Valida su dolor: "Te entiendo de todo corazón, es un reto tremendo con los celulares y las tareas...". Brinda tranquilidad, ternura y esperanza real.
+2. 🎭 PERSONAJE: LA ASESORA TRANSPARENTE Y BLINDAJE TOTAL (para leads desconfiados o que temen estafas en internet):
+   - Cero enojo, calma absoluta y transparencia total: "¡Tienes toda la razón en cuidarte en internet! Por eso aquí la entrega es inmediata y cuentas con 7 días de garantía incondicional. Si algo no te encanta, se te reembolsa el 100% de inmediato. El riesgo es todo nuestro."
+3. 🎭 PERSONAJE: LA ALIADA DEL BOLSILLO / INVERSIÓN INTELIGENTE (para "no tengo plata", "está caro"):
+   - Valida la situación y revierte el costo: muestra que la inversión básica es simbólica (menos de lo que cuesta un café o una golosina), pero la transformación para su hijo dura toda la vida.
+4. 🎭 PERSONAJE: LA MOTIVADORA DE ACCIÓN INMEDIATA (para "voy a pensarlo", "lo consulto con mi pareja"):
+   - Anima con entusiasmo y practicidad: destaca que muchas familias aprovechan y aseguran el precio de promoción para darle la sorpresa a su pareja hoy mismo, con el respaldo de los 7 días de garantía.
+5. 🎭 PERSONAJE: LA COMPA DIRECTA Y CERCANA (para leads jóvenes, informales o con modismos locales):
+   - Conecta con agilidad, buena vibra, modismos nativos y respuesta rápida al grano.
+
+### 💥 PODERES DE CIERRE Y PERSUASIÓN MÁXIMA:
+1. **CERO GUIONES FORZADOS NI ROBÓTICOS**: Queda estrictamente PROHIBIDO recitar guiones memorizados o fórmulas fijas. Eres una persona real atendiendo a otra persona real en WhatsApp.
+2. **ATENCIÓN 100% DEDICADA AL CASO DE ESTE CLIENTE**: Convence al lead de que estás ahí 100% por él/ella, escuchando con empatía y prestando atención exclusiva a SU caso particular (nombres, edades, dudas, dificultades).
+3. **ADAPTACIÓN DINÁMICA DE AUDIOS Y MENSAJES**: Las notas de voz [AUDIO: ...] y tus respuestas de texto NUNCA deben ser genéricas. Debes formular las palabras en el momento exacto hablando directo a lo que te compartió.
+4. **NATIVIDAD CULTURAL**: Habla con expresiones naturales y modismos de ${targetCountry}. Cero lenguaje técnico.
+5. **COMUNICACIÓN NATURAL EN WHATSAPP**: Mensajes dinámicos y humanos (máximo 1 a 2 frases por mensaje). Tienes libertad total para notas de voz [AUDIO: ...] cuando quieras conectar emocionalmente.
+6. **PRECISIÓN DE VALORES**: Presenta SIEMPRE los precios en moneda local (${currencySymbol} ${ticketBasic} ${currencyCode} en Básica y ${currencySymbol} ${ticketComplete} ${currencyCode} en Completa). NUNCA menciones USD ni BRL.
+7. **PAGOS SIN PRESIÓN**: Solo proporciona datos de pago cuando el cliente pregunte cómo pagar o confirme que desea empezar.
+8. **DESARROLLA LA CONVERSACIÓN PRIMERO**: En los primeros intercambios concéntrate en conectar, descubrir la edad del niño/a y presentar los beneficios.
+9. **PROHIBICIÓN TOTAL DE "MUESTRAS"**: NUNCA ofrezcas "muestras" o "demos". El producto se entrega completo con garantía incondicional de 7 días.
+10. **REGLA DE ORO DEL CIERRE**: NUNCA termines un mensaje con texto plano o precios sueltos sin hacer una pregunta que pase la pelota al cliente de forma amable y seductora.
+11. **PROHIBIDO REPETIR PLACEHOLDERS**: Si el cliente envía "[idade]" o "[edad]", jamás lo repitas textualmente. Habla con total naturalidad sobre "su edad".
 
 ---
 
@@ -538,15 +565,45 @@ ${contextDirective ? `\n=== DIRECTIVA DE CONTEXTO ACTUAL ===\n${contextDirective
 - Link Oficial de Checkout: ${product.checkoutUrl || 'Link pendente'}`;
     }
 
-    return `Você é um consultor especialista em vendas e atendimento humanizado via WhatsApp da empresa Zapix.
-Seu objetivo principal é atender o lead com extrema empatia, entender as necessidades dele, tirar dúvidas, contornar objeções e conduzi-lo para a compra do infoproduto.
+    return `👑 O BOSS ABSOLUTO DAS VENDAS, ARTICULAÇÃO IMPECÁVEL E MODO PERSONAGEM/CAMALEÃO 👑
+Você é o atendente e vendedor número 1 do mundo no WhatsApp: hipnótico na conversa, extremamente articulado, empático, ágil e absolutamente imbatível na condução de vendas consultivas.
+Seu lema de honra: NENHUM LEAD É PERDIDO. Você tem lábia de mestre e psicologia refinada para convencer qualquer pessoa de que este produto é a melhor decisão da vida dela.
 
-=== REGRA SUPREMA: ATENÇÃO 100% DEDICADA AO CASO DO LEAD (ZERO ROTEIROS ENGESSADOS) ===
-1. ZERO SCRIPTS DECORADOS OU ROTEIROS PRÉ-MONTADOS: Você NÃO é um robô de telemarketing e é terminantemente PROIBIDO disparar discursos prontos, mensagens enlatadas ou roteiros decorados.
-2. ATENÇÃO TOTAL E EXCLUSIVA AO CASO DESTE CLIENTE: Cada mensagem ou nota de voz [AUDIO: ...] deve convencer o lead de que você está ali 100% por ele, ouvindo atentamente cada detalhe da vida dele (nome do cliente, nome e idade dos filhos, rotina, medos, dúvidas reais).
-3. ADAPTAÇÃO DINÂMICA EM TEMPO REAL: Adapte seu vocabulário, exemplos e explicações à situação real do cliente. Se a mãe disse que o filho de 5 anos chora por causa da escola ou não sai do celular, fale sobre crianças de 5 anos e como a atividade vai resgatar a alegria dele. Conecte o produto DIRETAMENTE à dor revelada pelo lead!
-4. PERSUASÃO PELA EMPATIA E PROXIMIDADE: A persuasão no WhatsApp não vem de empurrar ofertas ou repetir discursos, mas de fazer o lead sentir que foi verdadeiramente ouvido, acolhido e compreendido por alguém que quer o bem dele.
-5. LIBERDADE PARA ÁUDIOS E TEXTOS: Você decide com total autonomia quando mandar áudio ou texto. Cada fala de áudio deve ser formulada espontaneamente na hora, falando diretamente para este cliente, soando humana, calorosa e viva!
+---
+
+### 🎭 HABILIDADE SUPREMA: MODO PERSONAGEM / CAMALEÃO ADAPTATIVO
+Você NÃO tem uma personalidade robótica fixa. Você analisa o tom, a dor, o linguajar e as defesas emocionais do cliente e ENTRA INSTANTANEAMENTE NO PERSONAGEM EXATO para quebrar qualquer barreira e fechar a venda:
+
+1. 🎭 PERSONAGEM: A MÃE / EDUCADORA CÚMPLICE E ACOLHEDORA
+   - *Quando ativar*: Pais ou mães cansados, com culpa, filhos viciados em celular/jogos ou com dificuldade de aprendizado.
+   - *Postura*: Acolhimento materno profundo. Valide a dor: "Eu sei na pele como é desesperador competir com tela... Mas fica tranquila, você não tá sozinha e a gente vai virar esse jogo juntos!".
+
+2. 🎭 PERSONAGEM: O CONSULTOR TRANSPARENTE & BLINDAGEM ANTI-GOLPE
+   - *Quando ativar*: Leads desconfiados, com medo de compras na internet ou perguntando se é seguro.
+   - *Postura*: Calma olímpica, transparência total e autoridade protetora: "Você tá coberto(a) de razão em se precaver na internet hoje em dia! Por isso aqui é 100% seguro: o material cai na hora no seu WhatsApp e você tem 7 dias de garantia incondicional blindada. Se não gostar, cancela com um clique e recebe 100% de volta na hora. O risco é todo meu, zero seu."
+
+3. 🎭 PERSONAGEM: O ALIADO DA ECONOMIA (INVERSOR DE PREÇO)
+   - *Quando ativar*: "Tô sem dinheiro", "tá caro", "tô apertado".
+   - *Postura*: Cúmplice e acolhedor, invertendo psicologicamente o valor: "Nossa, eu sei como o dinheiro tá suado, te entendo 100%! Mas é justamente por isso que mantivemos esse valor promocional simbólico de apenas R$ ${Number(ticketBasic).toFixed(2).replace('.', ',')} — é menos de 50 centavos por dia, não paga nem um pãozinho na padaria. A diferença é que o pão acaba em 5 minutos, e esse material fica pro resto da vida pro futuro do seu pequeno. É o investimento mais barato que existe!"
+
+4. 🎭 PERSONAGEM: O INCENTIVADOR DE AÇÃO IMEDIATA (QUEBRA-ENROLADOR)
+   - *Quando ativar*: "Vou falar com meu marido/esposa", "vou pensar", "depois eu vejo".
+   - *Postura*: Entusiasmo contagiante e senso prático: "Com certeza! E sabe o que muitas clientes fazem? Já garantem logo o Pacote Básico de R$ ${Number(ticketBasic).toFixed(2).replace('.', ',')} agora pra já imprimir as atividades e fazer uma surpresa gostosa pro marido ver o pequeno empolgado! E se ele não aprovar, você cancela em 7 dias sem burocracia nenhuma. Vale super a pena já aproveitar antes de virar o lote promocional!"
+
+5. 🎭 PERSONAGEM: O PARCEIRO DESCONTRAÍDO & CONECTADO
+   - *Quando ativar*: Leads que usam gírias, 'blz', 'show', 'bora', 'mano', 'top'.
+   - *Postura*: Direto, dinâmico, alto astral, objetivo e conduzindo pro fechamento imediato.
+
+---
+
+### 💥 OS PODERES DO BOSS: PERSUASÃO MÁXIMA & FECHAMENTO MAGNÉTICO
+1. **Inversão Emocional de Custo**: O cliente nunca compra um PDF; ele compra a paz de espírito em casa, o orgulho de ver o filho aprendendo e o alívio de tirar a criança das telas.
+2. **Eliminação Total de Barreiras**: Toda objeção vira o maior motivo para comprar agora:
+   - "Não tenho tempo" -> É exatamente por isso que o material já vem 100% pronto só pra imprimir em 2 minutos!
+   - "Meu filho é teimoso" -> As atividades são 100% lúdicas e coloridas, ele aprende brincando como se fosse um joguinho!
+3. **Regra de Ouro do Fechamento**: NUNCA envie uma resposta solta ou preços sem uma pergunta final que passe a bola pro cliente de forma envolvente (ex: "Qual dessas opções você prefere pra eu já te liberar o acesso agora mesmo?", "Bora começar hoje pro seu pequeno já aproveitar?").
+4. **Tenacidade Elegante**: Nunca desista de um lead. Se ele hesitar, acolha, mostre um novo ângulo e ofereça o Pacote Básico acessível.
+5. **CERO SCRIPTS DECORADOS**: Cada mensagem e áudio [AUDIO: ...] deve ser formulado espontaneamente na hora, falando diretamente para este cliente, soando viva e humana.
 
 === INFORMAÇÕES DO PRODUTO QUE VOCÊ VENDE ===
 - Nome do Produto: ${product.name}
@@ -563,13 +620,13 @@ ${product.defaultAudioPitchText ? `Diretrizes do Produtor: "${product.defaultAud
 ${paymentInfo}
 
 === DORES PRINCIPAIS DO CLIENTE ===
-${painPointsList || '- Busca uma nova fonte de renda rápida'}
+${locProd.painPoints || '- Busca uma nova oportunidade para seus filhos'}
 
 === PRINCIPAIS BENEFÍCIOS DO PRODUTO ===
-${benefitsList || '- Acesso imediato, prático e validado'}
+${locProd.benefits || '- Acesso imediato, prático e validado'}
 
 === TRATAMENTO DE OBJEÇÕES ===
-${objectionsList || '- Se achar caro, destaque o parcelamento e retorno rápido.'}
+${locProd.objections || '- Se achar caro, destaque o parcelamento e retorno rápido.'}
 
 === ENTREGÁVEIS / MATERIAIS DE APOIO DISPONÍVEIS ===
 ${deliverableList || 'Nenhum entregável cadastrado no momento.'}
@@ -739,20 +796,28 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
     throw new Error('Modelo retornou conteúdo vazio ou apenas tokens de raciocínio interno.');
   }
 
-  // Call OpenRouter tertiary fallback model (e.g. nvidia/nemotron-3.5-lightning:free)
+  // Call OpenRouter model (e.g. google/gemini-3.8-flash, nvidia/nemotron-3.5-lightning:free)
   async callOpenRouterModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 45000, targetLanguage = 'pt', targetCountry = 'Brasil') {
     if (!apiKey) {
       throw new Error(`OpenRouter API Key não configurada para o modelo ${model}`);
     }
 
+    const isGemini = String(model).toLowerCase().includes('gemini');
+    const safeMaxTokens = Math.min(Number(maxTokens) || 1200, 1500);
+
     const payload = {
       model,
       messages,
       temperature,
-      max_tokens: maxTokens,
-      top_p: 0.95,
-      reasoning: { max_tokens: 0 } // Disable reasoning tokens so raw CoT is not dumped as plain text
+      max_tokens: safeMaxTokens,
+      top_p: 0.95
     };
+
+    // For reasoning-capable models (e.g. Gemini 3.8 Flash), minimize internal thinking to maximize speed & credit efficiency
+    if (isGemini) {
+      payload.reasoning_effort = 'low';
+      payload.reasoning = { effort: 'low' };
+    }
 
     const response = await axios.post(this.openRouterEndpoint, payload, {
       headers: {
@@ -773,6 +838,133 @@ ${settings.ai?.customPromptInstructions ? `\n=== INSTRUÇÕES ADICIONAIS DO USU�
     }
 
     throw new Error('Modelo OpenRouter retornou conteúdo vazio ou apenas tokens de raciocínio interno.');
+  }
+
+  // Direct Google Gemini API call (Google AI Studio OpenAI-compatible endpoint)
+  async callGoogleGeminiDirect(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 60000, targetLanguage = 'pt', targetCountry = 'Brasil') {
+    if (!apiKey) {
+      throw new Error(`Google Gemini API Key não configurada para o modelo ${model}`);
+    }
+
+    const normalizedModel = String(model).replace(/^google\//i, '').trim();
+
+    const payload = {
+      model: normalizedModel,
+      messages,
+      temperature,
+      max_tokens: maxTokens
+    };
+
+    const response = await axios.post('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', payload, {
+      headers: {
+        Authorization: `Bearer ${apiKey.trim()}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: timeoutMs
+    });
+
+    if (response.data && response.data.choices && response.data.choices[0]?.message?.content) {
+      const content = this.sanitizeModelOutput(response.data.choices[0].message.content, targetLanguage, targetCountry);
+      if (content.length > 0) {
+        return content;
+      }
+    }
+
+    throw new Error('Google Gemini retornou conteúdo vazio.');
+  }
+
+  // Universal Smart Model Caller: Dispatches automatically to Google Gemini Direct, OpenRouter or NVIDIA NIM
+  async callAnyModel({
+    model,
+    apiKey,
+    messages,
+    temperature = 0.7,
+    maxTokens = 1500,
+    timeoutMs = 60000,
+    targetLanguage = 'pt',
+    targetCountry = 'Brasil',
+    tierName = 'primary'
+  }) {
+    const cleanModel = (model || 'google/gemini-3.8-flash').trim();
+    const allSettings = storage.getSettings();
+    const aiConfig = allSettings.ai || {};
+
+    // 1. Direct Google AI Studio Key (starts with AIza)
+    const isGoogleKey = apiKey && (apiKey.startsWith('AIza') || apiKey.length === 39);
+    if (isGoogleKey) {
+      return await this.callGoogleGeminiDirect(
+        cleanModel,
+        apiKey,
+        messages,
+        temperature,
+        maxTokens,
+        timeoutMs,
+        targetLanguage,
+        targetCountry
+      );
+    }
+
+    // 2. OpenRouter Models (google/gemini-*, meta-llama/*, qwen/*, deepseek/*, :free, etc.)
+    const isOpenRouterPattern =
+      cleanModel.startsWith('google/') ||
+      cleanModel.startsWith('meta-llama/') ||
+      cleanModel.startsWith('anthropic/') ||
+      cleanModel.startsWith('qwen/') ||
+      cleanModel.startsWith('deepseek/') ||
+      cleanModel.startsWith('mistralai/') ||
+      cleanModel.endsWith(':free') ||
+      cleanModel.toLowerCase().includes('gemini') ||
+      (apiKey && apiKey.startsWith('sk-or-'));
+
+    if (isOpenRouterPattern) {
+      const openRouterKey = (
+        (apiKey && apiKey.startsWith('sk-or-') ? apiKey : null) ||
+        aiConfig.tertiaryApiKey ||
+        process.env.OPENROUTER_API_KEY ||
+        allSettings.fishAudio?.apiKey ||
+        allSettings.vision?.apiKey ||
+        apiKey
+      )?.trim();
+
+      if (!openRouterKey) {
+        throw new Error(`OpenRouter API Key necessária para o modelo ${cleanModel}. Configure em Configurações de IA.`);
+      }
+
+      return await this.callOpenRouterModel(
+        cleanModel,
+        openRouterKey,
+        messages,
+        temperature,
+        maxTokens,
+        timeoutMs,
+        targetLanguage,
+        targetCountry
+      );
+    }
+
+    // 3. NVIDIA NIM Models
+    const nvidiaKey = (
+      (apiKey && !apiKey.startsWith('sk-or-') ? apiKey : null) ||
+      aiConfig.primaryApiKey ||
+      aiConfig.fallbackApiKey ||
+      process.env.NVIDIA_NIM_PRIMARY_API_KEY ||
+      process.env.NVIDIA_NIM_FALLBACK_API_KEY
+    )?.trim();
+
+    if (!nvidiaKey) {
+      throw new Error(`NVIDIA NIM API Key necessária para o modelo ${cleanModel}.`);
+    }
+
+    return await this.callModel(
+      cleanModel,
+      nvidiaKey,
+      messages,
+      temperature,
+      maxTokens,
+      timeoutMs,
+      targetLanguage,
+      targetCountry
+    );
   }
 
   // Generate sales response with automatic primary -> secondary fallback
@@ -1000,12 +1192,14 @@ DIRECTRICES DE MÁXIMA AUTONOMÍA CONVERSACIONAL (OPERACIÓN GLOBAL):
 ${deliveryStrategy === 'deliver_first'
   ? (hasSentDeliverable 
       ? '   - Los materiales ya fueron entregados anteriormente.' 
-      : `   - Tienes total autonomía para entregar los materiales completos ahora usando las etiquetas: ${allDelivTags} si el cliente mostró interés o pidió verlos.`)
+      : `   - Tienes total autonomía para entregar los materiales completos ahora usando las etiquetas: ${allDelivTags} si el cliente mostró interés o pidió verlos.
+   - ESTRUCTURA AL ENTREGAR: Responde primero las dudas del lead y anuncia que envías los archivos con 👇, coloca las etiquetas ${allDelivTags} en el medio, y termina SIEMPRE con una pregunta de cierre (ej: '¡Dale una vuelta y me dices qué te parecen! ¿Cuál te gustaría comenzar para tu peque?').`)
   : '   - Si la estrategia requiere pago previo, los materiales oficiales se enviarán tras la confirmación del pago.'}
-4. PITCH CONSULTIVO ADAPTADO:
+4. PITCH CONSULTIVO ADAPTADO Y REGLA DE ORO DE CIERRE:
 ${hasPixBeenSent 
   ? '   - Los datos de pago ya fueron enviados. No presiones. Brinda espacio, responde dudas con amabilidad y solo reenvía los datos si el cliente lo solicita.' 
-  : `   - Solo cuando sientas que es el momento oportuno (tras resolver dudas o cuando exprese entusiasmo), haz el pitch adaptado a lo que te contó y ofrece el paquete Básico (${formattedPrice}) o Completo (${formattedPriceComplete}).`}
+  : `   - Solo cuando sientas que es el momento oportuno (tras resolver dudas o quando exprese entusiasmo), haz el pitch adaptado a lo que te contó y ofrece el paquete Básico (${formattedPrice}) o Completo (${formattedPriceComplete}).`}
+- OBLIGATORIO: NUNCA termines un mensaje con viñetas o precios sueltos sin hacer una pregunta que pase la pelota al cliente.
 5. TONO HUMANO, AUDIO Y ORDEN: Habla como una persona real en WhatsApp de ${targetCountry}. Tú decides con total libertad el orden: si envías texto antes del audio [AUDIO: ...], audio antes del texto, o respondes únicamente en texto según lo que sea más natural.`;
       } else {
         const historyNotice = totalHistoryCount >= 2
@@ -1026,12 +1220,14 @@ DIRETRIZES DE MÁXIMA AUTONOMÍA CONVERSACIONAL (OPERAÇÃO BRASIL):
 ${deliveryStrategy === 'deliver_first'
   ? (hasSentDeliverable 
       ? '   - Os materiais já foram entregues anteriormente.' 
-      : `   - Você tem autonomia para liberar todos os materiais agora usando as tags: ${allDelivTags} se o cliente demonstrou interesse ou pediu para ver.`)
+      : `   - Você tem autonomia para liberar todos os materiais agora usando as tags: ${allDelivTags} se o cliente demonstrou interesse ou pediu para ver.
+   - ESTRUTURA AO ENTREGAR: Responda primeiro às dúvidas do lead e anuncie que está enviando os arquivos com 👇, coloque as tags ${allDelivTags} no meio, e termine SEMPRE com uma pergunta de fechamento calorosa (ex: 'Dá uma olhadinha com calma e me diz o que achou! Qual opção você prefere para o seu pequeno?').`)
   : '   - Se a operação for de cobrança prévia, os arquivos oficiais são liberados automaticamente após a confirmação do pagamento.'}
-4. PITCH CONSULTIVO ADAPTADO:
+4. PITCH CONSULTIVO ADAPTADO E REGRA DE OURO DE FECHAMENTO:
 ${hasPixBeenSent 
   ? '   - A chave PIX já foi enviada anteriormente. NÃO force a barra nem fique cobrando. Dê espaço, responda dúvidas com gentileza e só reenvie se ele pedir.' 
   : `   - Quando você sentir que o momento é oportuno, faça o pitch adaptado à realidade que ele te contou e ofereça o Pacote Básico (${formattedPrice}) ou o Pacote Completo (${formattedPriceComplete}).`}
+- OBRIGATÓRIO: NUNCA termine uma mensagem em tópicos ou preços soltos sem uma pergunta passando a bola pro cliente.
 5. TOM HUMANO, ÁUDIO E ORDEM: Fale como uma pessoa real no WhatsApp. Você decide com total liberdade o que vem primeiro: se o texto antes e o áudio [AUDIO: ...] depois, se o áudio primeiro e o texto depois, ou se responde apenas em texto conforme fizer mais sentido no momento.`;
       }
     }
@@ -1092,36 +1288,42 @@ ${hasPixBeenSent
     }
 
     let responseText = null;
-    let modelUsed = settings.primaryModel || 'z-ai/glm-5.3';
+    let modelUsed = settings.primaryModel || 'google/gemini-3.8-flash';
 
-    // 1. Try Primary NVIDIA NIM Model (timeout: 180s = 3 min)
+    // 1. Try Primary Model (Google Gemini 3.8 Flash / Universal)
     try {
-      const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
-      if (primaryKey) {
-        responseText = await this.callModel(
-          settings.primaryModel || 'z-ai/glm-5.3',
-          primaryKey,
+      const isGeminiOrOpenRouter = (settings.primaryModel || '').startsWith('google/') || (settings.primaryModel || '').toLowerCase().includes('gemini');
+      const primaryKey = settings.primaryApiKey || (isGeminiOrOpenRouter ? (settings.tertiaryApiKey || process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY) : process.env.NVIDIA_NIM_PRIMARY_API_KEY);
+      const modelToCall = settings.primaryModel || 'google/gemini-3.8-flash';
+      modelUsed = modelToCall;
+
+      if (primaryKey || isGeminiOrOpenRouter) {
+        responseText = await this.callAnyModel({
+          model: modelToCall,
+          apiKey: primaryKey,
           messages,
-          settings.temperature ?? 0.7,
-          settings.maxTokens || 1500,
-          180000, // 180s (3 min) timeout before falling back to secondary model
+          temperature: settings.temperature ?? 0.7,
+          maxTokens: settings.maxTokens || 1500,
+          timeoutMs: 60000, // 60s timeout for fast models like Gemini Flash
           targetLanguage,
-          targetCountry
-        );
+          targetCountry,
+          tierName: 'primary'
+        });
+
         // Primary succeeded - reset cooldown and ensure fallback state is inactive
         this.lastPrimaryFailureTime = 0;
         if (settings.isFallbackActive) {
           storage.updateSettings({ ai: { isFallbackActive: false, lastFallbackReason: null } });
-          storage.addLog('INFO', `Modelo Primário NVIDIA NIM (${modelUsed}) restabelecido com sucesso.`);
+          storage.addLog('INFO', `Modelo Primário (${modelUsed}) restabelecido com sucesso.`);
         }
         return { text: responseText, modelUsed, fallbackTriggered: false, locale: localeInfo };
       }
     } catch (primaryErr) {
       this.lastPrimaryFailureTime = Date.now();
-      console.warn(`[NVIDIA NIM Primary Error]: ${primaryErr.message}`);
+      console.warn(`[AI Primary Error (${modelUsed})]: ${primaryErr.message}`);
       storage.addLog(
         'FALLBACK_TRIGGERED',
-        `NVIDIA NIM Primário (${settings.primaryModel || 'z-ai/glm-5.3'}) não respondeu em 3 min (${primaryErr.message}). Ativando fallback secundário (${settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it'}).`
+        `Modelo Primário (${modelUsed}) falhou (${primaryErr.message}). Ativando fallback secundário (${settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it'}).`
       );
       storage.updateSettings({
         ai: {
@@ -1131,60 +1333,64 @@ ${hasPixBeenSent
       });
     }
 
-    // 2. Try Fallback NVIDIA NIM Model (google/diffusiongemma-26b-a4b-it)
+    // 2. Try Fallback Model (NVIDIA NIM or secondary model)
     try {
-      const fallbackKey = settings.fallbackApiKey || process.env.NVIDIA_NIM_FALLBACK_API_KEY || settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
       const fallbackModel = settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it';
-      if (fallbackKey && fallbackModel) {
+      const isFallbackOpenRouter = fallbackModel.startsWith('google/') || fallbackModel.toLowerCase().includes('gemini');
+      const fallbackKey = settings.fallbackApiKey || (isFallbackOpenRouter ? (settings.tertiaryApiKey || process.env.OPENROUTER_API_KEY) : (settings.primaryApiKey || process.env.NVIDIA_NIM_FALLBACK_API_KEY || process.env.NVIDIA_NIM_PRIMARY_API_KEY));
+      
+      if (fallbackKey || isFallbackOpenRouter) {
         modelUsed = fallbackModel;
-        responseText = await this.callModel(
-          fallbackModel,
-          fallbackKey,
+        responseText = await this.callAnyModel({
+          model: fallbackModel,
+          apiKey: fallbackKey,
           messages,
-          settings.temperature ?? 0.7,
-          settings.maxTokens || 1500,
-          60000, // 60s fallback timeout
+          temperature: settings.temperature ?? 0.7,
+          maxTokens: settings.maxTokens || 1500,
+          timeoutMs: 60000,
           targetLanguage,
-          targetCountry
-        );
-        return { text: responseText, modelUsed, fallbackTriggered: true, fallbackTier: 'secondary_nvidia', locale: localeInfo };
+          targetCountry,
+          tierName: 'fallback'
+        });
+        return { text: responseText, modelUsed, fallbackTriggered: true, fallbackTier: 'secondary_fallback', locale: localeInfo };
       }
     } catch (fallbackErr) {
-      console.error(`[NVIDIA NIM Fallback Error]: ${fallbackErr.message}`);
+      console.error(`[AI Fallback Error]: ${fallbackErr.message}`);
       storage.addLog(
         'WARNING',
-        `NVIDIA NIM Secundário falhou (${fallbackErr.message}). Acionando 3º Fallback via OpenRouter (${settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free'}).`
+        `Modelo Secundário falhou (${fallbackErr.message}). Acionando 3º Fallback (${settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free'}).`
       );
     }
 
-    // 3. Try Tertiary Fallback: OpenRouter (nvidia/nemotron-3.5-lightning:free)
+    // 3. Try Tertiary Fallback: OpenRouter Free / Backup Model
     try {
       const allSettings = storage.getSettings();
       const tertiaryKey = settings.tertiaryApiKey || process.env.OPENROUTER_API_KEY || allSettings.fishAudio?.apiKey || allSettings.vision?.apiKey;
       const tertiaryModel = settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free';
       if (tertiaryKey && tertiaryModel) {
         modelUsed = tertiaryModel;
-        responseText = await this.callOpenRouterModel(
-          tertiaryModel,
-          tertiaryKey,
+        responseText = await this.callAnyModel({
+          model: tertiaryModel,
+          apiKey: tertiaryKey,
           messages,
-          settings.temperature ?? 0.7,
-          settings.maxTokens || 1500,
-          45000, // 45s timeout for OpenRouter
+          temperature: settings.temperature ?? 0.7,
+          maxTokens: settings.maxTokens || 1500,
+          timeoutMs: 45000,
           targetLanguage,
-          targetCountry
-        );
+          targetCountry,
+          tierName: 'tertiary'
+        });
         storage.addLog(
           'FALLBACK_TRIGGERED',
-          `Modelos NVIDIA NIM indisponíveis. Resposta atendida com sucesso pelo 3º Fallback OpenRouter (${tertiaryModel}).`
+          `Modelos anteriores indisponíveis. Resposta atendida com sucesso pelo 3º Fallback (${tertiaryModel}).`
         );
         return { text: responseText, modelUsed, fallbackTriggered: true, fallbackTier: 'tertiary_openrouter', locale: localeInfo };
       }
     } catch (tertiaryErr) {
-      console.error(`[OpenRouter Tertiary Fallback Error]: ${tertiaryErr.message}`);
+      console.error(`[AI Tertiary Fallback Error]: ${tertiaryErr.message}`);
       storage.addLog(
         'ERROR',
-        `Todas as 3 IAs falharam (NVIDIA Primário, NVIDIA Secundário e OpenRouter ${settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free'}): ${tertiaryErr.message}`
+        `Todas as 3 IAs falharam (Primário, Secundário e Terciário ${settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free'}): ${tertiaryErr.message}`
       );
     }
 
@@ -1385,36 +1591,40 @@ Gere o JSON localizado para ${targetCountry}.`;
     ];
 
     let rawReply = '';
-    const primaryKey = aiConfig.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
+    const targetModel = aiConfig.primaryModel || 'google/gemini-3.8-flash';
+    const primaryKey = aiConfig.primaryApiKey || (targetModel.includes('gemini') || targetModel.startsWith('google/') ? (aiConfig.tertiaryApiKey || process.env.OPENROUTER_API_KEY || settings.fishAudio?.apiKey) : process.env.NVIDIA_NIM_PRIMARY_API_KEY);
     if (primaryKey) {
       try {
-        rawReply = await this.callModel(
-          aiConfig.primaryModel || 'z-ai/glm-5.3',
-          primaryKey,
+        rawReply = await this.callAnyModel({
+          model: targetModel,
+          apiKey: primaryKey,
           messages,
-          0.4,
-          2200,
-          90000,
-          isEnglish ? 'en' : 'es',
-          targetCountry
-        );
+          temperature: 0.4,
+          maxTokens: 2200,
+          timeoutMs: 60000,
+          targetLanguage: isEnglish ? 'en' : 'es',
+          targetCountry,
+          tierName: 'primary'
+        });
       } catch (err) {
         console.warn(`[Localize Primary Model Error]: ${err.message}. Tentando fallback...`);
       }
     }
 
     if (!rawReply) {
-      const openRouterKey = aiConfig.tertiaryApiKey || process.env.OPENROUTER_API_KEY || settings.fishAudio?.apiKey || settings.vision?.apiKey;
-      rawReply = await this.callOpenRouterModel(
-        aiConfig.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free',
-        openRouterKey,
+      const fallbackModel = aiConfig.fallbackModel || aiConfig.tertiaryModel || 'google/diffusiongemma-26b-a4b-it';
+      const fallbackKey = aiConfig.fallbackApiKey || aiConfig.tertiaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY || process.env.OPENROUTER_API_KEY;
+      rawReply = await this.callAnyModel({
+        model: fallbackModel,
+        apiKey: fallbackKey,
         messages,
-        0.4,
-        2200,
-        60000,
-        isEnglish ? 'en' : 'es',
-        targetCountry
-      );
+        temperature: 0.4,
+        maxTokens: 2200,
+        timeoutMs: 60000,
+        targetLanguage: isEnglish ? 'en' : 'es',
+        targetCountry,
+        tierName: 'fallback'
+      });
     }
 
     let cleanJsonStr = rawReply.trim();
@@ -1436,6 +1646,7 @@ Gere o JSON localizado para ${targetCountry}.`;
   // Generate spoken remarketing script tailored dynamically to the lead's exact conversation history
   async generateRemarketingSpeech(instruction, lead, product, conversationHistory = []) {
     const settings = storage.getSettings().ai;
+    const allSettings = storage.getSettings();
     const leadFirstName = (lead.name || '').split(' ')[0] || '';
     const cleanLeadName = /^[0-9+() -]+$/.test(leadFirstName) ? '' : leadFirstName;
 
@@ -1468,66 +1679,69 @@ Gere agora o texto exato falado para ser gravado em áudio sob medida para este 
       { role: 'user', content: userPrompt }
     ];
 
-    // Try Primary NVIDIA NIM Model
+    // Try Primary Model (Google Gemini 3.8 Flash / Universal)
     try {
-      const primaryKey = settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
-      if (primaryKey) {
-        const generated = await this.callModel(
-          settings.primaryModel || 'z-ai/glm-5.3',
-          primaryKey,
+      const primaryModel = settings.primaryModel || 'google/gemini-3.8-flash';
+      const isGeminiOrOpenRouter = primaryModel.startsWith('google/') || primaryModel.toLowerCase().includes('gemini');
+      const primaryKey = settings.primaryApiKey || (isGeminiOrOpenRouter ? (settings.tertiaryApiKey || process.env.OPENROUTER_API_KEY || allSettings.fishAudio?.apiKey) : process.env.NVIDIA_NIM_PRIMARY_API_KEY);
+      
+      if (primaryKey || isGeminiOrOpenRouter) {
+        const generated = await this.callAnyModel({
+          model: primaryModel,
+          apiKey: primaryKey,
           messages,
-          0.7,
-          500,
-          60000 // 60s (1 min) timeout
-        );
+          temperature: 0.7,
+          maxTokens: 500,
+          timeoutMs: 45000
+        });
         if (generated && generated.length > 5) {
           return generated.replace(/["'“”«»]/g, '').trim();
         }
       }
     } catch (e) {
-      console.warn('[NVIDIA NIM Remarketing Primary Error]:', e.message);
+      console.warn('[AI Remarketing Primary Error]:', e.message);
     }
 
-    // Fallback NVIDIA NIM Model
+    // Fallback Model
     try {
+      const fallbackModel = settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it';
       const fallbackKey = settings.fallbackApiKey || process.env.NVIDIA_NIM_FALLBACK_API_KEY || settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY;
       if (fallbackKey) {
-        const generated = await this.callModel(
-          settings.fallbackModel || 'google/diffusiongemma-26b-a4b-it',
-          fallbackKey,
+        const generated = await this.callAnyModel({
+          model: fallbackModel,
+          apiKey: fallbackKey,
           messages,
-          0.7,
-          500,
-          12000 // 12s timeout
-        );
+          temperature: 0.7,
+          maxTokens: 500,
+          timeoutMs: 20000
+        });
         if (generated && generated.length > 5) {
           return generated.replace(/["'“”«»]/g, '').trim();
         }
       }
     } catch (e2) {
-      console.warn('[NVIDIA NIM Remarketing Fallback Error]:', e2.message);
+      console.warn('[AI Remarketing Fallback Error]:', e2.message);
     }
 
-    // Tertiary OpenRouter Model (nvidia/nemotron-3.5-lightning:free)
+    // Tertiary OpenRouter Model
     try {
-      const allSettings = storage.getSettings();
       const tertiaryKey = settings.tertiaryApiKey || process.env.OPENROUTER_API_KEY || allSettings.fishAudio?.apiKey || allSettings.vision?.apiKey;
       const tertiaryModel = settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free';
       if (tertiaryKey && tertiaryModel) {
-        const generated = await this.callOpenRouterModel(
-          tertiaryModel,
-          tertiaryKey,
+        const generated = await this.callAnyModel({
+          model: tertiaryModel,
+          apiKey: tertiaryKey,
           messages,
-          0.7,
-          1200,
-          15000 // 15s timeout
-        );
+          temperature: 0.7,
+          maxTokens: 500,
+          timeoutMs: 20000
+        });
         if (generated && generated.length > 5) {
           return generated.replace(/["'“”«»]/g, '').trim();
         }
       }
     } catch (e3) {
-      console.warn('[OpenRouter Remarketing Tertiary Error]:', e3.message);
+      console.warn('[AI Remarketing Tertiary Error]:', e3.message);
     }
 
     return null;

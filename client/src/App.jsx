@@ -424,6 +424,23 @@ export default function App() {
     }
   };
 
+  const handleReorderDeliverables = async (newOrderedDeliverables) => {
+    setDeliverables(newOrderedDeliverables);
+    try {
+      const ids = newOrderedDeliverables.map((d) => d.id);
+      const res = await fetch('/api/deliverables/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      });
+      if (!res.ok) throw new Error('Falha ao salvar a nova ordem dos arquivos');
+      showToast('Ordem dos entregáveis atualizada com sucesso!');
+      fetchLogs();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
   // Meta Ads Spend Sync
   const handleSyncMeta = async () => {
     setIsSyncingMeta(true);
@@ -654,6 +671,9 @@ export default function App() {
           <DeliverablesManager
             deliverables={deliverables}
             deliveryStrategy={settings?.product?.deliveryStrategy}
+            orderMode={settings?.product?.deliverablesOrderMode || 'top_down'}
+            onUpdateOrderMode={(mode) => handleSaveSettings({ product: { ...(settings?.product || {}), deliverablesOrderMode: mode } })}
+            onReorder={handleReorderDeliverables}
             onUpload={handleUploadDeliverable}
             onUpdate={handleUpdateDeliverable}
             onDelete={handleDeleteDeliverable}
