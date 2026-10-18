@@ -187,7 +187,8 @@ function buildPortugueseBlocks({ vars, locProd, product, guarantee, deliveryStra
     section('PAGAMENTO', lines(
       payment,
       '- Só envie os dados de pagamento quando o cliente pedir ou disser que quer comprar.',
-      '- REGRA DE CÓPIA RÁPIDA (META / WHATSAPP): Ao enviar a chave PIX, envie-a OBRIGATORIAMENTE isolada em uma linha entre três crases (ex: ```88994892385```). O WhatsApp da Meta cria automaticamente um botão nativo no balão para o cliente copiar a chave com 1 toque no celular.'
+      '- REGRA DE CÓPIA RÁPIDA (META / WHATSAPP): Ao enviar a chave PIX, envie-a OBRIGATORIAMENTE isolada em uma linha entre três crases (ex: ```88994892385```). O WhatsApp da Meta cria automaticamente um botão nativo no balão para o cliente copiar a chave com 1 toque no celular.',
+      '- ORDEM DA MENSAGEM: Coloque os dados da chave PIX sempre no FINAL da sua resposta. Fale primeiro com o cliente, acolha, responda e passe a chave por último para que o botão oficial de cópia venha colado logo abaixo dela.'
     )),
 
     section('ENTREGA', deliveryStrategy === 'deliver_first'
@@ -264,7 +265,8 @@ function buildSpanishBlocks({ lang, country, vars, locProd, guarantee, deliveryS
     section(`PAGO (${countryEs.toUpperCase()})`, lines(
       payment,
       '- Comparte los datos de pago solo cuando el cliente lo pida o diga que quiere comprar.',
-      '- REGLA DE COPIA RÁPIDA (META / WHATSAPP): Al enviar la CLABE de SPEI, número de Nequi / Bre-B o Alias, envíalo OBRIGATORIAMENTE aislado en una línea entre tres tildes invertidas (ej: ```123456789```). El WhatsApp de Meta crea automáticamente un botón nativo en el globo para que el cliente copie con 1 toque en su teléfono.'
+      '- REGLA DE COPIA RÁPIDA (META / WHATSAPP): Al enviar la CLABE de SPEI, número de Nequi / Bre-B o Alias, envíalo OBRIGATORIAMENTE aislado en una línea entre tres tildes invertidas (ej: ```123456789```). El WhatsApp de Meta crea automáticamente un botón nativo en el globo para que el cliente copie con 1 toque en su teléfono.',
+      '- ORDEN DEL MENSAJE: Coloca los datos de pago siempre al FINAL de tu respuesta. Orienta primero al cliente y entrega los datos por último para que el botón oficial de copia quede pegado justo debajo.'
     )),
 
     section('ENTREGA', deliveryStrategy === 'deliver_first'

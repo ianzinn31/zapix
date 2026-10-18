@@ -1155,7 +1155,24 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
         // 7. Dispatch Helpers for Text Bubbles & Audio Voice Notes
         const sendTextBubbles = async (textToSend) => {
           if (!textToSend || textToSend.trim().length === 0 || signal.aborted) return;
-          const bubbles = antiBan.splitIntoNaturalBubbles(textToSend);
+          let bubbles = antiBan.splitIntoNaturalBubbles(textToSend);
+
+          // Guarantee that payment bubbles are sent LAST in the text sequence
+          // so the bubble with the key and the interactive copy button appear immediately one after the other!
+          if (product.pixKey || activeSpeiCharge?.clabe || product.nequiNumber) {
+            const isPaymentBubble = (b) => (
+              (product.pixKey && b.includes(product.pixKey)) ||
+              (activeSpeiCharge?.clabe && b.includes(activeSpeiCharge.clabe)) ||
+              (product.nequiNumber && b.includes(product.nequiNumber)) ||
+              /chave\s*pix/i.test(b) ||
+              /dados\s*do\s*pix/i.test(b)
+            );
+            const nonPaymentBubbles = bubbles.filter((b) => !isPaymentBubble(b));
+            const paymentBubbles = bubbles.filter((b) => isPaymentBubble(b));
+            if (paymentBubbles.length > 0 && nonPaymentBubbles.length > 0) {
+              bubbles = [...nonPaymentBubbles, ...paymentBubbles];
+            }
+          }
 
           for (let i = 0; i < bubbles.length; i++) {
             if (signal.aborted) {
