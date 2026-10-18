@@ -545,19 +545,22 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
     let paymentInfoDetails = '';
     if (targetCountry === 'México') {
       paymentMethodName = 'SPEI Automático (XPag)';
-      paymentInfoDetails = `Transferencia interbancaria SPEI / CLABE única. Activación 100% automática tras la transferencia.`;
+      paymentInfoDetails = `Transferencia interbancaria SPEI / CLABE única (enviar CLABE aislada entre \`\`\` para botón de copia). Activación 100% automática tras la transferencia.`;
     } else if (targetCountry === 'Colômbia') {
       paymentMethodName = 'Nequi / Bre-B';
-      paymentInfoDetails = `Número Nequi: ${product.nequiNumber || 'Consulte'} (Titular: ${product.nequiBeneficiary || 'Oficial'}). Solicite comprobante para liberar acceso.`;
+      const nequiFmt = product.nequiNumber ? `\`\`\`${product.nequiNumber}\`\`\`` : 'Consulte';
+      paymentInfoDetails = `Número Nequi / Bre-B: ${nequiFmt} (Titular: ${product.nequiBeneficiary || 'Oficial'}). Enviar número entre \`\`\` para botón de copia rápida. Solicite comprobante para liberar acceso.`;
     } else if (targetCountry === 'Bolívia') {
       paymentMethodName = 'QR Simple / Banco';
       paymentInfoDetails = `Banco: ${product.boliviaBankName || ''} - Cuenta: ${product.boliviaAccountNumber || ''} (Titular: ${product.boliviaBeneficiary || 'Oficial'}).`;
     } else if (targetCountry === 'Argentina' || targetCountry === 'Paraguai') {
       paymentMethodName = 'Alias / Transferencia';
-      paymentInfoDetails = `Clave Alias: ${product.aliasKey || 'Consulte'} (Banco: ${product.aliasBank || ''} - Titular: ${product.aliasBeneficiary || 'Oficial'}).`;
+      const aliasFmt = product.aliasKey ? `\`\`\`${product.aliasKey}\`\`\`` : 'Consulte';
+      paymentInfoDetails = `Clave Alias: ${aliasFmt} (Banco: ${product.aliasBank || ''} - Titular: ${product.aliasBeneficiary || 'Oficial'}).`;
     } else {
       paymentMethodName = 'PIX';
-      paymentInfoDetails = `Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'} | Titular: ${product.pixBeneficiary || 'ian alves dos anjos'}. Enviar comprovante para confirmação.`;
+      const pixFmt = product.pixKey ? `\`\`\`${product.pixKey}\`\`\`` : '```88994892385```';
+      paymentInfoDetails = `Chave PIX (${product.pixKeyType || 'telefone'}): ${pixFmt} | Titular: ${product.pixBeneficiary || 'ian alves dos anjos'}. Enviar chave entre \`\`\` para o WhatsApp criar botão de copiar. Enviar comprovante para confirmação.`;
     }
 
     const deliveryStrategy = product.deliveryStrategy || 'require_payment';

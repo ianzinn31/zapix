@@ -48,8 +48,9 @@ export function buildPaymentLines({ lang, country, product = {}, xpagCharge = nu
 
   if (country === 'Brasil' || lang === 'pt') {
     const method = p.paymentMethod || (p.pixKey ? 'both' : 'checkout');
+    const pixKeyFormatted = clean(p.pixKey) ? `\`\`\`${clean(p.pixKey)}\`\`\`` : '```88994892385```';
     const pix = lines(
-      `- PIX (${clean(p.pixKeyType) || 'chave'}): ${clean(p.pixKey) || '88994892385'} — Titular: ${clean(p.pixBeneficiary) || 'ian alves dos anjos'}`,
+      `- PIX (${clean(p.pixKeyType) || 'chave'}): ${pixKeyFormatted} — Titular: ${clean(p.pixBeneficiary) || 'ian alves dos anjos'}`,
       clean(p.pixInstructions) ? `- Instruções: ${clean(p.pixInstructions)}` : '- Depois de pagar, o cliente envia o comprovante aqui para confirmação.'
     );
     const checkout = clean(p.checkoutUrl) ? `- Cartão / parcelado: ${clean(p.checkoutUrl)}` : '';
@@ -62,14 +63,15 @@ export function buildPaymentLines({ lang, country, product = {}, xpagCharge = nu
   if (country === 'México') {
     return lines(
       '- SPEI automático (XPag): se genera una CLABE única para el cliente. La activación es automática al pagar; no hace falta enviar comprobante.',
-      xpagCharge?.clabe ? `- CLABE ya generada para este cliente: ${xpagCharge.clabe} (Banco: ${clean(xpagCharge.bankName) || 'STP'})` : '',
+      xpagCharge?.clabe ? `- CLABE ya generada para este cliente: \`\`\`${xpagCharge.clabe}\`\`\` (Banco: ${clean(xpagCharge.bankName) || 'STP'})` : '',
       clean(p.xpagInstructions) ? `- Instrucciones: ${clean(p.xpagInstructions)}` : ''
     );
   }
 
   if (country === 'Colômbia') {
+    const nequiFormatted = clean(p.nequiNumber) ? `\`\`\`${clean(p.nequiNumber)}\`\`\`` : '(número no configurado)';
     return lines(
-      `- Nequi / Bre-B: ${clean(p.nequiNumber) || '(número no configurado)'}${clean(p.nequiBeneficiary) ? ` — Titular: ${clean(p.nequiBeneficiary)}` : ''}`,
+      `- Nequi / Bre-B: ${nequiFormatted}${clean(p.nequiBeneficiary) ? ` — Titular: ${clean(p.nequiBeneficiary)}` : ''}`,
       clean(p.nequiInstructions) ? `- Instrucciones: ${clean(p.nequiInstructions)}` : '- Después de pagar, el cliente envía el comprobante aquí para activar el acceso.'
     );
   }
@@ -87,8 +89,9 @@ export function buildPaymentLines({ lang, country, product = {}, xpagCharge = nu
   }
 
   if (country === 'Argentina' || country === 'Paraguai') {
+    const aliasFormatted = clean(p.aliasKey) ? `\`\`\`${clean(p.aliasKey)}\`\`\`` : '(alias no configurado)';
     return lines(
-      `- Transferencia por Alias: ${clean(p.aliasKey) || '(alias no configurado)'}${clean(p.aliasBank) ? ` (Banco ${clean(p.aliasBank)})` : ''}${clean(p.aliasBeneficiary) ? ` — Titular: ${clean(p.aliasBeneficiary)}` : ''}`,
+      `- Transferencia por Alias: ${aliasFormatted}${clean(p.aliasBank) ? ` (Banco ${clean(p.aliasBank)})` : ''}${clean(p.aliasBeneficiary) ? ` — Titular: ${clean(p.aliasBeneficiary)}` : ''}`,
       clean(p.aliasInstructions) ? `- Instrucciones: ${clean(p.aliasInstructions)}` : '- Después de pagar, el cliente envía el comprobante aquí.'
     );
   }
@@ -183,7 +186,8 @@ function buildPortugueseBlocks({ vars, locProd, product, guarantee, deliveryStra
 
     section('PAGAMENTO', lines(
       payment,
-      '- Só envie os dados de pagamento quando o cliente pedir ou disser que quer comprar.'
+      '- Só envie os dados de pagamento quando o cliente pedir ou disser que quer comprar.',
+      '- REGRA DE CÓPIA RÁPIDA (META / WHATSAPP): Ao enviar a chave PIX, envie-a OBRIGATORIAMENTE isolada em uma linha entre três crases (ex: ```88994892385```). O WhatsApp da Meta cria automaticamente um botão nativo no balão para o cliente copiar a chave com 1 toque no celular.'
     )),
 
     section('ENTREGA', deliveryStrategy === 'deliver_first'
@@ -205,7 +209,7 @@ function buildPortugueseBlocks({ vars, locProd, product, guarantee, deliveryStra
           '- Nota de voz: use a tag [AUDIO: texto que será falado] — no máximo uma por resposta. Pode vir antes ou depois de um texto curto.',
           '- Use áudio quando o cliente pedir ou quando for explicar algo com mais calor (acolher, apresentar o produto, quebrar uma objeção). Para respostas rápidas e confirmações, use só texto.',
           '- O texto do áudio deve soar falado: 2 a 4 frases (10 a 25 segundos), sem emojis, links, listas ou marcações entre colchetes (como [warm] ou [pausa]). Use reticências para pausas naturais.',
-          '- Informações que o cliente precisa copiar ou consultar (preços, chave PIX, links) vão sempre no texto.'
+          '- Informações que o cliente precisa copiar ou consultar (preços, chave PIX, links) vão sempre no texto (chave PIX isolada entre três crases: ```chave``` para ativar o botão de cópia da Meta).'
         )
         : '- Responda somente em texto. Não use a tag [AUDIO].'
     )),
@@ -259,7 +263,8 @@ function buildSpanishBlocks({ lang, country, vars, locProd, guarantee, deliveryS
 
     section(`PAGO (${countryEs.toUpperCase()})`, lines(
       payment,
-      '- Comparte los datos de pago solo cuando el cliente lo pida o diga que quiere comprar.'
+      '- Comparte los datos de pago solo cuando el cliente lo pida o diga que quiere comprar.',
+      '- REGLA DE COPIA RÁPIDA (META / WHATSAPP): Al enviar la CLABE de SPEI, número de Nequi / Bre-B o Alias, envíalo OBRIGATORIAMENTE aislado en una línea entre tres tildes invertidas (ej: ```123456789```). El WhatsApp de Meta crea automáticamente un botón nativo en el globo para que el cliente copie con 1 toque en su teléfono.'
     )),
 
     section('ENTREGA', deliveryStrategy === 'deliver_first'
@@ -281,7 +286,7 @@ function buildSpanishBlocks({ lang, country, vars, locProd, guarantee, deliveryS
           '- Nota de voz: usa la etiqueta [AUDIO: texto que se va a hablar] — máximo una por respuesta. Puede ir antes o después de un texto corto.',
           '- Usa audio cuando el cliente lo pida o cuando expliques algo con más calidez (acoger, presentar el producto, resolver una objeción). Para respuestas rápidas y confirmaciones, usa solo texto.',
           '- El texto del audio debe sonar hablado: 2 a 4 frases (10 a 25 segundos), sin emojis, links, listas ni marcas entre corchetes (como [warm] o [pausa]). Usa puntos suspensivos para pausas naturales.',
-          '- La información que el cliente necesita copiar o consultar (precios, datos de pago, links) va siempre en el texto.'
+          '- La información que el cliente necesita copiar o consultar (precios, datos de pago, links) va siempre en el texto (datos de pago aislados entre tres tildes: ```número``` para activar el botón de copia de Meta).'
         )
         : '- Responde solo en texto. No uses la etiqueta [AUDIO].'
     )),
@@ -384,7 +389,7 @@ export function buildTurnContext({
     receipt_scheduled: 'O comprovante é de um agendamento: o valor ainda não foi debitado. Explique com gentileza, peça para cancelar o agendamento no app do banco e fazer a transferência na hora, e reenvie os dados de pagamento.',
     receipt_invalid: 'O comprovante enviado tem uma divergência (detalhes na mensagem do cliente). Explique com respeito e reenvie os dados oficiais de pagamento.',
     paid: 'O cliente já pagou e está com o acesso confirmado. Responda às dúvidas dele com atenção; se perguntar dos materiais, confirme que são os que já foram enviados. Não tente vender de novo.',
-    payment_request: `O cliente quer pagar. Se ainda não escolheu, confirme a opção (${prices}). Envie no texto os dados da seção PAGAMENTO e diga o próximo passo (enviar o comprovante).`,
+    payment_request: `O cliente quer pagar. Se ainda não escolheu, confirme a opção (${prices}). Envie no texto os dados da seção PAGAMENTO (com a chave PIX isolada entre três crases: \`\`\`chave\`\`\` para o WhatsApp gerar o botão de cópia rápida) e diga o próximo passo (enviar o comprovante).`,
     price_question: `O cliente perguntou o preço. Informe as duas opções (${prices}), destaque em uma frase o principal benefício e faça uma pergunta para entender o que ele procura. Ainda não envie dados de pagamento.`,
     claims_paid: 'O cliente diz que já pagou. Agradeça e peça o comprovante aqui na conversa para confirmar.',
     files_question: 'O cliente pergunta se os materiais enviados são os definitivos. Confirme que sim: são os materiais completos, prontos para usar.'
@@ -398,7 +403,7 @@ export function buildTurnContext({
     receipt_scheduled: 'El comprobante es de un pago programado: el monto aún no se debitó. Explícalo con amabilidad, pídele que cancele la programación en su app bancaria y haga la transferencia inmediata, y reenvía los datos de pago.',
     receipt_invalid: 'El comprobante enviado tiene una inconsistencia (detalles en el mensaje del cliente). Explícalo con respeto y reenvía los datos oficiales de pago.',
     paid: 'El cliente ya pagó y su acceso está confirmado. Responde sus dudas con atención; si pregunta por los materiales, confirma que son los que ya se enviaron. No intentes venderle de nuevo.',
-    payment_request: `El cliente quiere pagar. Si aún no eligió, confirma la opción (${prices}). Envía en el texto los datos de la sección PAGO y explica el siguiente paso${country === 'México' ? ' (la activación es automática al pagar)' : ' (enviar el comprobante)'}.`,
+    payment_request: `El cliente quiere pagar. Si aún no eligió, confirma la opción (${prices}). Envía en el texto los datos de la sección PAGO (con la CLABE o Nequi/Bre-B entre tres tildes invertidas: \`\`\`código\`\`\` para que WhatsApp genere el botón de copiar rápido) y explica el siguiente paso${country === 'México' ? ' (la activación es automática al pagar)' : ' (enviar el comprobante)'}.`,
     price_question: `El cliente preguntó el precio. Indica las dos opciones (${prices}), destaca en una frase el beneficio principal y haz una pregunta para entender qué busca. Todavía no envíes datos de pago.`,
     claims_paid: country === 'México'
       ? 'El cliente dice que ya pagó. Agradece; con SPEI la confirmación es automática. Si aún no aparece confirmado, pídele el comprobante aquí.'

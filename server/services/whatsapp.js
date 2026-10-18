@@ -1054,13 +1054,12 @@ class WhatsAppService {
           /\[(?:ENVIAR_)?(?:PAGAMENTO|PAGO|COBRANCA|SPEI|PIX|DATOS_PAGO|CHAVE_PIX)\]/i.test(rawAiText) ||
           /(?:te paso los datos para que puedas transferir|te comparto los datos de la transferencia|puedes realizar la transferencia a la siguiente|aquí te dejo los datos para el pago|aquí tienes los datos oficiales para|segue abaixo a chave pix|vou te passar a chave pix|pode fazer a transferência para a chave)/i.test(lowerAi);
 
-        // Discovery question safeguard: check if message has ANY questions or is asking the client to choose an option
+        // Discovery question safeguard: check if message has actual exploratory questions or is asking to choose an option
         const replyTextToCheck = (textAfter || textBefore || '').trim();
-        const hasQuestion = /\?|¿/.test(replyTextToCheck);
-        const isAskingToChooseOption =
-          /(?:cu[aá]l\s+(?:opci[oó]n|paquete)|qu[eé]\s+(?:opci[oó]n|paquete)|b[aá]sica\s+o\s+completa|qual\s+op[çc][aã]o|b[aá]sico\s+ou\s+completo|qual\s+dos\s+dois|150\s+o\s+270|15\s+ou\s+37)/i.test(replyTextToCheck);
+        const isClosingPoliteness = /(?:t[aá] bom\?|te parece\?|combinado\?|tudo bem\?|me avisas\?|me avisa\?|certo\?)/i.test(replyTextToCheck);
+        const hasDiscoveryQuestion = (/\?|¿/.test(replyTextToCheck) && !isClosingPoliteness) || isAskingToChooseOption;
 
-        const isDiscoveryDialogue = (hasQuestion || isAskingToChooseOption) && !userExplicitlyWantsPayment;
+        const isDiscoveryDialogue = hasDiscoveryQuestion && !userExplicitlyWantsPayment;
 
         // In deliver_first: only close if materials were ALREADY delivered in message history AND customer or AI explicitly triggered payment
         const isFirstTimePhase2Closing = deliveryStrategy === 'deliver_first' &&
@@ -1084,7 +1083,7 @@ class WhatsAppService {
 
         if (!isLatAmLead && product.pixKey && shouldAppendPayment) {
           const pixPrice = Number(resolvedAmount).toFixed(2).replace('.', ',');
-          const pixBlock = `Chave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${pixPrice}\n\nAssim que você fizer, me envia o comprovante aqui tá bom? ❤️`;
+          const pixBlock = `Chave PIX (${product.pixKeyType || 'telefone'}):\n\`\`\`${product.pixKey}\`\`\`\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: R$ ${pixPrice}\n\nAssim que você fizer, me envia o comprovante aqui tá bom? ❤️`;
           const emotionalAppeal = `Eu confiei em você de olhos fechados e já te entreguei todo o material completo antes mesmo de você pagar! Fiz isso de coração aberto porque sei o quanto você se preocupa e quer o melhor para o seu pequeno... ❤️\n\nAgora estou aqui de coração te pedindo pra fazer a sua parte com essa contribuição simbólica de apenas R$ ${pixPrice}, que é o que mantém nosso trabalho vivo e de pé!`;
 
           if (textAfter.length > 0) {
@@ -1340,20 +1339,51 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
           await sendTextBubbles(textAfter);
         }
 
-        // 8.5. Send native 1-click PIX or SPEI Copy Button (if applicable)
+        // 8.5. Send native 1-click PIX, SPEI or Nequi/Bre-B Copy Button (if applicable)
+        const textContainsPixKey = product.pixKey && (
+          (textAfter && textAfter.includes(product.pixKey)) ||
+          (textBefore && textBefore.includes(product.pixKey)) ||
+          (replyText && replyText.includes(product.pixKey))
+        );
+
         const shouldSendPixButton =
           !isLatAmLead &&
           product.pixKey &&
           product.sendPixButton !== false &&
           !signal.aborted &&
-          shouldAppendPayment;
+          (shouldAppendPayment || textContainsPixKey || (userExplicitlyWantsPayment && !hasAlreadySentPixInHistory));
+
+        const textContainsSpeiClabe = activeSpeiCharge?.clabe && (
+          (textAfter && textAfter.includes(activeSpeiCharge.clabe)) ||
+          (textBefore && textBefore.includes(activeSpeiCharge.clabe)) ||
+          (replyText && replyText.includes(activeSpeiCharge.clabe))
+        );
+
+        const shouldSendSpeiButton =
+          isLatAmLead &&
+          activeSpeiCharge?.clabe &&
+          !signal.aborted &&
+          (shouldAppendPayment || textContainsSpeiClabe || (userExplicitlyWantsPayment && !hasAlreadySentPixInHistory));
+
+        const textContainsNequi = product.nequiNumber && (
+          (textAfter && textAfter.includes(product.nequiNumber)) ||
+          (textBefore && textBefore.includes(product.nequiNumber)) ||
+          (replyText && replyText.includes(product.nequiNumber))
+        );
+
+        const shouldSendNequiButton =
+          isLatAmLead &&
+          product.nequiNumber &&
+          (product.targetCountry === 'Colômbia' || aiResult.locale?.country === 'Colômbia') &&
+          !signal.aborted &&
+          (shouldAppendPayment || textContainsNequi || (userExplicitlyWantsPayment && !hasAlreadySentPixInHistory));
 
         if (shouldSendPixButton) {
           await antiBan.sleep(1200, signal);
           if (!signal.aborted && this.status === 'connected' && this.sock) {
-            await this.sendPixCopyButton(jid, product.pixKey, product.price, product.pixBeneficiary);
+            await this.sendPixCopyButton(jid, product.pixKey, resolvedAmount || product.price, product.pixBeneficiary);
           }
-        } else if (isLatAmLead && activeSpeiCharge?.clabe && !signal.aborted && shouldAppendPayment) {
+        } else if (shouldSendSpeiButton) {
           await antiBan.sleep(1200, signal);
           if (!signal.aborted && this.status === 'connected' && this.sock) {
             await this.sendCopyButton(
@@ -1363,6 +1393,18 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
               'Pago Oficial SPEI',
               `Toca el botón abajo para copiar la CLABE interbancaria directamente a tu app del banco 👇\n\n*Banco:* ${activeSpeiCharge.bankName || 'STP'}\n*Monto:* $ ${Number(activeSpeiCharge.amount || 150).toFixed(2)} MXN`,
               `CLABE: ${activeSpeiCharge.clabe}`
+            );
+          }
+        } else if (shouldSendNequiButton) {
+          await antiBan.sleep(1200, signal);
+          if (!signal.aborted && this.status === 'connected' && this.sock) {
+            await this.sendCopyButton(
+              jid,
+              '📋 Copiar Nequi / Bre-B',
+              product.nequiNumber,
+              'Pago Oficial Nequi / Bre-B',
+              `Toca el botón abajo para copiar el número de Nequi / Bre-B directamente a tu app del banco 👇\n\n*Número:* ${product.nequiNumber}\n*Titular:* ${product.nequiBeneficiary || ''}`,
+              `Nequi / Bre-B: ${product.nequiNumber}`
             );
           }
         }
@@ -1722,11 +1764,12 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
     } catch (btnErr) {
       console.warn('[WhatsApp] Erro ao enviar botão interativo de cópia:', btnErr.message);
       try {
-        await this.sock.sendMessage(jid, { text: copyCode });
+        const fallbackText = `\`\`\`${copyCode}\`\`\``;
+        await this.sock.sendMessage(jid, { text: fallbackText });
         const keyMsg = storage.addMessage({
           phone,
           fromMe: true,
-          text: copyCode,
+          text: fallbackText,
           type: 'text'
         });
         this.emit('chat:message', keyMsg);
