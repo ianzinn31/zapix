@@ -35,7 +35,9 @@ import {
 
 export default function AiConfig({ aiSettings, onSave }) {
   const [formData, setFormData] = useState({
-    primaryModel: aiSettings?.primaryModel || 'gemini-3.8-flash',
+    primaryProvider: aiSettings?.primaryProvider || 'azure',
+    primaryEndpoint: aiSettings?.primaryEndpoint || 'https://agoravai.services.ai.azure.com/api/projects/proj-default',
+    primaryModel: aiSettings?.primaryModel || 'gpt-4o',
     primaryApiKey: aiSettings?.primaryApiKey || '',
     fallbackModel: aiSettings?.fallbackModel || 'z-ai/glm-5.3-flash',
     fallbackApiKey: aiSettings?.fallbackApiKey || '',
@@ -82,7 +84,9 @@ export default function AiConfig({ aiSettings, onSave }) {
     if (aiSettings) {
       setFormData((prev) => ({
         ...prev,
-        primaryModel: aiSettings.primaryModel || prev.primaryModel,
+        primaryProvider: aiSettings.primaryProvider || 'azure',
+        primaryEndpoint: aiSettings.primaryEndpoint || prev.primaryEndpoint || 'https://agoravai.services.ai.azure.com/api/projects/proj-default',
+        primaryModel: aiSettings.primaryModel || prev.primaryModel || 'gpt-4o',
         primaryApiKey: aiSettings.primaryApiKey !== undefined ? aiSettings.primaryApiKey : prev.primaryApiKey,
         fallbackModel: aiSettings.fallbackModel || prev.fallbackModel,
         fallbackApiKey: aiSettings.fallbackApiKey !== undefined ? aiSettings.fallbackApiKey : prev.fallbackApiKey,
@@ -261,9 +265,10 @@ export default function AiConfig({ aiSettings, onSave }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          provider: 'google',
-          model: formData.primaryModel || 'gemini-3.8-flash',
+          provider: 'azure',
+          model: formData.primaryModel || 'gpt-4o',
           apiKey: formData.primaryApiKey,
+          endpoint: formData.primaryEndpoint || 'https://agoravai.services.ai.azure.com/api/projects/proj-default',
           customSystemPrompt: promptToSend,
           testMessage: testLeadMessage,
           country: targetCtry,
@@ -280,13 +285,16 @@ export default function AiConfig({ aiSettings, onSave }) {
   };
 
   // Dynamic models state
-  const defaultGoogleModels = [
-    { id: 'gemini-3.8-flash', name: 'gemini-3.8-flash (Google Gemini 3.8 Flash - Boss das Vendas 🏆)' },
-    { id: 'gemini-3.7-flash', name: 'gemini-3.7-flash (Google Gemini 3.7 Flash - Resposta Instantânea ⚡)' },
-    { id: 'gemini-3.5-flash', name: 'gemini-3.5-flash (Google Gemini 3.5 Flash)' },
-    { id: 'gemini-flash-latest', name: 'gemini-flash-latest (Google Gemini Flash Latest)' },
-    { id: 'gemini-2.5-flash', name: 'gemini-2.5-flash (Google Gemini 2.5 Flash)' },
-    { id: 'gemini-2.5-pro', name: 'gemini-2.5-pro (Google Gemini 2.5 Pro - Contexto Longo)' }
+  const defaultAzureModels = [
+    { id: 'gpt-4o', name: 'gpt-4o (Azure OpenAI GPT-4o - Flagship Multimodal & Persuasivo 🏆)' },
+    { id: 'gpt-4o-mini', name: 'gpt-4o-mini (Azure OpenAI GPT-4o Mini - Ultra Rápido & Econômico ⚡)' },
+    { id: 'DeepSeek-R1', name: 'DeepSeek-R1 (Azure AI Foundry - Raciocínio & Fechamento 🧠)' },
+    { id: 'DeepSeek-V3', name: 'DeepSeek-V3 (Azure AI Foundry - Alto Desempenho 🚀)' },
+    { id: 'Phi-4', name: 'Phi-4 (Microsoft Phi-4 - Raciocínio Leve & Rápido)' },
+    { id: 'Llama-3.3-70B-Instruct', name: 'Llama-3.3-70B-Instruct (Meta Llama 3.3)' },
+    { id: 'Mistral-Large-2411', name: 'Mistral-Large-2411 (Mistral AI)' },
+    { id: 'o1', name: 'o1 (OpenAI o1 - Raciocínio Avançado)' },
+    { id: 'o3-mini', name: 'o3-mini (OpenAI o3-mini - Raciocínio Rápido)' }
   ];
 
   const defaultNimModels = [
@@ -304,15 +312,15 @@ export default function AiConfig({ aiSettings, onSave }) {
     { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Meta Llama 3.3 70B Instruct (free)', isFree: true }
   ];
 
-  const [googleModels, setGoogleModels] = useState(defaultGoogleModels);
+  const [azureModels, setAzureModels] = useState(defaultAzureModels);
   const [nimModels, setNimModels] = useState(defaultNimModels);
   const [openRouterModels, setOpenRouterModels] = useState(defaultOpenRouterModels);
 
-  const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const [loadingAzure, setLoadingAzure] = useState(false);
   const [loadingNim, setLoadingNim] = useState(false);
   const [loadingOpenRouter, setLoadingOpenRouter] = useState(false);
 
-  const [googleError, setGoogleError] = useState(null);
+  const [azureError, setAzureError] = useState(null);
   const [nimError, setNimError] = useState(null);
   const [openRouterError, setOpenRouterError] = useState(null);
 
@@ -335,26 +343,27 @@ export default function AiConfig({ aiSettings, onSave }) {
   const [tertiaryOnlyFree, setTertiaryOnlyFree] = useState(true);
   const [tertiaryManualMode, setTertiaryManualMode] = useState(false);
 
-  // Fetch Google Gemini models
-  const fetchGoogleModels = async (keyOverride = null) => {
-    setLoadingGoogle(true);
-    setGoogleError(null);
+  // Fetch Azure AI Foundry models
+  const fetchAzureModels = async (keyOverride = null, endpointOverride = null) => {
+    setLoadingAzure(true);
+    setAzureError(null);
     try {
       const key = (keyOverride || formData.primaryApiKey || '').trim();
-      const url = key ? `/api/ai/models/google?apiKey=${encodeURIComponent(key)}` : '/api/ai/models/google';
+      const endpoint = (endpointOverride || formData.primaryEndpoint || '').trim();
+      const url = `/api/ai/models/azure?apiKey=${encodeURIComponent(key)}&endpoint=${encodeURIComponent(endpoint)}`;
       const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Erro ao carregar modelos do Google');
+        throw new Error(data.error || 'Erro ao carregar modelos do Azure');
       }
       if (data.models && data.models.length > 0) {
-        setGoogleModels(data.models);
+        setAzureModels(data.models);
       }
     } catch (err) {
-      console.warn('Erro ao buscar modelos Google:', err.message);
-      setGoogleError(err.message);
+      console.warn('Erro ao buscar modelos Azure:', err.message);
+      setAzureError(err.message);
     } finally {
-      setLoadingGoogle(false);
+      setLoadingAzure(false);
     }
   };
 
@@ -405,14 +414,14 @@ export default function AiConfig({ aiSettings, onSave }) {
   };
 
   // Live Test Trigger
-  const handleTestAi = async (provider, model, apiKey, setResult, setLoading) => {
+  const handleTestAi = async (provider, model, apiKey, setResult, setLoading, endpoint = null) => {
     setLoading(true);
     setResult(null);
     try {
       const res = await fetch('/api/ai/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, model, apiKey })
+        body: JSON.stringify({ provider, model, apiKey, endpoint })
       });
       const data = await res.json();
       setResult(data);
@@ -425,13 +434,13 @@ export default function AiConfig({ aiSettings, onSave }) {
 
   // Sync on mount
   useEffect(() => {
-    fetchGoogleModels();
+    fetchAzureModels();
     fetchNimModels();
     fetchOpenRouterModels();
   }, []);
 
   const handleSyncAll = () => {
-    fetchGoogleModels();
+    fetchAzureModels();
     fetchNimModels();
     fetchOpenRouterModels();
   };
@@ -444,7 +453,7 @@ export default function AiConfig({ aiSettings, onSave }) {
   };
 
   // Filtered lists
-  const filteredPrimaryGoogle = googleModels.filter((m) => {
+  const filteredPrimaryAzure = azureModels.filter((m) => {
     if (!primarySearch.trim()) return true;
     const q = primarySearch.toLowerCase();
     return (m.id || '').toLowerCase().includes(q) || (m.name || '').toLowerCase().includes(q);
@@ -471,15 +480,15 @@ export default function AiConfig({ aiSettings, onSave }) {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
           <div className="flex items-center gap-3">
-            <div style={{ padding: '10px', background: 'rgba(139, 92, 246, 0.15)', borderRadius: '10px', color: '#c084fc' }}>
+            <div style={{ padding: '10px', background: 'rgba(59, 130, 246, 0.15)', borderRadius: '10px', color: '#60a5fa' }}>
               <Cpu size={22} />
             </div>
             <div>
               <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#f8fafc' }}>
-                Cérebro de IA: Google Gemini 3.8 + NVIDIA NIM + OpenRouter
+                Cérebro de IA: Azure AI Foundry + NVIDIA NIM + OpenRouter
               </h3>
               <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                Modelo 1 Direto do Google AI Studio (Boss das Vendas), com contingência automática da NVIDIA NIM e OpenRouter.
+                Modelo 1 Direto do Azure AI Foundry (URL e API Key), com contingência automática da NVIDIA NIM e OpenRouter.
               </p>
             </div>
           </div>
@@ -488,13 +497,13 @@ export default function AiConfig({ aiSettings, onSave }) {
             <button
               type="button"
               onClick={handleSyncAll}
-              disabled={loadingGoogle || loadingNim || loadingOpenRouter}
+              disabled={loadingAzure || loadingNim || loadingOpenRouter}
               className="btn-secondary"
               style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', padding: '8px 14px' }}
-              title="Buscar lista atualizada de modelos diretamente das APIs da Google, NVIDIA e OpenRouter"
+              title="Buscar lista atualizada de modelos diretamente das APIs da Azure, NVIDIA e OpenRouter"
             >
-              <RefreshCw size={15} className={loadingGoogle || loadingNim || loadingOpenRouter ? 'animate-spin' : ''} />
-              <span>{loadingGoogle || loadingNim || loadingOpenRouter ? 'Puxando Modelos...' : 'Sincronizar APIs'}</span>
+              <RefreshCw size={15} className={loadingAzure || loadingNim || loadingOpenRouter ? 'animate-spin' : ''} />
+              <span>{loadingAzure || loadingNim || loadingOpenRouter ? 'Puxando Modelos...' : 'Sincronizar APIs'}</span>
             </button>
 
             <button type="submit" className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -552,41 +561,62 @@ export default function AiConfig({ aiSettings, onSave }) {
         {/* 3-Column Cascade Grid: Primary, Fallback 2, Fallback 3 */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '24px' }}>
           
-          {/* 1. Primary Model Card - Google Gemini Direto */}
+          {/* 1. Primary Model Card - Azure AI Foundry */}
           <div style={{
             background: 'rgba(255, 255, 255, 0.02)',
             padding: '20px',
             borderRadius: '12px',
-            border: '1px solid rgba(139, 92, 246, 0.35)',
+            border: '1px solid rgba(59, 130, 246, 0.4)',
             display: 'flex',
             flexDirection: 'column',
             gap: '14px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Zap size={18} color="#c084fc" />
+                <Zap size={18} color="#60a5fa" />
                 <h4 style={{ fontSize: '0.96rem', fontWeight: 700, color: '#f8fafc' }}>
-                  1. Primário (Google Gemini Direto 🏆)
+                  1. Primário (Azure AI Foundry 🏆)
                 </h4>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span className="badge badge-conversa">Google AI Studio</span>
+                <span className="badge badge-conversa" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#93c5fd' }}>
+                  Azure Foundry
+                </span>
                 <button
                   type="button"
-                  onClick={() => fetchGoogleModels(formData.primaryApiKey)}
-                  disabled={loadingGoogle}
-                  title="Atualizar modelos do Google Gemini"
-                  style={{ background: 'none', border: 'none', color: '#c084fc', cursor: 'pointer', padding: '2px' }}
+                  onClick={() => fetchAzureModels(formData.primaryApiKey, formData.primaryEndpoint)}
+                  disabled={loadingAzure}
+                  title="Atualizar modelos do Azure AI Foundry"
+                  style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: '2px' }}
                 >
-                  <RefreshCw size={14} className={loadingGoogle ? 'animate-spin' : ''} />
+                  <RefreshCw size={14} className={loadingAzure ? 'animate-spin' : ''} />
                 </button>
               </div>
             </div>
 
+            {/* Azure Foundry Endpoint URL */}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
+                URL do Projeto Azure Foundry (Endpoint)
+              </label>
+              <input
+                type="text"
+                value={formData.primaryEndpoint}
+                onChange={(e) => setFormData({ ...formData, primaryEndpoint: e.target.value })}
+                placeholder="https://agoravai.services.ai.azure.com/api/projects/proj-default"
+                className="input-field"
+                style={{ fontSize: '0.84rem' }}
+              />
+              <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
+                Endpoint do projeto no Azure AI Foundry.
+              </p>
+            </div>
+
+            {/* Model / Deployment Name */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1' }}>
-                  Modelo Primário de Vendas ({googleModels.length} no Google)
+                  Modelo / Deployment ({azureModels.length} no Azure)
                 </label>
                 <button
                   type="button"
@@ -603,7 +633,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                   }}
                 >
                   {primaryManualMode ? <List size={12} /> : <Edit3 size={12} />}
-                  <span>{primaryManualMode ? 'Lista Google' : 'Digitar ID'}</span>
+                  <span>{primaryManualMode ? 'Lista Azure' : 'Digitar Nome'}</span>
                 </button>
               </div>
 
@@ -612,7 +642,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                   type="text"
                   value={formData.primaryModel}
                   onChange={(e) => setFormData({ ...formData, primaryModel: e.target.value })}
-                  placeholder="Ex: gemini-3.8-flash"
+                  placeholder="Ex: gpt-4o ou nome do deployment"
                   className="input-field"
                   style={{ fontSize: '0.84rem' }}
                 />
@@ -624,7 +654,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                       type="text"
                       value={primarySearch}
                       onChange={(e) => setPrimarySearch(e.target.value)}
-                      placeholder="Filtrar Gemini (ex: 3.8, 2.5, flash)..."
+                      placeholder="Filtrar modelos (ex: gpt-4o, deepseek, phi)..."
                       className="input-field"
                       style={{ paddingLeft: '32px', fontSize: '0.78rem', height: '34px', background: 'rgba(0,0,0,0.2)' }}
                     />
@@ -636,12 +666,12 @@ export default function AiConfig({ aiSettings, onSave }) {
                     className="input-field"
                     style={{ fontSize: '0.84rem' }}
                   >
-                    {!googleModels.some((m) => m.id === formData.primaryModel) && (
+                    {!azureModels.some((m) => m.id === formData.primaryModel) && (
                       <option value={formData.primaryModel}>
                         📌 {formData.primaryModel} (Atual)
                       </option>
                     )}
-                    {filteredPrimaryGoogle.map((m) => (
+                    {filteredPrimaryAzure.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name || m.id}
                       </option>
@@ -650,23 +680,24 @@ export default function AiConfig({ aiSettings, onSave }) {
                 </div>
               )}
 
-              {googleError && (
+              {azureError && (
                 <p style={{ fontSize: '0.72rem', color: '#f87171', marginTop: '4px' }}>
-                  ⚠️ {googleError}
+                  ⚠️ {azureError}
                 </p>
               )}
             </div>
 
+            {/* Azure API Key */}
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                Google AI Studio API Key (Chave Direta)
+                Azure AI Foundry API Key (Chave da API)
               </label>
               <div style={{ position: 'relative' }}>
                 <input
                   type={showPrimaryKey ? 'text' : 'password'}
                   value={formData.primaryApiKey}
                   onChange={(e) => setFormData({ ...formData, primaryApiKey: e.target.value })}
-                  placeholder="AIzaSy... (Chave Google AI Studio)"
+                  placeholder="Cole sua API Key do Azure Foundry..."
                   className="input-field"
                   style={{ paddingRight: '40px', fontSize: '0.84rem' }}
                 />
@@ -679,7 +710,7 @@ export default function AiConfig({ aiSettings, onSave }) {
                 </button>
               </div>
               <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
-                Obtenha gratuitamente em <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: '#c084fc' }}>aistudio.google.com/apikey</a> (100% Direto Google, sem intermediários).
+                Obtenha em <a href="https://ai.azure.com" target="_blank" rel="noreferrer" style={{ color: '#60a5fa' }}>ai.azure.com</a> em <strong>Project Settings &gt; Keys &amp; Endpoints</strong>.
               </p>
             </div>
 
@@ -687,7 +718,7 @@ export default function AiConfig({ aiSettings, onSave }) {
             <div style={{ marginTop: 'auto', paddingTop: '10px' }}>
               <button
                 type="button"
-                onClick={() => handleTestAi('google', formData.primaryModel, formData.primaryApiKey, setPrimaryTestResult, setTestingPrimary)}
+                onClick={() => handleTestAi('azure', formData.primaryModel, formData.primaryApiKey, setPrimaryTestResult, setTestingPrimary, formData.primaryEndpoint)}
                 disabled={testingPrimary}
                 className="btn-secondary"
                 style={{
@@ -698,11 +729,11 @@ export default function AiConfig({ aiSettings, onSave }) {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '6px',
-                  borderColor: 'rgba(139, 92, 246, 0.4)'
+                  borderColor: 'rgba(59, 130, 246, 0.4)'
                 }}
               >
                 <Zap size={13} className={testingPrimary ? 'animate-spin' : ''} />
-                <span>{testingPrimary ? 'Testando Conexão...' : '⚡ Testar Google Gemini'}</span>
+                <span>{testingPrimary ? 'Testando Conexão...' : '⚡ Testar Azure Foundry'}</span>
               </button>
 
               {primaryTestResult && (

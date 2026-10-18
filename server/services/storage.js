@@ -48,8 +48,10 @@ export function isSamePhoneNumber(p1, p2) {
 const DEFAULT_STATE = {
   settings: {
     ai: {
-      primaryModel: 'gemini-3.8-flash',
-      primaryApiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
+      primaryProvider: 'azure',
+      primaryEndpoint: process.env.AZURE_AI_FOUNDRY_URL || 'https://agoravai.services.ai.azure.com/api/projects/proj-default',
+      primaryModel: 'gpt-4o',
+      primaryApiKey: process.env.AZURE_AI_API_KEY || process.env.AZURE_OPENAI_API_KEY || '',
       fallbackModel: 'z-ai/glm-5.3-flash',
       fallbackApiKey: process.env.NVIDIA_NIM_PRIMARY_API_KEY || process.env.NVIDIA_NIM_FALLBACK_API_KEY || '',
       tertiaryModel: 'nvidia/nemotron-3.5-lightning:free',
@@ -345,9 +347,12 @@ class StorageService {
 
         if (cloudSettings) {
           this.data.settings = { ...this.data.settings, ...cloudSettings };
-          // Ensure real credentials from env are linked if blank
-          if (!this.data.settings.ai.primaryApiKey && process.env.NVIDIA_NIM_PRIMARY_API_KEY) {
-            this.data.settings.ai.primaryApiKey = process.env.NVIDIA_NIM_PRIMARY_API_KEY;
+          // Ensure primary credentials are for Azure AI Foundry, not legacy NIM or Google
+          if (this.data.settings.ai.primaryApiKey?.startsWith('nvapi-') || this.data.settings.ai.primaryApiKey?.startsWith('AIza')) {
+            this.data.settings.ai.primaryApiKey = process.env.AZURE_AI_API_KEY || process.env.AZURE_OPENAI_API_KEY || '';
+          }
+          if (!this.data.settings.ai.primaryApiKey && (process.env.AZURE_AI_API_KEY || process.env.AZURE_OPENAI_API_KEY)) {
+            this.data.settings.ai.primaryApiKey = process.env.AZURE_AI_API_KEY || process.env.AZURE_OPENAI_API_KEY;
           }
           if (!this.data.settings.ai.fallbackApiKey && process.env.NVIDIA_NIM_FALLBACK_API_KEY) {
             this.data.settings.ai.fallbackApiKey = process.env.NVIDIA_NIM_FALLBACK_API_KEY;
@@ -370,8 +375,18 @@ class StorageService {
             }
             this.data.settings.transcription.apiKey = process.env.GROQ_API_KEY;
           }
-          // Upgrade deprecated or legacy default models to Google Gemini 3.8 Flash
+          if (!this.data.settings.ai.primaryEndpoint) {
+            this.data.settings.ai.primaryEndpoint = process.env.AZURE_AI_FOUNDRY_URL || 'https://agoravai.services.ai.azure.com/api/projects/proj-default';
+          }
+          if (!this.data.settings.ai.primaryProvider) {
+            this.data.settings.ai.primaryProvider = 'azure';
+          }
+          // Upgrade deprecated or legacy default models to Azure AI Foundry gpt-4o
           const legacyOrInvalidPrimary = [
+            'gemini-3.8-flash',
+            'google/gemini-3.8-flash',
+            'google/gemini-2.5-flash',
+            'gemini-2.5-flash',
             'z-ai/glm-5.3-flash',
             'z-ai/glm-5.3',
             'moonshotai/kimi-k2.6',
@@ -381,7 +396,7 @@ class StorageService {
             'nvidia/nemotron-3-ultra-550b-a55b'
           ];
           if (legacyOrInvalidPrimary.includes(this.data.settings.ai.primaryModel) || !this.data.settings.ai.primaryModel) {
-            this.data.settings.ai.primaryModel = 'google/gemini-3.8-flash';
+            this.data.settings.ai.primaryModel = 'gpt-4o';
           }
           const invalidFallback = [
             'mistralai/mixtral-8x22b-instruct',
@@ -480,8 +495,21 @@ class StorageService {
           systemLogs: parsed.systemLogs || DEFAULT_STATE.systemLogs
         };
 
-        // Normalize deprecated or legacy default models to Google Gemini 3.8 Flash
+        if (!loaded.settings.ai.primaryEndpoint) {
+          loaded.settings.ai.primaryEndpoint = process.env.AZURE_AI_FOUNDRY_URL || 'https://agoravai.services.ai.azure.com/api/projects/proj-default';
+        }
+        if (!loaded.settings.ai.primaryProvider) {
+          loaded.settings.ai.primaryProvider = 'azure';
+        }
+        if (loaded.settings.ai.primaryApiKey?.startsWith('nvapi-') || loaded.settings.ai.primaryApiKey?.startsWith('AIza')) {
+          loaded.settings.ai.primaryApiKey = process.env.AZURE_AI_API_KEY || process.env.AZURE_OPENAI_API_KEY || '';
+        }
+        // Normalize deprecated or legacy default models to Azure AI Foundry gpt-4o
         const legacyOrInvalidPrimary = [
+          'gemini-3.8-flash',
+          'google/gemini-3.8-flash',
+          'google/gemini-2.5-flash',
+          'gemini-2.5-flash',
           'z-ai/glm-5.3-flash',
           'z-ai/glm-5.3',
           'moonshotai/kimi-k2.6',
@@ -491,7 +519,7 @@ class StorageService {
           'nvidia/nemotron-3-ultra-550b-a55b'
         ];
         if (legacyOrInvalidPrimary.includes(loaded.settings.ai.primaryModel) || !loaded.settings.ai.primaryModel) {
-          loaded.settings.ai.primaryModel = 'google/gemini-3.8-flash';
+          loaded.settings.ai.primaryModel = 'gpt-4o';
         }
         const invalidFallback = [
           'mistralai/mixtral-8x22b-instruct',
@@ -503,7 +531,7 @@ class StorageService {
         if (invalidFallback.includes(loaded.settings.ai.fallbackModel) || !loaded.settings.ai.fallbackModel) {
           loaded.settings.ai.fallbackModel = 'google/diffusiongemma-26b-a4b-it';
         }
-        if (loaded.settings.ai.isFallbackActive && (loaded.settings.ai.primaryModel === 'google/gemini-3.8-flash' || loaded.settings.ai.primaryModel === 'z-ai/glm-5.3')) {
+        if (loaded.settings.ai.isFallbackActive && (loaded.settings.ai.primaryModel === 'gpt-4o' || loaded.settings.ai.primaryModel === 'google/gemini-3.8-flash' || loaded.settings.ai.primaryModel === 'z-ai/glm-5.3')) {
           loaded.settings.ai.isFallbackActive = false;
           loaded.settings.ai.lastFallbackReason = null;
         }

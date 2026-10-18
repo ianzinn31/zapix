@@ -997,6 +997,129 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
 
     return payload;
   }
+  // Direct Azure AI Foundry Project / Model Inference API call
+  async callAzureFoundry({
+    endpoint,
+    model,
+    apiKey,
+    messages,
+    temperature = 0.7,
+    maxTokens = 1500,
+    timeoutMs = 60000,
+    targetLanguage = 'pt',
+    targetCountry = 'Brasil'
+  }) {
+    const cleanKey = (
+      apiKey ||
+      storage.getSettings().ai?.primaryApiKey ||
+      process.env.AZURE_AI_API_KEY ||
+      process.env.AZURE_OPENAI_API_KEY ||
+      ''
+    ).trim();
+
+    if (!cleanKey) {
+      throw new Error(`Azure AI Foundry API Key não configurada! Insira sua chave no painel de configurações de IA.`);
+    }
+
+    const rawEndpoint = (
+      endpoint ||
+      storage.getSettings().ai?.primaryEndpoint ||
+      storage.getSettings().ai?.azureEndpoint ||
+      process.env.AZURE_AI_FOUNDRY_URL ||
+      'https://agoravai.services.ai.azure.com/api/projects/proj-default'
+    ).trim().replace(/\/+$/, '');
+
+    const cleanModel = String(model || 'gpt-4o').replace(/^azure\//i, '').trim();
+
+    // Candidate routes for Azure AI Foundry
+    const candidateUrls = [];
+
+    // 1. Project route (e.g. https://<res>.services.ai.azure.com/api/projects/<proj>/openai/v1/chat/completions)
+    if (rawEndpoint.includes('/api/projects/')) {
+      candidateUrls.push(`${rawEndpoint}/openai/v1/chat/completions`);
+      candidateUrls.push(`${rawEndpoint}/chat/completions`);
+    }
+
+    if (rawEndpoint.endsWith('/chat/completions')) {
+      candidateUrls.unshift(rawEndpoint);
+    } else if (rawEndpoint.endsWith('/openai/v1')) {
+      candidateUrls.unshift(`${rawEndpoint}/chat/completions`);
+    }
+
+    // 2. Resource base routes (e.g. https://agoravai.services.ai.azure.com)
+    const resourceBase = rawEndpoint.split('/api/projects')[0];
+    if (resourceBase && resourceBase !== rawEndpoint) {
+      candidateUrls.push(`${resourceBase}/models/chat/completions?api-version=2024-05-01-preview`);
+      candidateUrls.push(`${resourceBase}/openai/deployments/${cleanModel}/chat/completions?api-version=2024-05-01-preview`);
+      candidateUrls.push(`${resourceBase}/openai/v1/chat/completions`);
+    }
+
+    const uniqueUrls = [...new Set(candidateUrls)];
+
+    const formattedMessages = (messages || []).map(m => ({
+      role: m.role === 'model' ? 'assistant' : m.role,
+      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '')
+    }));
+
+    const openAiPayload = {
+      model: cleanModel,
+      messages: formattedMessages,
+      temperature: Math.max(0, Math.min(2, Number(temperature) || 0.7)),
+      max_tokens: Number(maxTokens) || 1500
+    };
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'api-key': cleanKey,
+      'Authorization': `Bearer ${cleanKey}`
+    };
+
+    let lastError = null;
+
+    for (const targetUrl of uniqueUrls) {
+      try {
+        const response = await axios.post(targetUrl, openAiPayload, {
+          headers,
+          timeout: timeoutMs
+        });
+
+        if (response.data?.choices && response.data.choices[0]?.message?.content) {
+          const raw = response.data.choices[0].message.content;
+          const text = typeof raw === 'string'
+            ? raw
+            : (Array.isArray(raw) ? raw.map(p => p.text || '').join('') : String(raw || ''));
+          if (text && text.trim().length > 0) {
+            return this.sanitizeModelOutput(text.trim(), targetLanguage, targetCountry);
+          }
+        }
+
+        if (response.data?.message?.content) {
+          return this.sanitizeModelOutput(response.data.message.content, targetLanguage, targetCountry);
+        }
+      } catch (err) {
+        lastError = err;
+        const status = err.response?.status;
+        const errMsg = err.response?.data?.error?.message || err.response?.data?.message || err.message;
+        console.warn(`[Azure Foundry (${targetUrl}) - status ${status}]: ${errMsg}`);
+
+        if (status === 401 || status === 403) {
+          throw new Error(`Chave do Azure AI Foundry inválida ou não autorizada: ${errMsg}`);
+        }
+
+        if (status === 400 && (String(errMsg).toLowerCase().includes('model') || String(errMsg).toLowerCase().includes('deployment'))) {
+          throw new Error(`Modelo/Deployment do Azure AI Foundry (${cleanModel}) não encontrado: ${errMsg}`);
+        }
+
+        continue;
+      }
+    }
+
+    const finalErrMsg = lastError?.response?.data?.error?.message ||
+                        lastError?.response?.data?.message ||
+                        lastError?.message ||
+                        'Falha na chamada à API do Azure AI Foundry';
+    throw new Error(`Azure AI Foundry Direto erro: ${finalErrMsg}`);
+  }
 
   // Direct Google Gemini API call (Native Generative Language API + OpenAI-compatible backup)
   async callGoogleGeminiDirect(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 60000, targetLanguage = 'pt', targetCountry = 'Brasil') {
@@ -1114,6 +1237,7 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
   async callAnyModel({
     model,
     apiKey,
+    endpoint,
     messages,
     temperature = 0.7,
     maxTokens = 1500,
@@ -1122,12 +1246,47 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
     targetCountry = 'Brasil',
     tierName = 'primary'
   }) {
-    const cleanModel = (model || 'gemini-3.8-flash').trim();
     const allSettings = storage.getSettings();
     const aiConfig = allSettings.ai || {};
+    const cleanModel = (model || aiConfig.primaryModel || 'gpt-4o').trim();
 
-    // 1. Primary Model: ALWAYS Direct Google Gemini
-    const isGoogle = tierName === 'primary' || cleanModel.toLowerCase().includes('gemini') || cleanModel.startsWith('google/');
+    // Check providers
+    const isGoogle = cleanModel.toLowerCase().includes('gemini') || cleanModel.startsWith('google/');
+    const isOpenRouter = tierName === 'tertiary' || cleanModel.endsWith(':free') || (apiKey && apiKey.startsWith('sk-or-'));
+    const isNvidiaNim = tierName === 'fallback' || cleanModel.startsWith('z-ai/') || cleanModel.startsWith('nvidia/') || (apiKey && apiKey.startsWith('nvapi-'));
+
+    // 1. Primary Model: ALWAYS Azure AI Foundry
+    if (tierName === 'primary' || cleanModel.startsWith('azure/') || (!isGoogle && !isOpenRouter && !isNvidiaNim)) {
+      const azureKey = (
+        apiKey ||
+        aiConfig.primaryApiKey ||
+        process.env.AZURE_AI_API_KEY ||
+        process.env.AZURE_OPENAI_API_KEY ||
+        ''
+      ).trim();
+
+      const azureEndpoint = (
+        endpoint ||
+        aiConfig.primaryEndpoint ||
+        aiConfig.azureEndpoint ||
+        process.env.AZURE_AI_FOUNDRY_URL ||
+        'https://agoravai.services.ai.azure.com/api/projects/proj-default'
+      ).trim();
+
+      return await this.callAzureFoundry({
+        endpoint: azureEndpoint,
+        model: cleanModel,
+        apiKey: azureKey,
+        messages,
+        temperature,
+        maxTokens,
+        timeoutMs,
+        targetLanguage,
+        targetCountry
+      });
+    }
+
+    // Google Gemini Direct
     if (isGoogle) {
       const googleKey = (
         apiKey ||
@@ -1150,7 +1309,6 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
     }
 
     // 2. Tertiary Model: OpenRouter
-    const isOpenRouter = tierName === 'tertiary' || cleanModel.endsWith(':free') || (apiKey && apiKey.startsWith('sk-or-'));
     if (isOpenRouter) {
       const openRouterKey = (
         (apiKey && apiKey.startsWith('sk-or-') ? apiKey : null) ||
@@ -1202,15 +1360,34 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
   }
 
   // Smart Unified Model Caller: Routes dynamically based on API key prefix and provider type
-  async callConfiguredTier({ model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 60000, targetLanguage = 'pt', targetCountry = 'Brasil' }) {
+  async callConfiguredTier({ model, apiKey, endpoint, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 60000, targetLanguage = 'pt', targetCountry = 'Brasil', tierName = null }) {
     if (!apiKey) throw new Error('API Key não configurada.');
     const cleanKey = String(apiKey).trim();
     const cleanModel = String(model || '').trim();
 
     const isGoogleModel = cleanModel.startsWith('google/') || cleanModel.toLowerCase().includes('gemini');
+    const isGoogleKey = cleanKey.startsWith('AIza');
+    const isNvidiaKey = cleanKey.startsWith('nvapi-');
+    const isOpenRouterKey = cleanKey.startsWith('sk-or-') || cleanModel.endsWith(':free');
 
-    // 1. Google Gemini models (cannot run on NVIDIA NIM)
-    if (isGoogleModel) {
+    // 1. Azure AI Foundry (Primary default or generic keys)
+    if (tierName === 'primary' || (!isGoogleModel && !isGoogleKey && !isNvidiaKey && !isOpenRouterKey)) {
+      const azureEndpoint = (endpoint || storage.getSettings().ai?.primaryEndpoint || process.env.AZURE_AI_FOUNDRY_URL || 'https://agoravai.services.ai.azure.com/api/projects/proj-default').trim();
+      return await this.callAzureFoundry({
+        endpoint: azureEndpoint,
+        model: cleanModel || 'gpt-4o',
+        apiKey: cleanKey,
+        messages,
+        temperature,
+        maxTokens,
+        timeoutMs,
+        targetLanguage,
+        targetCountry
+      });
+    }
+
+    // 2. Google Gemini models
+    if (isGoogleModel || isGoogleKey) {
       if (cleanKey.startsWith('AIza')) {
         return await this.callGoogleGeminiDirect(cleanModel, cleanKey, messages, temperature, maxTokens, timeoutMs, targetLanguage, targetCountry);
       }
@@ -1220,28 +1397,36 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
       if (openRouterKey && openRouterKey.startsWith('sk-or-')) {
         return await this.callOpenRouterModel(cleanModel, openRouterKey, messages, temperature, maxTokens, Math.min(timeoutMs, 45000), targetLanguage, targetCountry);
       }
-    }
-
-    // 2. OpenRouter models or keys
-    if (cleanKey.startsWith('sk-or-') || cleanModel.endsWith(':free')) {
-      return await this.callOpenRouterModel(cleanModel, cleanKey, messages, temperature, maxTokens, Math.min(timeoutMs, 45000), targetLanguage, targetCountry);
-    }
-
-    // 3. NVIDIA NIM (nvapi-...)
-    if (cleanKey.startsWith('nvapi-')) {
-      return await this.callModel(cleanModel, cleanKey, messages, temperature, maxTokens, timeoutMs, targetLanguage, targetCountry);
-    }
-
-    // 4. Google AI Studio direct
-    if (cleanKey.startsWith('AIza')) {
       return await this.callGoogleGeminiDirect(cleanModel, cleanKey, messages, temperature, maxTokens, timeoutMs, targetLanguage, targetCountry);
     }
 
-    // Default to OpenRouter if sk-, otherwise NIM
-    if (cleanKey.startsWith('sk-')) {
-      return await this.callOpenRouterModel(cleanModel, cleanKey, messages, temperature, maxTokens, timeoutMs, targetLanguage, targetCountry);
+    // 3. OpenRouter models or keys
+    if (isOpenRouterKey) {
+      return await this.callOpenRouterModel(cleanModel, cleanKey, messages, temperature, maxTokens, Math.min(timeoutMs, 45000), targetLanguage, targetCountry);
     }
-    return await this.callModel(cleanModel, cleanKey, messages, temperature, maxTokens, timeoutMs, targetLanguage, targetCountry);
+
+    // 4. NVIDIA NIM (nvapi-...)
+    if (isNvidiaKey) {
+      return await this.callModel(cleanModel, cleanKey, messages, temperature, maxTokens, timeoutMs, targetLanguage, targetCountry);
+    }
+
+    // Default: try Azure Foundry first, then NIM
+    try {
+      const azureEndpoint = (endpoint || storage.getSettings().ai?.primaryEndpoint || 'https://agoravai.services.ai.azure.com/api/projects/proj-default').trim();
+      return await this.callAzureFoundry({
+        endpoint: azureEndpoint,
+        model: cleanModel || 'gpt-4o',
+        apiKey: cleanKey,
+        messages,
+        temperature,
+        maxTokens,
+        timeoutMs,
+        targetLanguage,
+        targetCountry
+      });
+    } catch {
+      return await this.callModel(cleanModel, cleanKey, messages, temperature, maxTokens, timeoutMs, targetLanguage, targetCountry);
+    }
   }
 
   // Generate sales response with automatic primary -> secondary fallback
@@ -1337,27 +1522,30 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
     }
 
     let responseText = null;
-    let modelUsed = settings.primaryModel || 'google/gemini-2.5-flash';
+    let modelUsed = settings.primaryModel || 'gpt-4o';
 
-    // 1. Try Primary Model
+    // 1. Try Primary Model (Azure AI Foundry)
     try {
-      const primaryModel = settings.primaryModel || 'google/gemini-2.5-flash';
-      const primaryKey = (settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY || process.env.GEMINI_API_KEY || '').trim();
+      const primaryModel = settings.primaryModel || 'gpt-4o';
+      const primaryKey = (settings.primaryApiKey || process.env.AZURE_AI_API_KEY || process.env.AZURE_OPENAI_API_KEY || '').trim();
+      const primaryEndpoint = (settings.primaryEndpoint || process.env.AZURE_AI_FOUNDRY_URL || 'https://agoravai.services.ai.azure.com/api/projects/proj-default').trim();
       modelUsed = primaryModel;
 
       if (!primaryKey) {
-        throw new Error('Chave de API do Modelo Primário não configurada.');
+        throw new Error('Chave de API do Azure AI Foundry (Primário) não configurada no painel de configurações.');
       }
 
       responseText = await this.callConfiguredTier({
         model: primaryModel,
         apiKey: primaryKey,
+        endpoint: primaryEndpoint,
         messages,
         temperature: settings.temperature ?? 0.7,
         maxTokens: settings.maxTokens || 1500,
         timeoutMs: 60000,
         targetLanguage,
-        targetCountry
+        targetCountry,
+        tierName: 'primary'
       });
 
       this.lastPrimaryFailureTime = 0;
@@ -1654,13 +1842,14 @@ Gere o JSON localizado para ${targetCountry}.`;
     ];
 
     let rawReply = '';
-    const targetModel = aiConfig.primaryModel || 'google/gemini-3.8-flash';
-    const primaryKey = aiConfig.primaryApiKey || (targetModel.includes('gemini') || targetModel.startsWith('google/') ? (aiConfig.tertiaryApiKey || process.env.OPENROUTER_API_KEY || settings.fishAudio?.apiKey) : process.env.NVIDIA_NIM_PRIMARY_API_KEY);
+    const targetModel = aiConfig.primaryModel || 'gpt-4o';
+    const primaryKey = aiConfig.primaryApiKey || process.env.AZURE_AI_API_KEY || process.env.AZURE_OPENAI_API_KEY || (targetModel.includes('gemini') || targetModel.startsWith('google/') ? (aiConfig.tertiaryApiKey || process.env.OPENROUTER_API_KEY || settings.fishAudio?.apiKey) : process.env.NVIDIA_NIM_PRIMARY_API_KEY);
     if (primaryKey) {
       try {
         rawReply = await this.callAnyModel({
           model: targetModel,
           apiKey: primaryKey,
+          endpoint: aiConfig.primaryEndpoint,
           messages,
           temperature: 0.4,
           maxTokens: 2200,
@@ -1742,20 +1931,22 @@ Gere agora o texto exato falado para ser gravado em áudio sob medida para este 
       { role: 'user', content: userPrompt }
     ];
 
-    // Try Primary Model (Google Gemini 3.8 Flash / Universal)
+    // Try Primary Model (Azure AI Foundry / Universal)
     try {
-      const primaryModel = settings.primaryModel || 'google/gemini-3.8-flash';
+      const primaryModel = settings.primaryModel || 'gpt-4o';
       const isGeminiOrOpenRouter = primaryModel.startsWith('google/') || primaryModel.toLowerCase().includes('gemini');
-      const primaryKey = settings.primaryApiKey || (isGeminiOrOpenRouter ? (settings.tertiaryApiKey || process.env.OPENROUTER_API_KEY || allSettings.fishAudio?.apiKey) : process.env.NVIDIA_NIM_PRIMARY_API_KEY);
+      const primaryKey = settings.primaryApiKey || process.env.AZURE_AI_API_KEY || process.env.AZURE_OPENAI_API_KEY || (isGeminiOrOpenRouter ? (settings.tertiaryApiKey || process.env.OPENROUTER_API_KEY || allSettings.fishAudio?.apiKey) : process.env.NVIDIA_NIM_PRIMARY_API_KEY);
       
       if (primaryKey || isGeminiOrOpenRouter) {
         const generated = await this.callAnyModel({
           model: primaryModel,
           apiKey: primaryKey,
+          endpoint: settings.primaryEndpoint,
           messages,
           temperature: 0.7,
           maxTokens: 500,
-          timeoutMs: 45000
+          timeoutMs: 45000,
+          tierName: 'primary'
         });
         if (generated && generated.length > 5) {
           return generated.replace(/["'“”«»]/g, '').trim();

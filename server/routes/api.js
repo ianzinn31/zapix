@@ -506,6 +506,94 @@ router.post('/remarketing/trigger-now', async (req, res) => {
   }
 });
 
+// === Azure AI Foundry Models Fetching ===
+router.get('/ai/models/azure', async (req, res) => {
+  const { apiKey, endpoint } = req.query;
+  const effectiveKey = (apiKey || storage.getSettings().ai?.primaryApiKey || process.env.AZURE_AI_API_KEY || process.env.AZURE_OPENAI_API_KEY || '').trim();
+  const effectiveEndpoint = (endpoint || storage.getSettings().ai?.primaryEndpoint || process.env.AZURE_AI_FOUNDRY_URL || 'https://agoravai.services.ai.azure.com/api/projects/proj-default').trim().replace(/\/+$/, '');
+
+  const standardAzureModels = [
+    { id: 'gpt-4o', name: 'gpt-4o (Azure OpenAI GPT-4o - Flagship Multimodal & Persuasivo 🏆)', description: 'Modelo multimodal de ponta para conversão e fechamento de vendas' },
+    { id: 'gpt-4o-mini', name: 'gpt-4o-mini (Azure OpenAI GPT-4o Mini - Ultra Rápido & Econômico ⚡)', description: 'Ultra rápido, excelente inteligência e custo-benefício' },
+    { id: 'DeepSeek-R1', name: 'DeepSeek-R1 (Azure AI Foundry - Raciocínio & Fechamento 🧠)', description: 'Raciocínio avançado para vendas consultivas e quebra de objeções' },
+    { id: 'DeepSeek-V3', name: 'DeepSeek-V3 (Azure AI Foundry - Alto Desempenho 🚀)', description: 'Velocidade e inteligência conversacional' },
+    { id: 'Phi-4', name: 'Phi-4 (Microsoft Phi-4 - Raciocínio Leve & Rápido)', description: 'Modelo ultraleve de alta eficiência da Microsoft' },
+    { id: 'Llama-3.3-70B-Instruct', name: 'Llama-3.3-70B-Instruct (Meta Llama 3.3)', description: 'Grande capacidade analítica e de contexto' },
+    { id: 'Mistral-Large-2411', name: 'Mistral-Large-2411 (Mistral AI)', description: 'Raciocínio profundo e excelente performance' },
+    { id: 'o1', name: 'o1 (OpenAI o1 - Raciocínio Avançado)', description: 'Raciocínio profundo para decisões complexas' },
+    { id: 'o3-mini', name: 'o3-mini (OpenAI o3-mini - Raciocínio Rápido)', description: 'Raciocínio ágil focado em exatidão e velocidade' }
+  ];
+
+  if (!effectiveKey) {
+    return res.json({
+      success: true,
+      count: standardAzureModels.length,
+      models: standardAzureModels,
+      isDefaultList: true
+    });
+  }
+
+  try {
+    const urlsToTry = [
+      `${effectiveEndpoint}/openai/v1/models`,
+      `${effectiveEndpoint}/models`,
+      `${effectiveEndpoint.split('/api/projects')[0]}/models?api-version=2024-05-01-preview`
+    ];
+
+    let fetchedModels = null;
+    for (const url of urlsToTry) {
+      try {
+        const response = await axios.get(url, {
+          headers: {
+            'api-key': effectiveKey,
+            'Authorization': `Bearer ${effectiveKey}`
+          },
+          timeout: 8000
+        });
+        if (response.data?.data && Array.isArray(response.data.data)) {
+          fetchedModels = response.data.data.map(m => ({
+            id: m.id,
+            name: `${m.id} (${m.owned_by || 'Azure'})`,
+            description: m.capabilities ? JSON.stringify(m.capabilities) : ''
+          }));
+          break;
+        } else if (response.data?.value && Array.isArray(response.data.value)) {
+          fetchedModels = response.data.value.map(m => ({
+            id: m.name || m.id,
+            name: `${m.name || m.id} (Azure Deployment)`,
+            description: m.properties?.model?.name || ''
+          }));
+          break;
+        }
+      } catch {
+        // try next candidate
+      }
+    }
+
+    if (fetchedModels && fetchedModels.length > 0) {
+      return res.json({
+        success: true,
+        count: fetchedModels.length,
+        models: fetchedModels
+      });
+    }
+
+    return res.json({
+      success: true,
+      count: standardAzureModels.length,
+      models: standardAzureModels,
+      isDefaultList: true
+    });
+  } catch (err) {
+    return res.json({
+      success: true,
+      count: standardAzureModels.length,
+      models: standardAzureModels,
+      warning: err.message
+    });
+  }
+});
+
 // === Google Gemini Models Fetching ===
 router.get('/ai/models/google', async (req, res) => {
   const { apiKey } = req.query;
@@ -612,7 +700,7 @@ router.post('/ai/prompts/preview', (req, res) => {
 
 // === Live AI Connection Tester & Prompt Validator ===
 router.post('/ai/test', async (req, res) => {
-  const { provider, model, apiKey, customSystemPrompt, testMessage, country, language } = req.body || {};
+  const { provider, model, apiKey, endpoint, customSystemPrompt, testMessage, country, language } = req.body || {};
   const t0 = Date.now();
 
   try {
@@ -632,7 +720,25 @@ router.post('/ai/test', async (req, res) => {
     const targetCtry = country || 'Brasil';
     const maxTokensToUse = customSystemPrompt ? 350 : 100;
 
-    if (provider === 'google' || (!provider && (model?.includes('gemini') || model?.startsWith('google/')))) {
+    const isAzure = provider === 'azure' || provider === 'azure_foundry' || (!provider && (model?.startsWith('gpt-') || model?.includes('DeepSeek') || model?.startsWith('Phi-') || (!model?.includes('gemini') && !model?.startsWith('google/') && !model?.endsWith(':free') && !(apiKey || '').startsWith('nvapi-'))));
+
+    if (isAzure) {
+      const key = (apiKey || storage.getSettings().ai?.primaryApiKey || process.env.AZURE_AI_API_KEY || process.env.AZURE_OPENAI_API_KEY || '').trim();
+      if (!key) {
+        return res.status(400).json({ success: false, error: 'Chave da API do Azure AI Foundry não informada. Preencha sua chave no painel.' });
+      }
+      result = await nvidiaNim.callAzureFoundry({
+        endpoint: endpoint || storage.getSettings().ai?.primaryEndpoint,
+        model: model || 'gpt-4o',
+        apiKey: key,
+        messages: testMessages,
+        temperature: 0.5,
+        maxTokens: maxTokensToUse,
+        timeoutMs: 45000,
+        targetLanguage: targetLang,
+        targetCountry: targetCtry
+      });
+    } else if (provider === 'google' || (!provider && (model?.includes('gemini') || model?.startsWith('google/')))) {
       const key = (apiKey || storage.getSettings().ai?.primaryApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
       if (!key) {
         return res.status(400).json({ success: false, error: 'Chave da API do Google Gemini não informada.' });
