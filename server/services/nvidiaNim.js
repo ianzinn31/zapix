@@ -36,11 +36,11 @@ class NvidiaNimService {
   detectLanguageAndCountry(userMessage = '', conversationHistory = [], phone = '') {
     const phoneCountry = this.detectCountryFromPhone(phone);
 
-    // Collect all incoming customer messages
+    const historyArr = Array.isArray(conversationHistory) ? conversationHistory : [];
     const incomingTexts = [
       userMessage,
-      ...(conversationHistory || [])
-        .filter(m => !m.fromMe && m.text)
+      ...historyArr
+        .filter(m => m && !m.fromMe && m.text)
         .slice(-6)
         .map(m => m.text)
     ].filter(Boolean);
@@ -895,7 +895,8 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
     }
 
     const isGemini = String(model).toLowerCase().includes('gemini');
-    const safeMaxTokens = Math.min(Number(maxTokens) || 1200, 1500);
+    // WhatsApp replies should be concise (max 600-800 tokens), also prevents OpenRouter credit check 402 errors on low balance
+    const safeMaxTokens = Math.min(Number(maxTokens) || 600, 800);
 
     const payload = {
       model,
@@ -905,10 +906,10 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
       top_p: 0.95
     };
 
-    // For reasoning-capable models (e.g. Gemini 3.8 Flash), minimize internal thinking to maximize speed & credit efficiency
-    if (isGemini) {
-      payload.reasoning_effort = 'low';
-      payload.reasoning = { effort: 'low' };
+    // For reasoning-capable models (e.g. Gemini 3.8 Flash), cap reasoning tokens to maximize speed & credit efficiency
+    // OpenRouter rejects calls if both reasoning.effort and reasoning.max_tokens or reasoning_effort are sent together.
+    if (isGemini || String(model).includes('flash') || String(model).includes('reasoning')) {
+      payload.reasoning = { max_tokens: 50 };
     }
 
     const response = await axios.post(this.openRouterEndpoint, payload, {
@@ -1206,18 +1207,33 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
     const cleanKey = String(apiKey).trim();
     const cleanModel = String(model || '').trim();
 
-    // 1. If key is OpenRouter (sk-or-...) OR model is OpenRouter slug
+    const isGoogleModel = cleanModel.startsWith('google/') || cleanModel.toLowerCase().includes('gemini');
+
+    // 1. Google Gemini models (cannot run on NVIDIA NIM)
+    if (isGoogleModel) {
+      if (cleanKey.startsWith('AIza')) {
+        return await this.callGoogleGeminiDirect(cleanModel, cleanKey, messages, temperature, maxTokens, timeoutMs, targetLanguage, targetCountry);
+      }
+      const openRouterKey = cleanKey.startsWith('sk-or-')
+        ? cleanKey
+        : (storage.getSettings().ai?.tertiaryApiKey || process.env.OPENROUTER_API_KEY || storage.getSettings().fishAudio?.apiKey || '').trim();
+      if (openRouterKey && openRouterKey.startsWith('sk-or-')) {
+        return await this.callOpenRouterModel(cleanModel, openRouterKey, messages, temperature, maxTokens, Math.min(timeoutMs, 45000), targetLanguage, targetCountry);
+      }
+    }
+
+    // 2. OpenRouter models or keys
     if (cleanKey.startsWith('sk-or-') || cleanModel.endsWith(':free')) {
       return await this.callOpenRouterModel(cleanModel, cleanKey, messages, temperature, maxTokens, Math.min(timeoutMs, 45000), targetLanguage, targetCountry);
     }
 
-    // 2. If key is NVIDIA NIM (nvapi-...)
+    // 3. NVIDIA NIM (nvapi-...)
     if (cleanKey.startsWith('nvapi-')) {
       return await this.callModel(cleanModel, cleanKey, messages, temperature, maxTokens, timeoutMs, targetLanguage, targetCountry);
     }
 
-    // 3. If key is Google AI Studio (AIza...)
-    if (cleanKey.startsWith('AIza') || cleanModel.toLowerCase().includes('gemini')) {
+    // 4. Google AI Studio direct
+    if (cleanKey.startsWith('AIza')) {
       return await this.callGoogleGeminiDirect(cleanModel, cleanKey, messages, temperature, maxTokens, timeoutMs, targetLanguage, targetCountry);
     }
 
