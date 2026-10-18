@@ -34,6 +34,8 @@ class NvidiaNimService {
 
   // Real-time Language, Dialect & Slang Detection from customer messages & conversation history
   detectLanguageAndCountry(userMessage = '', conversationHistory = [], phone = '') {
+    const phoneCountry = this.detectCountryFromPhone(phone);
+
     // Collect all incoming customer messages
     const incomingTexts = [
       userMessage,
@@ -43,87 +45,81 @@ class NvidiaNimService {
         .map(m => m.text)
     ].filter(Boolean);
 
-    const fullText = incomingTexts.join(' ').toLowerCase();
+    const fullText = incomingTexts.join(' ');
+    // Normalize diacritics (remove accents) for reliable regex matching
+    const normText = fullText.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
     // 1. Regional Slang & Vocabulary Patterns (Immediate Country Match)
-    // México:
-    const isMexicanSlang = /\b(qu[eé]\s+onda|oye|chido|chida|padr[ií]simo|padr[ií]sima|padre|porfa|porfis|[oó]rale|compa|wey|g[uü]ey|neta|ahorita|lana|carnal|pl[aá]tica|h[ií]jole|mande|aguas|sale)\b/i.test(fullText);
+    const isMexicanSlang = /\b(que onda|oye|chido|chida|padrisimo|padrisima|padre|porfa|porfis|orale|compa|wey|guey|neta|ahorita|lana|carnal|platica|hijole|mande|aguas|sale)\b/i.test(normText);
+    const isColombianSlang = /\b(parce|parcero|parcera|chevere|bacano|bacana|de una|listo parce|plata|berraco|pelao|pelaito|bien pueda)\b/i.test(normText);
+    const isArgentineSlang = /\b(che\b|mira\b|viste|boludo|boluda|copado|copada|posta|dale\b|laburo|re bien|quilombo|re bueno|genial che)\b/i.test(normText);
+    const isChileanSlang = /\b(po\b|cachai|altiro|al tiro|bacan|weon)\b/i.test(normText);
+    const isPeruvianSlang = /\b(pe\b|causa|pata|choche)\b/i.test(normText);
+    const isBolivianSlang = /\b(casero|casera|qr simple|tigo money)\b/i.test(normText);
 
-    // Colombia:
-    const isColombianSlang = /\b(parce|parcero|parcera|ch[eé]vere|bacano|bacana|de\s+una|listo\s+parce|plata|berraco|pelao|pelaito|bien\s+pueda)\b/i.test(fullText);
+    // 2. Language Scoring with distinct vocabularies (exclude shared words like 'como', 'que', 'audio', 'info', 'claro', 'aprender')
+    // Distinct Portuguese (normalized):
+    const ptPatterns = /\b(ola|oi|voce|voces|tudo bem|tudo bom|obrigad[ao]|valeu|pix|cartao|boleto|crianc[as]|filh[os]|pequen[os]|adivinhou|adivinhar|ensino|blz|show|manda|envia|como funciona|pode me explicar|ta bom|com certeza|meu|minha|nao|sim|quero|posso|quanto custa|qual o valor|muito caro|reais|bom dia|boa tarde|boa noite|gostaria|preco|apostila|atividades|achei|nossa)\b/gi;
+    const ptScore = (normText.match(ptPatterns) || []).length;
 
-    // Argentina:
-    const isArgentineSlang = /\b(che\b|mir[aá]\b|viste|boludo|boluda|copado|copada|posta|dale\b|laburo|re\s+bien|quilombo|re\s+bueno|genial\s+che)\b/i.test(fullText);
+    // Distinct Spanish (normalized):
+    const esPatterns = /\b(hola|buenas|oye|porfa|por favor|gracias|muchas gracias|quiero|puedo|mandar|escuchar|hacer|hij[os]|nin[os]|pequen[os]|precio|costo|es que|se me|con todo gusto|usted|ustedes|donde|cuando|cuanto cuesta|cual es|que onda|chido|padrisimo|orale|wey|neta|ahorita|parce|chevere|de una|viste|boludo|copado|posta|dale)\b/gi;
+    const esPunctuation = (fullText.match(/[¿¡]/g) || []).length;
+    const esScore = (normText.match(esPatterns) || []).length + (esPunctuation * 3) + (isMexicanSlang ? 6 : 0) + (isColombianSlang ? 6 : 0) + (isArgentineSlang ? 6 : 0);
 
-    // Chile:
-    const isChileanSlang = /\b(po\b|cachai|altiro|al\s+tiro|bac[aá]n|we[oó]n)\b/i.test(fullText);
+    const enPatterns = /\b(hello|hi\b|hey\b|how much|what is the price|please|thanks|thank you|child|children|kids|learn|english|send me|information|details)\b/gi;
+    const enScore = (normText.match(enPatterns) || []).length * 2;
 
-    // Peru:
-    const isPeruvianSlang = /\b(pe\b|causa|pata|choche)\b/i.test(fullText);
+    // 3. Selection Matrix with Phone Country Priority
+    // If phone DDI is clearly Brazil (+55):
+    if (phoneCountry === 'Brasil') {
+      // For a Brazilian number (+55), ONLY switch to Spanish if explicit, overwhelming Spanish indicators are present
+      if (esScore >= 3 && esScore > ptScore * 2 && (esPunctuation > 0 || isMexicanSlang || isColombianSlang || isArgentineSlang)) {
+        return { language: 'es', country: 'México', isLatAm: true, slang: 'latam_neutro' };
+      }
+      return { language: 'pt', country: 'Brasil', isLatAm: false, slang: 'brasileiro' };
+    }
 
-    // Bolivia:
-    const isBolivianSlang = /\b(casero|casera|qr\s+simple|tigo\s+money)\b/i.test(fullText);
+    // If phone DDI is LatAm (+52, +57, +54, etc.):
+    if (phoneCountry && phoneCountry !== 'Brasil' && phoneCountry !== 'Estados Unidos') {
+      if (ptScore >= 3 && ptScore > esScore * 2) {
+        return { language: 'pt', country: 'Brasil', isLatAm: false, slang: 'brasileiro' };
+      }
+      return {
+        language: 'es',
+        country: phoneCountry,
+        isLatAm: true,
+        slang: phoneCountry === 'México' ? 'mexicano' : phoneCountry === 'Colômbia' ? 'colombiano' : phoneCountry === 'Argentina' ? 'argentino' : 'latam_neutro'
+      };
+    }
 
-    // 2. Language Scoring (Spanish vs Portuguese vs English)
-    const spanishMatches = (fullText.match(/\b(qu[eé]|c[oó]mo|cu[aá]nto|cu[aá]ntos|cu[aá]l|d[oó]nde|est[aá]s?|hola|buenas|oye|porfa|por\s+favor|gracias|muchas\s+gracias|actividades|info|informaci[oó]n|quiero|puedo|mandar|audio|escuchar|f[aá]cil|hacer|hijos?|ni[nñ]os?|peque[nñ]os?|precio|costo|es\s+que|se\s+me|me\s+dabas|con\s+todo\s+gusto|claro|genial|para\s+que|aprender|ingl[eé]s)\b/gi) || []).length;
-    const spanishPunctuation = (fullText.match(/[¿¡]/g) || []).length;
-    const spanishScore = spanishMatches + (spanishPunctuation * 3) + (isMexicanSlang ? 6 : 0) + (isColombianSlang ? 6 : 0) + (isArgentineSlang ? 6 : 0);
+    if (phoneCountry === 'Estados Unidos') {
+      return { language: 'en', country: 'Estados Unidos', isLatAm: true, slang: 'english' };
+    }
 
-    const portugueseMatches = (fullText.match(/\b(ol[aá]|oi\b|tudo\s+bem|tudo\s+bom|quanto\s+custa|qual\s+o\s+valor|qual\s+o\s+pre[cç]o|gostaria|voc[eê]|pra\b|pro\b|obrigado|obrigada|valeu|pix|cart[aã]o|boleto|crian[cç]as?|filhos?|pequenos?|ensino|blz|show|manda\b|envia\b|como\s+funciona|pode\s+me\s+explicar|t[aá]\s+bom|com\s+certeza|meu|minha|n[aã]o|sim\b)\b/gi) || []).length;
-    const portugueseCharacters = (fullText.match(/[ãõç]/gi) || []).length;
-    const portugueseScore = portugueseMatches + (portugueseCharacters * 2);
-
-    const englishMatches = (fullText.match(/\b(hello|hi\b|hey\b|how\s+much|what\s+is\s+the\s+price|please|thanks|thank\s+you|child|children|kids|learn|english|send\s+me|information|details)\b/gi) || []).length;
-    const englishScore = englishMatches * 2;
-
-    const phoneCountry = this.detectCountryFromPhone(phone);
-
-    // 3. Selection Matrix
-    if (spanishScore > portugueseScore && spanishScore > englishScore) {
-      let country = 'México'; // Default LatAm reference
+    // If phone country unknown (e.g. LID or web test): rely on text scores
+    if (esScore > ptScore && esScore > enScore) {
+      let country = 'México';
       if (isMexicanSlang) country = 'México';
       else if (isColombianSlang) country = 'Colômbia';
       else if (isArgentineSlang) country = 'Argentina';
       else if (isChileanSlang) country = 'Chile';
       else if (isPeruvianSlang) country = 'Peru';
       else if (isBolivianSlang) country = 'Bolívia';
-      else if (phoneCountry && phoneCountry !== 'Brasil' && phoneCountry !== 'Estados Unidos') country = phoneCountry;
-
       return {
         language: 'es',
         country,
         isLatAm: true,
-        slang: isMexicanSlang ? 'mexicano' : isColombianSlang ? 'colombiano' : isArgentineSlang ? 'argentino' : isChileanSlang ? 'chileno' : 'latam_neutro'
+        slang: isMexicanSlang ? 'mexicano' : isColombianSlang ? 'colombiano' : isArgentineSlang ? 'argentino' : 'latam_neutro'
       };
     }
 
-    if (portugueseScore > spanishScore && portugueseScore > englishScore) {
-      return {
-        language: 'pt',
-        country: 'Brasil',
-        isLatAm: false,
-        slang: 'brasileiro'
-      };
+    if (ptScore > esScore && ptScore > enScore) {
+      return { language: 'pt', country: 'Brasil', isLatAm: false, slang: 'brasileiro' };
     }
 
-    if (englishScore > spanishScore && englishScore > portugueseScore) {
-      return {
-        language: 'en',
-        country: 'Estados Unidos',
-        isLatAm: true,
-        slang: 'english'
-      };
-    }
-
-    // If text was short/ambiguous, rely on valid phone DDI
-    if (phoneCountry) {
-      const isLat = phoneCountry !== 'Brasil';
-      return {
-        language: isLat ? 'es' : 'pt',
-        country: phoneCountry,
-        isLatAm: isLat,
-        slang: phoneCountry === 'México' ? 'mexicano' : phoneCountry === 'Colômbia' ? 'colombiano' : phoneCountry === 'Argentina' ? 'argentino' : isLat ? 'latam_neutro' : 'brasileiro'
-      };
+    if (enScore > esScore && enScore > ptScore) {
+      return { language: 'en', country: 'Estados Unidos', isLatAm: true, slang: 'english' };
     }
 
     // Default fallback to settings product targetCountry
@@ -1204,6 +1200,34 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
     );
   }
 
+  // Smart Unified Model Caller: Routes dynamically based on API key prefix and provider type
+  async callConfiguredTier({ model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 60000, targetLanguage = 'pt', targetCountry = 'Brasil' }) {
+    if (!apiKey) throw new Error('API Key não configurada.');
+    const cleanKey = String(apiKey).trim();
+    const cleanModel = String(model || '').trim();
+
+    // 1. If key is OpenRouter (sk-or-...) OR model is OpenRouter slug
+    if (cleanKey.startsWith('sk-or-') || cleanModel.endsWith(':free')) {
+      return await this.callOpenRouterModel(cleanModel, cleanKey, messages, temperature, maxTokens, Math.min(timeoutMs, 45000), targetLanguage, targetCountry);
+    }
+
+    // 2. If key is NVIDIA NIM (nvapi-...)
+    if (cleanKey.startsWith('nvapi-')) {
+      return await this.callModel(cleanModel, cleanKey, messages, temperature, maxTokens, timeoutMs, targetLanguage, targetCountry);
+    }
+
+    // 3. If key is Google AI Studio (AIza...)
+    if (cleanKey.startsWith('AIza') || cleanModel.toLowerCase().includes('gemini')) {
+      return await this.callGoogleGeminiDirect(cleanModel, cleanKey, messages, temperature, maxTokens, timeoutMs, targetLanguage, targetCountry);
+    }
+
+    // Default to OpenRouter if sk-, otherwise NIM
+    if (cleanKey.startsWith('sk-')) {
+      return await this.callOpenRouterModel(cleanModel, cleanKey, messages, temperature, maxTokens, timeoutMs, targetLanguage, targetCountry);
+    }
+    return await this.callModel(cleanModel, cleanKey, messages, temperature, maxTokens, timeoutMs, targetLanguage, targetCountry);
+  }
+
   // Generate sales response with automatic primary -> secondary fallback
   async generateResponse(phone, userMessage, conversationHistory = []) {
     const settings = storage.getSettings().ai;
@@ -1258,8 +1282,6 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
     const allHistory = (conversationHistory || []).slice(-60);
 
     // Smart context deduplication:
-    // When incoming messages arrive via WhatsApp, the debouncer saves them in storage before calling generateResponse.
-    // We detect if the trailing messages in history already represent userMessage to avoid duplicate turns.
     let lastAssistantIdx = -1;
     for (let i = allHistory.length - 1; i >= 0; i--) {
       if (allHistory[i].fromMe) {
@@ -1276,7 +1298,6 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
       trailingUserMsgs.some(m => (m.text || '').trim() === userMessage.trim()) ||
       userMessage.trim().includes(trailingUserText)
     )) {
-      // Prior history up to the last assistant response
       const priorHistory = allHistory.slice(0, lastAssistantIdx + 1);
       for (const h of priorHistory) {
         const textContent = h.text || (h.type === 'audio' ? '🎵 [Áudio]' : h.type === 'image' ? '📷 [Imagem]' : '📎 [Arquivo]');
@@ -1285,10 +1306,8 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
           content: textContent
         });
       }
-      // Single clean consolidated user turn
       messages.push({ role: 'user', content: userMessage });
     } else {
-      // Standard history addition
       for (const h of allHistory) {
         const textContent = h.text || (h.type === 'audio' ? '🎵 [Áudio]' : h.type === 'image' ? '📷 [Imagem]' : '📎 [Arquivo]');
         messages.push({
@@ -1296,41 +1315,39 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
           content: textContent
         });
       }
-      // If userMessage is not yet at the end, append it
       if (userMessage && (messages.length === 1 || messages[messages.length - 1].content !== userMessage)) {
         messages.push({ role: 'user', content: userMessage });
       }
     }
 
     let responseText = null;
-    let modelUsed = settings.primaryModel || 'google/gemini-3.8-flash';
+    let modelUsed = settings.primaryModel || 'google/gemini-2.5-flash';
 
-    // 1. Try Primary Model: Google Gemini (Direto da Google)
+    // 1. Try Primary Model
     try {
-      const modelToCall = settings.primaryModel || 'gemini-3.8-flash';
-      modelUsed = modelToCall;
-      const primaryKey = (settings.primaryApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
+      const primaryModel = settings.primaryModel || 'google/gemini-2.5-flash';
+      const primaryKey = (settings.primaryApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY || process.env.GEMINI_API_KEY || '').trim();
+      modelUsed = primaryModel;
 
       if (!primaryKey) {
-        throw new Error('Chave de API do Google Gemini não configurada no painel ou no arquivo .env (GEMINI_API_KEY).');
+        throw new Error('Chave de API do Modelo Primário não configurada.');
       }
 
-      responseText = await this.callGoogleGeminiDirect(
-        modelToCall,
-        primaryKey,
+      responseText = await this.callConfiguredTier({
+        model: primaryModel,
+        apiKey: primaryKey,
         messages,
-        settings.temperature ?? 0.7,
-        settings.maxTokens || 1500,
-        60000,
+        temperature: settings.temperature ?? 0.7,
+        maxTokens: settings.maxTokens || 1500,
+        timeoutMs: 60000,
         targetLanguage,
         targetCountry
-      );
+      });
 
-      // Primary succeeded - reset cooldown and ensure fallback state is inactive
       this.lastPrimaryFailureTime = 0;
       if (settings.isFallbackActive) {
         storage.updateSettings({ ai: { isFallbackActive: false, lastFallbackReason: null } });
-        storage.addLog('INFO', `Modelo Primário Google Gemini (${modelUsed}) restabelecido com sucesso.`);
+        storage.addLog('INFO', `Modelo Primário (${modelUsed}) restabelecido com sucesso.`);
       }
       return { text: responseText, modelUsed, fallbackTriggered: false, locale: localeInfo };
     } catch (primaryErr) {
@@ -1338,7 +1355,7 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
       console.warn(`[AI Primary Error (${modelUsed})]: ${primaryErr.message}`);
       storage.addLog(
         'FALLBACK_TRIGGERED',
-        `Modelo Primário Google Gemini (${modelUsed}) falhou (${primaryErr.message}). Ativando fallback secundário NVIDIA NIM (${settings.fallbackModel || 'z-ai/glm-5.3-flash'}).`
+        `Modelo Primário (${modelUsed}) falhou (${primaryErr.message}). Acionando fallback secundário.`
       );
       storage.updateSettings({
         ai: {
@@ -1348,50 +1365,49 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
       });
     }
 
-    // 2. Try Fallback Model: NVIDIA NIM
+    // 2. Try Fallback Model
     try {
-      const fallbackModel = settings.fallbackModel || 'z-ai/glm-5.3-flash';
-      const fallbackKey = (settings.fallbackApiKey || process.env.NVIDIA_NIM_PRIMARY_API_KEY || process.env.NVIDIA_NIM_FALLBACK_API_KEY || '').trim();
+      const fallbackModel = settings.fallbackModel || 'nvidia/nemotron-3.5-super-vl-120b-a12b';
+      const fallbackKey = (settings.fallbackApiKey || process.env.NVIDIA_NIM_FALLBACK_API_KEY || process.env.NVIDIA_NIM_PRIMARY_API_KEY || '').trim();
       
       if (fallbackKey) {
         modelUsed = fallbackModel;
-        responseText = await this.callModel(
-          fallbackModel,
-          fallbackKey,
+        responseText = await this.callConfiguredTier({
+          model: fallbackModel,
+          apiKey: fallbackKey,
           messages,
-          settings.temperature ?? 0.7,
-          settings.maxTokens || 1500,
-          60000,
+          temperature: settings.temperature ?? 0.7,
+          maxTokens: settings.maxTokens || 1500,
+          timeoutMs: 60000,
           targetLanguage,
           targetCountry
-        );
+        });
         return { text: responseText, modelUsed, fallbackTriggered: true, fallbackTier: 'secondary_fallback', locale: localeInfo };
       }
     } catch (fallbackErr) {
       console.error(`[AI Fallback Error]: ${fallbackErr.message}`);
       storage.addLog(
         'WARNING',
-        `Modelo Secundário NVIDIA NIM falhou (${fallbackErr.message}). Acionando 3º Fallback OpenRouter (${settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free'}).`
+        `Modelo Secundário falhou (${fallbackErr.message}). Acionando 3º Fallback.`
       );
     }
 
-    // 3. Try Tertiary Fallback: OpenRouter Free / Backup Model
+    // 3. Try Tertiary Fallback
     try {
-      const allSettings = storage.getSettings();
-      const tertiaryKey = (settings.tertiaryApiKey || process.env.OPENROUTER_API_KEY || allSettings.fishAudio?.apiKey || '').trim();
-      const tertiaryModel = settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free';
+      const tertiaryKey = (settings.tertiaryApiKey || process.env.OPENROUTER_API_KEY || storage.getSettings().fishAudio?.apiKey || '').trim();
+      const tertiaryModel = settings.tertiaryModel || 'google/gemini-2.5-flash';
       if (tertiaryKey && tertiaryModel) {
         modelUsed = tertiaryModel;
-        responseText = await this.callOpenRouterModel(
-          tertiaryModel,
-          tertiaryKey,
+        responseText = await this.callConfiguredTier({
+          model: tertiaryModel,
+          apiKey: tertiaryKey,
           messages,
-          settings.temperature ?? 0.7,
-          settings.maxTokens || 1500,
-          45000,
+          temperature: settings.temperature ?? 0.7,
+          maxTokens: settings.maxTokens || 1500,
+          timeoutMs: 45000,
           targetLanguage,
           targetCountry
-        );
+        });
         storage.addLog(
           'FALLBACK_TRIGGERED',
           `Modelos anteriores indisponíveis. Resposta atendida com sucesso pelo 3º Fallback (${tertiaryModel}).`
@@ -1402,12 +1418,12 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
       console.error(`[AI Tertiary Fallback Error]: ${tertiaryErr.message}`);
       storage.addLog(
         'ERROR',
-        `Todas as 3 IAs falharam (Primário, Secundário e Terciário ${settings.tertiaryModel || 'nvidia/nemotron-3.5-lightning:free'}): ${tertiaryErr.message}`
+        `Todas as 3 IAs falharam: ${tertiaryErr.message}`
       );
     }
 
     // 4. Smart Rule-Based Engine Backup (if all 3 AI models failed or offline)
-    const backupReply = this.generateOfflineSmartReply(userMessage, localeInfo);
+    const backupReply = this.generateOfflineSmartReply(userMessage, localeInfo, conversationHistory);
     return {
       text: backupReply,
       modelUsed: 'offline-sales-fallback',
@@ -1418,7 +1434,7 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
   }
 
   // Backup sales responses when no API keys are provided or offline
-  generateOfflineSmartReply(userMessage = '', localeInfo = null) {
+  generateOfflineSmartReply(userMessage = '', localeInfo = null, conversationHistory = []) {
     const text = (userMessage || '').toLowerCase();
     const product = storage.getSettings().product || {};
     const deliverables = storage.getDeliverables();
@@ -1426,11 +1442,21 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
     const loc = localeInfo || this.detectLanguageAndCountry(userMessage);
     const targetCountry = loc.country || product.targetCountry || 'Brasil';
     const isLatAm = loc.isLatAm;
-    const currencyCode = product.currencyCode || (targetCountry === 'México' ? 'MXN' : targetCountry === 'Colômbia' ? 'COP' : targetCountry === 'Bolívia' ? 'BOB' : targetCountry === 'Paraguai' ? 'PYG' : targetCountry === 'Argentina' ? 'ARS' : 'BRL');
-    const currencySymbol = product.currencySymbol || (currencyCode === 'BRL' ? 'R$' : currencyCode === 'BOB' ? 'Bs' : currencyCode === 'PYG' ? 'Gs' : '$');
+    const currencyCode = isLatAm ? (targetCountry === 'México' ? 'MXN' : targetCountry === 'Colômbia' ? 'COP' : 'USD') : 'BRL';
+    const currencySymbol = isLatAm ? '$' : 'R$';
     const ticketBasic = Number(product.ticketBasic ?? product.price ?? 15);
-    const ticketComplete = Number(product.ticketComplete ?? (ticketBasic * 1.6).toFixed(0));
+    const ticketComplete = Number(product.ticketComplete ?? Math.round(ticketBasic * 1.6));
     const formattedPrice = isLatAm ? `${currencySymbol} ${ticketBasic} ${currencyCode}` : `R$ ${ticketBasic.toFixed(2).replace('.', ',')}`;
+
+    const isOngoing = (conversationHistory || []).length > 0;
+
+    // Price objection handling
+    if (/caro|muito caro|reais|sem dinheiro|apertado|no tengo dinero|muy caro/.test(text)) {
+      if (isLatAm) {
+        return `¡Te entiendo perfectamente! Por eso mismo dejamos la opción del Paquete Básico por solo ${formattedPrice}, que es una inversión súper accesible para que tu pequeño comience hoy mismo a disfrutar los materiales. ¿Te gustaría aprovechar esta opción básica?`;
+      }
+      return `Te entendo perfeitamente! Justamente por isso preparamos o Pacote Básico por apenas ${formattedPrice}, que é um valor bem simbólico de contribuição para você já começar hoje com as atividades completas. O que acha de aproveitar por esse valor?`;
+    }
 
     if (isLatAm) {
       if (product.deliveryStrategy === 'deliver_first') {
@@ -1441,6 +1467,10 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
       if (text.includes('precio') || text.includes('costo') || text.includes('cuanto') || text.includes('pagar')) {
         return `El programa completo está con una oportunidad especial: Paquete Básico por solo ${formattedPrice} o Paquete Completo por ${currencySymbol} ${ticketComplete} ${currencyCode}.\n\n¿Quieres que te comparta cómo acceder ahora mismo?`;
       }
+      if (isOngoing) {
+        return `¡Entendido! Puedes contar conmigo. Cuéntame, ¿tienes alguna duda específica sobre las actividades o te gustaría que te explique más a detalle?`;
+      }
+      return `¡Hola! Qué gusto saludarte. Vi que te interesó nuestro material educativo. ¿Qué edad tiene tu pequeño o pequeña para orientarte mejor?`;
     }
 
     if (product.deliveryStrategy === 'deliver_first') {
@@ -1462,20 +1492,25 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
         text.includes('adorei') ||
         text.includes('que lindo')
       ) {
-        return `Fico muito feliz que tenha gostado! ❤️ Fiz questão de te mandar o material completo para você já ver o quanto vai ajudar no desenvolvimento dele!\n\nPara manter nosso projeto vivo e continuarmos criando novos materiais, a gente pede uma contribuição simbólica de apenas ${formattedPrice}.\n\nChave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: ${formattedPrice}\n\n[AUDIO: Oi!... Te mandei as atividades completas com muito carinho... Dá uma olhadinha na chave PIX e quando fizer me manda o comprovante aqui tá bom? Um abraço grande!]`;
+        return `Fico muito feliz que tenha gostado! ❤️ Fiz questão de te mandar o material completo para você já ver o quanto vai ajudar no desenvolvimento dele!\n\nPara manter nosso projeto vivo e continuarmos criando novos materiais, a gente pede uma contribuição simbólica de apenas ${formattedPrice}.\n\nChave PIX (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'}\nNome: ${product.pixBeneficiary || 'ian alves dos anjos'}\nValor: ${formattedPrice}`;
       }
     }
 
     if (text.includes('preço') || text.includes('quanto custa') || text.includes('valor')) {
-      return `O investimento no ${product.name} está em condição especial hoje por apenas ${formattedPrice} (Básico) ou ${currencySymbol} ${ticketComplete} (Completo)!\n\nVocê tem acesso completo a todo o passo a passo com garantia incondicional de ${product.guaranteeDays || 7} dias.\n\nQuer garantir sua vaga com esse valor promocional agora? É só acessar: ${product.checkoutUrl || 'link oficial'}`;
+      return `O investimento no ${product.name} está em condição especial hoje: Pacote Básico por apenas ${formattedPrice} ou Pacote Completo por R$ ${ticketComplete.toFixed(2).replace('.', ',')}!\n\nQual dessas opções você prefere para o seu pequeno?`;
     }
 
     if (text.includes('link') || text.includes('comprar') || text.includes('quero') || text.includes('pix')) {
-      return `Maravilha! Você pode garantir seu acesso imediatamente pelo link oficial:\n👉 ${product.checkoutUrl || 'link oficial'}\n\nAssim que o pagamento for confirmado, você já recebe o acesso no seu e-mail e no WhatsApp! Se tiver qualquer dúvida durante o processo, só me avisar aqui.`;
+      return `Maravilha! Você pode fazer o PIX diretamente pela chave (${product.pixKeyType || 'telefone'}): ${product.pixKey || '88994892385'} - ${product.pixBeneficiary || 'ian alves dos anjos'} no valor de ${formattedPrice}.\n\nAssim que fizer, só mandar o comprovante aqui para confirmação imediata!`;
     }
 
     if (text.includes('funciona') || text.includes('resultado') || text.includes('prova')) {
       return `[ENVIAR_IMAGEM: PROVA_SOCIAL]\nSim, funciona com certeza! Temos alunos de todas as idades aplicando o método passo a passo.\n\nDá uma olhada nesses resultados acima! O que você mais busca no momento com o método?`;
+    }
+
+    // Ongoing conversation fallback: NEVER restart with a greeting!
+    if (isOngoing) {
+      return `Entendi perfeitamente! Fica tranquilo(a). Me conta, ficou alguma dúvida sobre as atividades ou em que mais posso te orientar? 😊`;
     }
 
     return `Olá! Que bom falar com você! 😊\n\nSou do time de atendimento do ${product.name}. Vi que você se interessou pelo nosso material.\n\nComo posso te ajudar hoje?`;
