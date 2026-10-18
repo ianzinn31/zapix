@@ -774,9 +774,9 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
     if (!rawText || typeof rawText !== 'string') return '';
     let content = rawText.trim();
 
-    // 1. Strip think / reasoning blocks
-    content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-    content = content.replace(/```(?:thought|thinking)[\s\S]*?```/gi, '').trim();
+    // 1. Strip think / reasoning blocks (including unclosed tags when truncated by max_tokens)
+    content = content.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim();
+    content = content.replace(/```(?:thought|thinking)[\s\S]*?(?:```|$)/gi, '').trim();
     content = content.replace(/^(?:thought|thinking):\s*[\s\S]*?\n\n/gi, '').trim();
     content = content.replace(/^Here's a thinking process:[\s\S]*?(?:\n\n|\n[A-Z0-9#*-])/i, '').trim();
     content = content.replace(/^Here's a thinking process:[\s\S]*/i, '').trim();
@@ -819,7 +819,7 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
         .replace(/são atividades super interativas e coloridas que você pode imprimir e aplicar em casa mesmo\.?/gi, 'Son actividades súper interactivas y coloridas que puedes imprimir y realizar en casa mismo.')
         .replace(/a ideia é que elas aprendam brincando e já comecem a falar algumas palavras nas primeiras semanas!?/gi, '¡La idea es que aprendan jugando y ya comiencen a decir sus primeras palabras en inglés desde las primeras semanas!')
         .replace(/para eu te ajudar melhor, qual a idade do seu pequeno ou da pequena\??/gi, 'Para orientarte mejor, ¿qué edad tiene tu pequeño o pequeña?')
-        .replace(/qual a idade do seu pequeno ou da pequena\??/gi, '¿Qué edad tiene tu pequeño o pequeña?')
+        .replace(/qual a idade do seu pequeno ou da pequena\??/gi, '¿Qué edad tiene tu pequeno o pequeña?')
         .replace(/qual a idade do seu pequeno\??/gi, '¿Qué edad tiene tu pequeño?')
         .replace(/qual a idade da sua pequena\??/gi, '¿Qué edad tiene tu pequeña?')
         .replace(/\bnosso material\b/gi, 'nuestro material')
@@ -855,6 +855,72 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
     return content.trim();
   }
 
+  // Extract conversational snippet from thinking or reasoning blocks
+  extractConversationalSnippet(text, targetLanguage = 'pt', targetCountry = 'Brasil') {
+    if (!text || typeof text !== 'string') return '';
+    const raw = text.replace(/<\/?think>/gi, '').trim();
+
+    // Look for explicit markers like "Resposta:", "Mensagem:", "Output:", "Texto:"
+    const markerMatch = raw.match(/(?:Resposta(?:\s+ao\s+cliente)?|Mensagem(?:\s+final)?|Texto(?:\s+para\s+enviar)?|Respuesta(?:\s+al\s+cliente)?|Mensaje|Output|Final response):\s*\n*([^\n][\s\S]*?)(?:\n\n|\n[A-Z0-9#*-]|$)/i);
+    if (markerMatch && markerMatch[1]) {
+      const candidate = this.sanitizeModelOutput(markerMatch[1], targetLanguage, targetCountry);
+      if (candidate.length > 5) return candidate;
+    }
+
+    // Look for quoted dialog: "Olá..." or "¿Hola..."
+    const quoteMatches = raw.match(/["“]([A-ZÀ-Ú¡¿][^"”]{10,600})["”]/g);
+    if (quoteMatches && quoteMatches.length > 0) {
+      const lastQuote = quoteMatches[quoteMatches.length - 1].replace(/^["“]|["”]$/g, '').trim();
+      const candidate = this.sanitizeModelOutput(lastQuote, targetLanguage, targetCountry);
+      if (candidate.length > 5) return candidate;
+    }
+
+    // Find the last paragraph that looks conversational
+    const paragraphs = raw.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+    for (let i = paragraphs.length - 1; i >= 0; i--) {
+      const p = paragraphs[i];
+      if (/^(?:Let's|I should|We need|First|Step|Analysis|The user|The prompt|Checking|Wait,|Now,|So,)/i.test(p)) {
+        continue;
+      }
+      const candidate = this.sanitizeModelOutput(p, targetLanguage, targetCountry);
+      if (candidate.length > 10) return candidate;
+    }
+
+    return '';
+  }
+
+  // Extract clean response from message object (handles content, reasoning_content and <think>)
+  extractCleanResponse(choiceMessage, targetLanguage = 'pt', targetCountry = 'Brasil') {
+    if (!choiceMessage) return '';
+    const rawContent = choiceMessage.content || '';
+    const rawReasoning = choiceMessage.reasoning_content || '';
+
+    // 1. Standard sanitize
+    if (typeof rawContent === 'string' && rawContent.trim()) {
+      const clean = this.sanitizeModelOutput(rawContent, targetLanguage, targetCountry);
+      if (clean && clean.length > 0) return clean;
+
+      // If content was entirely stripped because everything was inside <think>
+      if (rawContent.includes('<think>')) {
+        const afterThink = rawContent.split(/<\/think>/i).pop()?.trim();
+        if (afterThink) {
+          const cleanAfter = this.sanitizeModelOutput(afterThink, targetLanguage, targetCountry);
+          if (cleanAfter && cleanAfter.length > 0) return cleanAfter;
+        }
+        const snippet = this.extractConversationalSnippet(rawContent, targetLanguage, targetCountry);
+        if (snippet) return snippet;
+      }
+    }
+
+    // 2. If content is empty or null, extract from reasoning_content
+    if (typeof rawReasoning === 'string' && rawReasoning.trim()) {
+      const snippet = this.extractConversationalSnippet(rawReasoning, targetLanguage, targetCountry);
+      if (snippet) return snippet;
+    }
+
+    return '';
+  }
+
   // Call single NIM model with configurable timeout (default 180s = 3 minutes)
   async callModel(model, apiKey, messages, temperature = 0.7, maxTokens = 1500, timeoutMs = 180000, targetLanguage = 'pt', targetCountry = 'Brasil') {
     if (!apiKey) {
@@ -864,8 +930,8 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
     const payload = {
       model,
       messages,
-      temperature,
-      max_tokens: maxTokens,
+      temperature: Math.max(0.1, Math.min(1.0, Number(temperature) || 0.7)),
+      max_tokens: Math.max(Number(maxTokens) || 1500, 2048),
       top_p: 0.95
     };
 
@@ -877,14 +943,21 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
       timeout: timeoutMs
     });
 
-    if (response.data && response.data.choices && response.data.choices[0]?.message?.content) {
-      const content = this.sanitizeModelOutput(response.data.choices[0].message.content, targetLanguage, targetCountry);
-      if (content.length > 0) {
-        return content;
+    if (response.data && response.data.choices && response.data.choices[0]?.message) {
+      const choice = response.data.choices[0];
+      const clean = this.extractCleanResponse(choice.message, targetLanguage, targetCountry);
+      if (clean && clean.length > 0) {
+        return clean;
       }
     }
 
-    // NEVER return reasoning_content or internal thinking to WhatsApp!
+    // Fallback: extract last user question to generate emergency conversational reply rather than breaking
+    const lastUserMsg = [...(messages || [])].reverse().find(m => m.role === 'user')?.content || '';
+    const safeBackup = this.generateOfflineSmartReply(lastUserMsg, { country: targetCountry, isLatAm: targetCountry !== 'Brasil' }, []);
+    if (safeBackup) {
+      return safeBackup;
+    }
+
     throw new Error('Modelo retornou conteúdo vazio ou apenas tokens de raciocínio interno.');
   }
 
@@ -924,9 +997,9 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
 
     if (response.data && response.data.choices && response.data.choices[0]?.message) {
       const choice = response.data.choices[0];
-      const content = this.sanitizeModelOutput(choice.message.content || '', targetLanguage, targetCountry);
-      if (content.length > 0) {
-        return content;
+      const clean = this.extractCleanResponse(choice.message, targetLanguage, targetCountry);
+      if (clean && clean.length > 0) {
+        return clean;
       }
     }
 
@@ -1037,7 +1110,11 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
     // 1. Project route (e.g. https://<res>.services.ai.azure.com/api/projects/<proj>/openai/v1/chat/completions)
     if (rawEndpoint.includes('/api/projects/')) {
       candidateUrls.push(`${rawEndpoint}/openai/v1/chat/completions`);
+      candidateUrls.push(`${rawEndpoint}/chat/completions?api-version=2024-06-01`);
+      candidateUrls.push(`${rawEndpoint}/chat/completions?api-version=2024-10-21`);
+      candidateUrls.push(`${rawEndpoint}/chat/completions?api-version=2024-02-15-preview`);
       candidateUrls.push(`${rawEndpoint}/chat/completions`);
+      candidateUrls.push(`${rawEndpoint}/models/chat/completions?api-version=2024-06-01`);
     }
 
     if (rawEndpoint.endsWith('/chat/completions')) {
@@ -1048,10 +1125,24 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
 
     // 2. Resource base routes (e.g. https://agoravai.services.ai.azure.com)
     const resourceBase = rawEndpoint.split('/api/projects')[0];
+    const subdomain = resourceBase.match(/https?:\/\/([^.]+)\./)?.[1];
+
     if (resourceBase && resourceBase !== rawEndpoint) {
+      candidateUrls.push(`${resourceBase}/openai/deployments/${cleanModel}/chat/completions?api-version=2024-06-01`);
+      candidateUrls.push(`${resourceBase}/openai/deployments/${cleanModel}/chat/completions?api-version=2024-10-21`);
+      candidateUrls.push(`${resourceBase}/openai/deployments/${cleanModel}/chat/completions?api-version=2024-02-15-preview`);
+      candidateUrls.push(`${resourceBase}/models/chat/completions?api-version=2024-06-01`);
       candidateUrls.push(`${resourceBase}/models/chat/completions?api-version=2024-05-01-preview`);
-      candidateUrls.push(`${resourceBase}/openai/deployments/${cleanModel}/chat/completions?api-version=2024-05-01-preview`);
       candidateUrls.push(`${resourceBase}/openai/v1/chat/completions`);
+
+      // 3. Azure OpenAI standard host (https://<resource>.openai.azure.com)
+      if (subdomain && !resourceBase.includes('.openai.azure.com')) {
+        const openaiHost = `https://${subdomain}.openai.azure.com`;
+        candidateUrls.push(`${openaiHost}/openai/deployments/${cleanModel}/chat/completions?api-version=2024-06-01`);
+        candidateUrls.push(`${openaiHost}/openai/deployments/${cleanModel}/chat/completions?api-version=2024-10-21`);
+        candidateUrls.push(`${openaiHost}/openai/deployments/${cleanModel}/chat/completions?api-version=2024-02-15-preview`);
+        candidateUrls.push(`${openaiHost}/openai/v1/chat/completions`);
+      }
     }
 
     const uniqueUrls = [...new Set(candidateUrls)];
@@ -1083,13 +1174,10 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
           timeout: timeoutMs
         });
 
-        if (response.data?.choices && response.data.choices[0]?.message?.content) {
-          const raw = response.data.choices[0].message.content;
-          const text = typeof raw === 'string'
-            ? raw
-            : (Array.isArray(raw) ? raw.map(p => p.text || '').join('') : String(raw || ''));
-          if (text && text.trim().length > 0) {
-            return this.sanitizeModelOutput(text.trim(), targetLanguage, targetCountry);
+        if (response.data?.choices && response.data.choices[0]?.message) {
+          const clean = this.extractCleanResponse(response.data.choices[0].message, targetLanguage, targetCountry);
+          if (clean && clean.length > 0) {
+            return clean;
           }
         }
 
@@ -1114,10 +1202,55 @@ Etiquetas de archivos: {{TAGS_ARQUIVOS}}
       }
     }
 
+    // Auto-discovery of deployments if 404 occurred
+    let discoveredDeployments = [];
+    if (lastError?.response?.status === 404 || String(lastError?.message).includes('404')) {
+      const discoveryEndpoints = [
+        `${resourceBase}/openai/deployments?api-version=2024-06-01`,
+        `${resourceBase}/openai/deployments?api-version=2024-10-21`,
+        subdomain ? `https://${subdomain}.openai.azure.com/openai/deployments?api-version=2024-06-01` : null
+      ].filter(Boolean);
+
+      for (const discUrl of discoveryEndpoints) {
+        try {
+          const discRes = await axios.get(discUrl, { headers, timeout: 6000 });
+          const items = discRes.data?.data || discRes.data?.value || [];
+          if (Array.isArray(items) && items.length > 0) {
+            discoveredDeployments = items.map(d => d.id || d.name).filter(Boolean);
+            break;
+          }
+        } catch (_) {}
+      }
+
+      // Try any discovered deployment
+      for (const discDep of discoveredDeployments) {
+        if (discDep !== cleanModel) {
+          try {
+            console.log(`[Azure AI Foundry] Tentando deployment descoberto automaticamente: ${discDep}`);
+            const retryPayload = { ...openAiPayload, model: discDep };
+            const retryUrl = `${resourceBase}/openai/deployments/${discDep}/chat/completions?api-version=2024-06-01`;
+            const retryRes = await axios.post(retryUrl, retryPayload, { headers, timeout: timeoutMs });
+            if (retryRes.data?.choices && retryRes.data.choices[0]?.message) {
+              const cleanText = this.extractCleanResponse(retryRes.data.choices[0].message, targetLanguage, targetCountry);
+              if (cleanText) return cleanText;
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
     const finalErrMsg = lastError?.response?.data?.error?.message ||
                         lastError?.response?.data?.message ||
                         lastError?.message ||
                         'Falha na chamada à API do Azure AI Foundry';
+
+    if (String(finalErrMsg).includes('deployment') || lastError?.response?.status === 404) {
+      const discNote = discoveredDeployments.length > 0
+        ? ` Deployments encontrados no seu recurso: ${discoveredDeployments.join(', ')}.`
+        : ` Nenhum deployment com o nome '${cleanModel}' foi encontrado no seu recurso (${resourceBase}).`;
+      throw new Error(`Deployment '${cleanModel}' não existe no Azure AI Foundry.${discNote} Verifique o nome exato do deployment no portal Azure AI Foundry.`);
+    }
+
     throw new Error(`Azure AI Foundry Direto erro: ${finalErrMsg}`);
   }
 

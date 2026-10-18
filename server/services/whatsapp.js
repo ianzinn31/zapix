@@ -9,7 +9,7 @@ import pino from 'pino';
 import path from 'path';
 import fs from 'fs';
 import QRCode from 'qrcode';
-import { storage, DATA_DIR, UPLOADS_DIR, AUDIO_CACHE_DIR, MEDIA_CACHE_DIR } from './storage.js';
+import { storage, DATA_DIR, UPLOADS_DIR, AUDIO_CACHE_DIR, MEDIA_CACHE_DIR, isLikelyLid, isLikelyPhoneNumber } from './storage.js';
 import { antiBan } from './antiBan.js';
 import { nvidiaNim } from './nvidiaNim.js';
 import { fishAudio } from './fishAudio.js';
@@ -119,6 +119,7 @@ class WhatsAppService {
   }
 
   // Scan persistent Baileys auth folder for reverse LID mappings (lid-mapping-*_reverse.json)
+  // Scan persistent Baileys auth folder for reverse LID mappings (lid-mapping-*_reverse.json)
   scanAuthLidMappings() {
     if (!fs.existsSync(AUTH_DIR)) return;
     try {
@@ -131,14 +132,21 @@ class WhatsAppService {
             const content = fs.readFileSync(path.join(AUTH_DIR, file), 'utf8');
             const pnUser = JSON.parse(content);
             if (typeof pnUser === 'string' && pnUser.trim()) {
-              const cleanPn = pnUser.trim().replace(/[^0-9]/g, '');
-              const cleanLid = lidUser.replace(/[^0-9]/g, '');
+              let cleanPn = pnUser.trim().replace(/[^0-9]/g, '');
+              let cleanLid = lidUser.replace(/[^0-9]/g, '');
               if (cleanPn && cleanLid && cleanPn !== cleanLid) {
-                storage.saveLidMapping(cleanLid, cleanPn);
-                const migrated = storage.migrateLidLead(cleanLid, cleanPn);
-                if (migrated) {
-                  this.emit('lead:updated', migrated);
-                  count++;
+                // Ensure cleanLid is genuine LID and cleanPn is genuine Phone
+                if (!isLikelyLid(cleanLid) && isLikelyLid(cleanPn)) {
+                  const t = cleanLid; cleanLid = cleanPn; cleanPn = t;
+                }
+                // Only process if cleanLid is a genuine LID and cleanPn is a real phone
+                if (isLikelyLid(cleanLid) && !isLikelyLid(cleanPn)) {
+                  storage.saveLidMapping(cleanLid, cleanPn);
+                  const migrated = storage.migrateLidLead(cleanLid, cleanPn);
+                  if (migrated) {
+                    this.emit('lead:updated', migrated);
+                    count++;
+                  }
                 }
               }
             }
@@ -154,30 +162,35 @@ class WhatsAppService {
   }
 
   // Actively sync and resolve real phone numbers for all leads currently stored as LIDs
+  // 2. No boot, só chamar migrateLidLead para chaves que são realmente LID (>= 15 dígitos)
   async syncLidMappingsForAllLeads() {
     this.scanAuthLidMappings();
     const leads = storage.getLeads();
     for (const lead of leads) {
       const phoneClean = (lead.phone || '').replace(/[^0-9]/g, '');
-      const isLid = lead.jid?.endsWith('@lid') || (phoneClean.length >= 14 && !phoneClean.startsWith('55') && !phoneClean.startsWith('52') && !phoneClean.startsWith('54'));
-      if (isLid) {
-        let realPhone = storage.getPhoneForLid(phoneClean);
-        if (!realPhone && this.sock?.signalRepository?.lidMapping) {
-          try {
-            const targetLid = lead.jid || `${phoneClean}@lid`;
-            const pnResult = await this.sock.signalRepository.lidMapping.getPNForLID(targetLid);
-            const pnStr = typeof pnResult === 'string' ? pnResult : (pnResult?.pn || '');
-            if (pnStr) {
-              realPhone = pnStr.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+      // ONLY process leads whose phone key is genuinely a LID (>= 15 digits)
+      const isLid = isLikelyLid(phoneClean);
+      if (!isLid) continue;
+
+      let realPhone = storage.getPhoneForLid(phoneClean);
+      if (!realPhone && this.sock?.signalRepository?.lidMapping) {
+        try {
+          const targetLid = lead.jid || `${phoneClean}@lid`;
+          const pnResult = await this.sock.signalRepository.lidMapping.getPNForLID(targetLid);
+          const pnStr = typeof pnResult === 'string' ? pnResult : (pnResult?.pn || '');
+          if (pnStr) {
+            const parsedPn = pnStr.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            if (!isLikelyLid(parsedPn)) {
+              realPhone = parsedPn;
             }
-          } catch (_) {}
-        }
-        if (realPhone && realPhone !== phoneClean) {
-          storage.saveLidMapping(phoneClean, realPhone);
-          const migrated = storage.migrateLidLead(phoneClean, realPhone, lead.name);
-          if (migrated) {
-            this.emit('lead:updated', migrated);
           }
+        } catch (_) {}
+      }
+      if (realPhone && realPhone !== phoneClean && !isLikelyLid(realPhone)) {
+        storage.saveLidMapping(phoneClean, realPhone);
+        const migrated = storage.migrateLidLead(phoneClean, realPhone, lead.name);
+        if (migrated) {
+          this.emit('lead:updated', migrated);
         }
       }
     }
@@ -290,13 +303,18 @@ class WhatsAppService {
       this.sock.ev.on('lid-mapping.update', (mapping) => {
         try {
           if (mapping?.lid && mapping?.pn) {
-            const cleanLid = mapping.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-            const cleanPn = mapping.pn.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            let cleanLid = mapping.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            let cleanPn = mapping.pn.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
             if (cleanLid && cleanPn && cleanLid !== cleanPn) {
-              storage.saveLidMapping(cleanLid, cleanPn);
-              const migrated = storage.migrateLidLead(cleanLid, cleanPn);
-              if (migrated) {
-                this.emit('lead:updated', migrated);
+              if (!isLikelyLid(cleanLid) && isLikelyLid(cleanPn)) {
+                const t = cleanLid; cleanLid = cleanPn; cleanPn = t;
+              }
+              if (isLikelyLid(cleanLid) && !isLikelyLid(cleanPn)) {
+                storage.saveLidMapping(cleanLid, cleanPn);
+                const migrated = storage.migrateLidLead(cleanLid, cleanPn);
+                if (migrated) {
+                  this.emit('lead:updated', migrated);
+                }
               }
             }
           }
@@ -310,16 +328,21 @@ class WhatsAppService {
         try {
           if (Array.isArray(contacts)) {
             for (const c of contacts) {
-              const lid = c.lid ? c.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null;
-              const pn = c.phoneNumber || (c.id && (c.id.includes('@s.whatsapp.net') || c.id.includes('@c.us')) ? c.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null);
+              let lid = c.lid ? c.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null;
+              let pn = c.phoneNumber || (c.id && (c.id.includes('@s.whatsapp.net') || c.id.includes('@c.us')) ? c.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null);
               const name = c.name || c.notify;
               if (lid && pn && lid !== pn) {
-                storage.saveLidMapping(lid, pn);
-                const migrated = storage.migrateLidLead(lid, pn, name);
-                if (migrated) {
-                  this.emit('lead:updated', migrated);
+                if (!isLikelyLid(lid) && isLikelyLid(pn)) {
+                  const t = lid; lid = pn; pn = t;
                 }
-              } else if (pn && name) {
+                if (isLikelyLid(lid) && !isLikelyLid(pn)) {
+                  storage.saveLidMapping(lid, pn);
+                  const migrated = storage.migrateLidLead(lid, pn, name);
+                  if (migrated) {
+                    this.emit('lead:updated', migrated);
+                  }
+                }
+              } else if (pn && name && !isLikelyLid(pn)) {
                 const lead = storage.getLead(pn);
                 if (lead && (!lead.name || /^[0-9]+$/.test(lead.name))) {
                   storage.upsertLead(pn, { name });
@@ -336,14 +359,19 @@ class WhatsAppService {
         try {
           if (Array.isArray(updates)) {
             for (const c of updates) {
-              const lid = c.lid ? c.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null;
-              const pn = c.phoneNumber || (c.id && (c.id.includes('@s.whatsapp.net') || c.id.includes('@c.us')) ? c.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null);
+              let lid = c.lid ? c.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null;
+              let pn = c.phoneNumber || (c.id && (c.id.includes('@s.whatsapp.net') || c.id.includes('@c.us')) ? c.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null);
               const name = c.name || c.notify;
               if (lid && pn && lid !== pn) {
-                storage.saveLidMapping(lid, pn);
-                const migrated = storage.migrateLidLead(lid, pn, name);
-                if (migrated) {
-                  this.emit('lead:updated', migrated);
+                if (!isLikelyLid(lid) && isLikelyLid(pn)) {
+                  const t = lid; lid = pn; pn = t;
+                }
+                if (isLikelyLid(lid) && !isLikelyLid(pn)) {
+                  storage.saveLidMapping(lid, pn);
+                  const migrated = storage.migrateLidLead(lid, pn, name);
+                  if (migrated) {
+                    this.emit('lead:updated', migrated);
+                  }
                 }
               }
             }
@@ -359,13 +387,18 @@ class WhatsAppService {
           if (Array.isArray(lidPnMappings)) {
             for (const m of lidPnMappings) {
               if (m?.lid && m?.pn) {
-                const cleanLid = m.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-                const cleanPn = m.pn.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                let cleanLid = m.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                let cleanPn = m.pn.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
                 if (cleanLid && cleanPn && cleanLid !== cleanPn) {
-                  storage.saveLidMapping(cleanLid, cleanPn);
-                  const migrated = storage.migrateLidLead(cleanLid, cleanPn);
-                  if (migrated) {
-                    this.emit('lead:updated', migrated);
+                  if (!isLikelyLid(cleanLid) && isLikelyLid(cleanPn)) {
+                    const t = cleanLid; cleanLid = cleanPn; cleanPn = t;
+                  }
+                  if (isLikelyLid(cleanLid) && !isLikelyLid(cleanPn)) {
+                    storage.saveLidMapping(cleanLid, cleanPn);
+                    const migrated = storage.migrateLidLead(cleanLid, cleanPn);
+                    if (migrated) {
+                      this.emit('lead:updated', migrated);
+                    }
                   }
                 }
               }
@@ -373,14 +406,19 @@ class WhatsAppService {
           }
           if (Array.isArray(contacts)) {
             for (const c of contacts) {
-              const lid = c.lid ? c.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null;
-              const pn = c.phoneNumber || (c.id && (c.id.includes('@s.whatsapp.net') || c.id.includes('@c.us')) ? c.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null);
+              let lid = c.lid ? c.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null;
+              let pn = c.phoneNumber || (c.id && (c.id.includes('@s.whatsapp.net') || c.id.includes('@c.us')) ? c.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : null);
               const name = c.name || c.notify;
               if (lid && pn && lid !== pn) {
-                storage.saveLidMapping(lid, pn);
-                const migrated = storage.migrateLidLead(lid, pn, name);
-                if (migrated) {
-                  this.emit('lead:updated', migrated);
+                if (!isLikelyLid(lid) && isLikelyLid(pn)) {
+                  const t = lid; lid = pn; pn = t;
+                }
+                if (isLikelyLid(lid) && !isLikelyLid(pn)) {
+                  storage.saveLidMapping(lid, pn);
+                  const migrated = storage.migrateLidLead(lid, pn, name);
+                  if (migrated) {
+                    this.emit('lead:updated', migrated);
+                  }
                 }
               }
             }
@@ -418,17 +456,20 @@ class WhatsAppService {
           }
 
           // Check cached storage mappings
-          if (lid && !realPhone) {
+          if (lid && !realPhone && isLikelyLid(lid)) {
             realPhone = storage.getPhoneForLid(lid);
           }
 
           // Check Baileys internal signalRepository.lidMapping
-          if (lid && !realPhone && this.sock?.signalRepository?.lidMapping) {
+          if (lid && !realPhone && isLikelyLid(lid) && this.sock?.signalRepository?.lidMapping) {
             try {
               const pnResult = await this.sock.signalRepository.lidMapping.getPNForLID(jid);
               const pnStr = typeof pnResult === 'string' ? pnResult : (pnResult?.pn || '');
               if (pnStr) {
-                realPhone = pnStr.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                const parsedPn = pnStr.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                if (!isLikelyLid(parsedPn)) {
+                  realPhone = parsedPn;
+                }
               }
             } catch (_) {}
           }
@@ -436,7 +477,7 @@ class WhatsAppService {
           const pushName = (msg.pushName || msg.verifiedBizName || '').trim();
 
           // If we mapped a LID to a real phone, migrate any prior temporary lead entries
-          if (lid && realPhone && realPhone !== lid) {
+          if (lid && realPhone && realPhone !== lid && isLikelyLid(lid) && !isLikelyLid(realPhone)) {
             storage.saveLidMapping(lid, realPhone);
             const migrated = storage.migrateLidLead(lid, realPhone, pushName);
             if (migrated) {
@@ -2068,18 +2109,21 @@ La acreditación se confirma automáticamente sin necesidad de enviar comprobant
 
       // 1. Resolve real phone number if contact currently has LID
       let resolvedPhone = null;
-      if (jid.endsWith('@lid') || clean.length >= 14) {
+      if (isLikelyLid(clean)) {
         resolvedPhone = storage.getPhoneForLid(clean);
         if (!resolvedPhone && this.sock.signalRepository?.lidMapping) {
           try {
             const pnResult = await this.sock.signalRepository.lidMapping.getPNForLID(jid);
             const pnStr = typeof pnResult === 'string' ? pnResult : (pnResult?.pn || '');
             if (pnStr) {
-              resolvedPhone = pnStr.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+              const parsedPn = pnStr.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+              if (!isLikelyLid(parsedPn)) {
+                resolvedPhone = parsedPn;
+              }
             }
           } catch (_) {}
         }
-        if (resolvedPhone && resolvedPhone !== clean) {
+        if (resolvedPhone && resolvedPhone !== clean && !isLikelyLid(resolvedPhone)) {
           storage.saveLidMapping(clean, resolvedPhone);
           const migrated = storage.migrateLidLead(clean, resolvedPhone);
           if (migrated) {

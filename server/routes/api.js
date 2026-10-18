@@ -534,11 +534,18 @@ router.get('/ai/models/azure', async (req, res) => {
   }
 
   try {
+    const resourceBase = effectiveEndpoint.split('/api/projects')[0];
+    const subdomain = resourceBase.match(/https?:\/\/([^.]+)\./)?.[1];
+
     const urlsToTry = [
       `${effectiveEndpoint}/openai/v1/models`,
       `${effectiveEndpoint}/models`,
-      `${effectiveEndpoint.split('/api/projects')[0]}/models?api-version=2024-05-01-preview`
-    ];
+      `${resourceBase}/openai/deployments?api-version=2024-06-01`,
+      `${resourceBase}/openai/deployments?api-version=2024-10-21`,
+      `${resourceBase}/models?api-version=2024-06-01`,
+      `${resourceBase}/models?api-version=2024-05-01-preview`,
+      subdomain ? `https://${subdomain}.openai.azure.com/openai/deployments?api-version=2024-06-01` : null
+    ].filter(Boolean);
 
     let fetchedModels = null;
     for (const url of urlsToTry) {
@@ -552,8 +559,8 @@ router.get('/ai/models/azure', async (req, res) => {
         });
         if (response.data?.data && Array.isArray(response.data.data)) {
           fetchedModels = response.data.data.map(m => ({
-            id: m.id,
-            name: `${m.id} (${m.owned_by || 'Azure'})`,
+            id: m.id || m.name,
+            name: `${m.id || m.name} (${m.model || m.owned_by || 'Azure'})`,
             description: m.capabilities ? JSON.stringify(m.capabilities) : ''
           }));
           break;

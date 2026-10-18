@@ -45,6 +45,24 @@ export function isSamePhoneNumber(p1, p2) {
   return false;
 }
 
+// Helper to identify WhatsApp LIDs (Linked Identity: 15-16 digit internal IDs, e.g. 150492164431874)
+// Real phone numbers (E.164) are 8 to 14 digits (e.g. BR 55... 12-13 digits, US 1... 11 digits, MX 52... 12 digits).
+export function isLikelyLid(id) {
+  if (!id) return false;
+  const clean = String(id).replace(/[^0-9]/g, '');
+  // WhatsApp LIDs are 15-16 digits long, starting with 1, 2, 50, 66, 78, etc.
+  if (clean.length < 15 || clean.length > 18) return false;
+  // If it matches a standard international phone format with country code <= 14 digits, it's not a LID
+  if (/^(55|52|54|57|56|51|591|595|593|58)\d{8,12}$/.test(clean)) return false;
+  return true;
+}
+
+export function isLikelyPhoneNumber(id) {
+  if (!id) return false;
+  const clean = String(id).replace(/[^0-9]/g, '');
+  return clean.length >= 8 && clean.length <= 14;
+}
+
 const DEFAULT_STATE = {
   settings: {
     ai: {
@@ -495,6 +513,55 @@ class StorageService {
           systemLogs: parsed.systemLogs || DEFAULT_STATE.systemLogs
         };
 
+        // 1. Sanitize corrupt or bidirectional lidMappings: ONLY keep genuine cleanLid (>= 15 digits) -> cleanPhone (< 15 digits)
+        if (loaded.lidMappings && typeof loaded.lidMappings === 'object') {
+          const cleanedMappings = {};
+          for (const [key, val] of Object.entries(loaded.lidMappings)) {
+            const cleanK = String(key).replace(/[^0-9]/g, '');
+            const cleanV = String(val).replace(/[^0-9]/g, '');
+            if (isLikelyLid(cleanK) && !isLikelyLid(cleanV) && cleanK !== cleanV) {
+              cleanedMappings[cleanK] = cleanV;
+            }
+          }
+          loaded.lidMappings = cleanedMappings;
+        }
+
+        // 2. Sanitize corrupted leads (e.g. leads keyed by a LID >= 15 digits whose real phone is mapped)
+        if (loaded.leads && typeof loaded.leads === 'object') {
+          for (const [key, lead] of Object.entries(loaded.leads)) {
+            const cleanKey = String(key).replace(/[^0-9]/g, '');
+            if (isLikelyLid(cleanKey)) {
+              const realPhone = loaded.lidMappings?.[cleanKey];
+              if (realPhone && !isLikelyLid(realPhone)) {
+                const existingReal = loaded.leads[realPhone] || {};
+                const isNumericName = (n) => !n || /^[0-9]+$/.test(String(n).trim()) || n === cleanKey || n === realPhone;
+                let validName = realPhone;
+                if (existingReal.name && !isNumericName(existingReal.name)) {
+                  validName = existingReal.name;
+                } else if (lead.name && !isNumericName(lead.name)) {
+                  validName = lead.name;
+                }
+
+                loaded.leads[realPhone] = {
+                  ...(lead || {}),
+                  ...(existingReal || {}),
+                  id: realPhone,
+                  phone: realPhone,
+                  realPhone,
+                  lid: cleanKey,
+                  jid: `${cleanKey}@lid`,
+                  name: validName,
+                  updatedAt: Date.now()
+                };
+                delete loaded.leads[key];
+                if (cleanKey !== key) {
+                  delete loaded.leads[cleanKey];
+                }
+              }
+            }
+          }
+        }
+
         if (!loaded.settings.ai.primaryEndpoint) {
           loaded.settings.ai.primaryEndpoint = process.env.AZURE_AI_FOUNDRY_URL || 'https://agoravai.services.ai.azure.com/api/projects/proj-default';
         }
@@ -653,50 +720,96 @@ class StorageService {
   }
 
   // LID Mappings (WhatsApp Privacy Identity -> Real Phone Number)
+  // 1. Gravar o mapa SÓ num sentido: lidMappings[lid] = phone (NUNCA phone -> lid)
   saveLidMapping(lid, phone) {
     if (!lid || !phone) return;
-    const cleanLid = String(lid).replace(/[^0-9]/g, '');
-    const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+    let cleanLid = String(lid).replace(/[^0-9]/g, '');
+    let cleanPhone = String(phone).replace(/[^0-9]/g, '');
     if (!cleanLid || !cleanPhone || cleanLid === cleanPhone) return;
+
+    // Auto-swap if arguments were accidentally inverted
+    if (!isLikelyLid(cleanLid) && isLikelyLid(cleanPhone)) {
+      const temp = cleanLid;
+      cleanLid = cleanPhone;
+      cleanPhone = temp;
+    }
+
+    // STRICT: cleanLid MUST be a LID (>= 15 digits) and cleanPhone MUST NOT be a LID
+    if (!isLikelyLid(cleanLid) || isLikelyLid(cleanPhone)) {
+      return;
+    }
 
     if (!this.data.lidMappings) {
       this.data.lidMappings = {};
     }
+
+    // Save strictly unidirectional: LID -> Real Phone
     this.data.lidMappings[cleanLid] = cleanPhone;
-    this.data.lidMappings[cleanPhone] = cleanLid;
+
+    // Purge any accidental reverse key that might have been stored previously
+    if (this.data.lidMappings[cleanPhone]) {
+      delete this.data.lidMappings[cleanPhone];
+    }
+
     this.save();
   }
 
   getPhoneForLid(lid) {
     if (!lid) return null;
     const clean = String(lid).replace(/[^0-9]/g, '');
+    if (!clean || !isLikelyLid(clean)) return null;
     return this.data.lidMappings?.[clean] || null;
   }
 
   getLidForPhone(phone) {
     if (!phone) return null;
     const clean = String(phone).replace(/[^0-9]/g, '');
-    return this.data.lidMappings?.[clean] || null;
+    if (!clean || isLikelyLid(clean)) return null;
+    if (!this.data.lidMappings) return null;
+    for (const [lidKey, phoneVal] of Object.entries(this.data.lidMappings)) {
+      if (phoneVal === clean && isLikelyLid(lidKey)) {
+        return lidKey;
+      }
+    }
+    return null;
   }
 
   migrateLidLead(lid, realPhone, optionalName = null) {
     if (!lid || !realPhone) return null;
-    const cleanLid = String(lid).replace(/[^0-9]/g, '');
-    const cleanPhone = String(realPhone).replace(/[^0-9]/g, '');
+    let cleanLid = String(lid).replace(/[^0-9]/g, '');
+    let cleanPhone = String(realPhone).replace(/[^0-9]/g, '');
     if (!cleanLid || !cleanPhone || cleanLid === cleanPhone) return null;
 
+    // Check if arguments were swapped
+    if (!isLikelyLid(cleanLid) && isLikelyLid(cleanPhone)) {
+      const temp = cleanLid;
+      cleanLid = cleanPhone;
+      cleanPhone = temp;
+    }
+
+    // STRICT: Only genuine LIDs can be migrated into real phones
+    if (!isLikelyLid(cleanLid) || isLikelyLid(cleanPhone)) {
+      return null;
+    }
+
+    // Save unidirectional mapping (lid -> phone only)
     this.saveLidMapping(cleanLid, cleanPhone);
 
     const oldLead = this.data.leads[cleanLid] || this.data.leads[lid];
     const existingReal = this.data.leads[cleanPhone] || this.data.leads[realPhone];
 
-    const routingJid = oldLead?.jid || (cleanLid.length >= 14 ? `${cleanLid}@lid` : `${cleanLid}@s.whatsapp.net`);
+    const routingJid = `${cleanLid}@lid`;
 
-    let name = optionalName || existingReal?.name || oldLead?.name || cleanPhone;
-    if (name === cleanLid && optionalName) {
+    // Preserve real human names: NEVER overwrite a human name with phone numbers or LIDs
+    const isNumericOrId = (val) => !val || /^[0-9]+$/.test(String(val).trim()) || val === cleanLid || val === cleanPhone;
+
+    let name = cleanPhone;
+    if (optionalName && !isNumericOrId(optionalName)) {
       name = optionalName;
-    } else if (name === cleanLid) {
-      name = cleanPhone;
+    } else if (existingReal?.name && !isNumericOrId(existingReal.name)) {
+      name = existingReal.name;
+    } else if (oldLead?.name && !isNumericOrId(oldLead.name)) {
+      name = oldLead.name;
     }
 
     const mergedLead = {
@@ -714,7 +827,7 @@ class StorageService {
     this.data.leads[cleanPhone] = mergedLead;
 
     // Remove obsolete LID key from leads map so it doesn't duplicate in CRM
-    if (this.data.leads[cleanLid] && cleanLid !== cleanPhone) {
+    if (this.data.leads[cleanLid]) {
       delete this.data.leads[cleanLid];
     }
     if (this.data.leads[lid] && lid !== cleanPhone) {
@@ -732,9 +845,7 @@ class StorageService {
 
     this.save();
     supabaseService.upsertLead(mergedLead);
-    if (cleanLid !== cleanPhone) {
-      supabaseService.deleteLead(cleanLid);
-    }
+    supabaseService.deleteLead(cleanLid);
 
     console.log(`[Storage] Lead migrado com sucesso: LID ${cleanLid} -> Telefone Real ${cleanPhone} (${name})`);
     return mergedLead;

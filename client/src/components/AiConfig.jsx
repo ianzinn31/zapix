@@ -680,6 +680,10 @@ export default function AiConfig({ aiSettings, onSave }) {
                 </div>
               )}
 
+              <p style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px' }}>
+                💡 No Azure AI Foundry, o nome deve coincidir exatamente com o nome do <strong>Deployment</strong> criado no portal Azure (seção Deployments).
+              </p>
+
               {azureError && (
                 <p style={{ fontSize: '0.72rem', color: '#f87171', marginTop: '4px' }}>
                   ⚠️ {azureError}
