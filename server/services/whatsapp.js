@@ -1057,6 +1057,8 @@ class WhatsAppService {
         // Discovery question safeguard: check if message has actual exploratory questions or is asking to choose an option
         const replyTextToCheck = (textAfter || textBefore || '').trim();
         const isClosingPoliteness = /(?:t[aá] bom\?|te parece\?|combinado\?|tudo bem\?|me avisas\?|me avisa\?|certo\?)/i.test(replyTextToCheck);
+        const isAskingToChooseOption =
+          /(?:cu[aá]l\s+(?:opci[oó]n|paquete)|qu[eé]\s+(?:opci[oó]n|paquete)|b[aá]sica\s+o\s+completa|qual\s+op[çc][aã]o|b[aá]sico\s+ou\s+completo|qual\s+dos\s+dois|150\s+o\s+270|15\s+ou\s+37)/i.test(replyTextToCheck);
         const hasDiscoveryQuestion = (/\?|¿/.test(replyTextToCheck) && !isClosingPoliteness) || isAskingToChooseOption;
 
         const isDiscoveryDialogue = hasDiscoveryQuestion && !userExplicitlyWantsPayment;
